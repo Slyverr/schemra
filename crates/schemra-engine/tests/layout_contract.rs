@@ -19,6 +19,8 @@ fn visual(direction: Direction) -> VisualIr {
         title: "Network".into(),
         direction,
         direction_explicit: false,
+        routing: None,
+        bend: None,
         groups: Vec::new(),
         nodes: Vec::new(),
         edges: Vec::new(),
@@ -45,6 +47,8 @@ fn edge(from: &str, to: &str) -> EdgeIr {
         to: NodeId(to.into()),
         to_span: span(),
         directionality: EdgeDirectionality::Directed,
+        routing: None,
+        bend: None,
         span: span(),
     }
 }

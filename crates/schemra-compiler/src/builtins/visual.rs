@@ -45,6 +45,8 @@ fn lower(
         title,
         direction: Direction::default(),
         direction_explicit: false,
+        routing: None,
+        bend: None,
         groups: Vec::new(),
         nodes: Vec::new(),
         edges: context.lower_edges(body),
