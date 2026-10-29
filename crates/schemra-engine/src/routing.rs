@@ -8,12 +8,23 @@ use schemra_scene::{
 };
 
 mod geometry;
+mod search;
 
 use geometry::{Side, center, direct_connector, natural_sides, port_anchor};
+
+#[cfg(test)]
+mod tests;
 
 const PORT_MARGIN: f32 = 8.0;
 const PORT_SPACING: f32 = 12.0;
 const MAX_PORT_SPREAD: f32 = 36.0;
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum RoutingMode {
+    Auto,
+    #[default]
+    Straight,
+}
 
 #[derive(Clone, Copy, Debug)]
 struct EdgePlan {
@@ -36,6 +47,15 @@ struct Endpoint {
 /// face. Incoming fans share one target anchor; when that would make links
 /// overlap collinearly, the anchor shifts by the smallest clear amount.
 pub(super) fn route_edges(edges: &mut [SceneEdge], nodes: &[SceneNode], direction: FlowDirection) {
+    route_edges_with_mode(edges, nodes, direction, RoutingMode::Straight);
+}
+
+fn route_edges_with_mode(
+    edges: &mut [SceneEdge],
+    nodes: &[SceneNode],
+    direction: FlowDirection,
+    mode: RoutingMode,
+) {
     for edge in edges.iter_mut() {
         edge.path.clear();
         edge.route_diagnostic = None;
@@ -174,14 +194,27 @@ pub(super) fn route_edges(edges: &mut [SceneEdge], nodes: &[SceneNode], directio
         else {
             continue;
         };
-        let path = vec![direct_connector(*start, *end)];
+        let direct_path = vec![direct_connector(*start, *end)];
         let obstacles = nodes
             .iter()
             .filter(|node| node.id != edge.from && node.id != edge.to)
             .map(|node| node.bounds)
             .collect::<Vec<_>>();
+        let direct_obstruction_count =
+            geometry::path_obstacle_intersections(&direct_path, &obstacles);
+        let path = if mode == RoutingMode::Auto && direct_obstruction_count > 0 {
+            search::orthogonal_route(*start, *end, &obstacles)
+                .map(|points| geometry::polyline_connectors(&points))
+                .filter(|path| !path.is_empty())
+                .unwrap_or_else(|| direct_path.clone())
+        } else {
+            direct_path.clone()
+        };
         let obstruction_count = geometry::path_obstacle_intersections(&path, &obstacles);
         let length = geometry::path_length(&path);
+        let geometric_lower_bound = geometry::path_length(&direct_path);
+        let selected_auto_route =
+            mode == RoutingMode::Auto && direct_obstruction_count > 0 && obstruction_count == 0;
         edges[*index].path = path;
         edges[*index].route_diagnostic = Some(SceneRouteDiagnostic {
             status: SceneRouteStatus::Routed,
@@ -191,22 +224,44 @@ pub(super) fn route_edges(edges: &mut [SceneEdge], nodes: &[SceneNode], directio
             target_port: plans
                 .get(index)
                 .map_or_else(String::new, |plan| plan.target_side.name().to_owned()),
-            candidates_considered: 1,
-            rejected_for_obstacles: 0,
+            candidates_considered: if mode == RoutingMode::Auto && direct_obstruction_count > 0 {
+                2
+            } else {
+                1
+            },
+            rejected_for_obstacles: usize::from(direct_obstruction_count > 0),
             rejected_for_route_conflicts: 0,
             obstacle_intersections: obstruction_count,
             route_conflicts: 0,
             candidate_rejections: Vec::new(),
             route_length: length,
-            geometric_lower_bound: length,
-            detour_ratio: 1.0,
-            direct_candidate_clear: obstruction_count == 0,
-            selected_routing: "straight".into(),
-            selection_reason: "straight connector between assigned face anchors".into(),
+            geometric_lower_bound,
+            detour_ratio: if geometric_lower_bound > f32::EPSILON {
+                length / geometric_lower_bound
+            } else {
+                1.0
+            },
+            direct_candidate_clear: direct_obstruction_count == 0,
+            selected_routing: if mode == RoutingMode::Auto {
+                "auto".into()
+            } else {
+                "straight".into()
+            },
+            selection_reason: if selected_auto_route {
+                "direct path was obstructed; selected a deterministic clear route".into()
+            } else if mode == RoutingMode::Auto && direct_obstruction_count == 0 {
+                "direct path was clear".into()
+            } else if mode == RoutingMode::Auto {
+                "no clear detour was found; retained the direct path".into()
+            } else {
+                "straight connector between assigned face anchors".into()
+            },
             message: (obstruction_count > 0).then(|| {
-                format!(
-                    "The direct connector passes beneath {obstruction_count} node(s); nodes render above links."
-                )
+                if mode == RoutingMode::Auto {
+                    format!("The selected route intersects {obstruction_count} node(s).")
+                } else {
+                    format!("The direct connector passes beneath {obstruction_count} node(s); nodes render above links.")
+                }
             }),
         });
         if let Some(reverse) = reciprocal_for.get(index).copied() {
@@ -461,14 +516,16 @@ fn mark_route_conflicts(edges: &mut [SceneEdge]) {
             {
                 continue;
             }
-            let left_path = &edges[left].path[0];
-            let right_path = &edges[right].path[0];
-            if geometry::segments_conflict(
-                left_path.start,
-                left_path.end,
-                right_path.start,
-                right_path.end,
-            ) {
+            if edges[left].path.iter().any(|left_segment| {
+                edges[right].path.iter().any(|right_segment| {
+                    geometry::segments_conflict(
+                        left_segment.start,
+                        left_segment.end,
+                        right_segment.start,
+                        right_segment.end,
+                    )
+                })
+            }) {
                 conflicts[left] += 1;
                 conflicts[right] += 1;
             }
@@ -479,7 +536,8 @@ fn mark_route_conflicts(edges: &mut [SceneEdge]) {
             diagnostic.route_conflicts = count;
             if count > 0 {
                 diagnostic.message = Some(format!(
-                    "This straight route intersects {count} other route(s)."
+                    "This {} route intersects {count} other route(s).",
+                    diagnostic.selected_routing
                 ));
             }
         }
