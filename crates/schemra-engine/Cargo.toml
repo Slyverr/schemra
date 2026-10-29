@@ -8,3 +8,5 @@ publish = false
 
 [dependencies]
 schemra-ir.workspace = true
+schemra-scene.workspace = true
+cosmic-text.workspace = true
