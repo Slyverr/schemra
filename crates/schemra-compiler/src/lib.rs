@@ -1,6 +1,7 @@
 //! Data-driven schemas for the Schemra construct language.
 
 mod compiler;
+mod completion;
 mod editor;
 mod editor_metadata;
 mod registry;
@@ -9,6 +10,9 @@ mod schema;
 pub use compiler::{
     ConstructHandler, LoweredItem, LoweringContext, ValidatedConstruct, compile, compile_sources,
     compile_sources_with_registry, validate_scenario_for_visual,
+};
+pub use completion::{
+    CompletionItem, CompletionKind, CompletionList, complete_at, complete_at_with_nodes,
 };
 pub use editor::{SyntaxToken, SyntaxTokenKind, highlight_tokens};
 pub use editor_metadata::{
