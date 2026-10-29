@@ -72,10 +72,10 @@ large snapshots; avoid excess mocking and tests coupled to private structure.
 Keep fixtures near the suite that owns them: crate-specific fixtures under
 `crates/<crate>/tests/fixtures/`, Studio fixtures under the corresponding
 `apps/studio` test directory, and shared fixtures under `tests/fixtures/`.
-Golden fixtures are reviewed source files: preserve them during migration, do
-not regenerate them silently, and inspect expected-output changes. Compare
-migrated behavior with the read-only `schemra-next` baseline where equivalent
-behavior exists; claim parity only when the comparisons have passed.
+Golden fixtures are part of the behavioral contract. Preserve them; do not
+regenerate them silently, and inspect expected-output changes. Verify behavior
+against the checked-in fixtures and cross-target comparisons; claim parity only
+when the relevant comparisons have passed.
 
 ### Test commands
 
@@ -116,6 +116,6 @@ git archive "$candidate_tree" | tar -x -C "$tmpdir"
 ```
 
 Commit only the tree that was checked. If the index or tracked files change
-after validation, repeat the checks. For each migration slice, include the
-relevant behavior and fixture comparisons in the verification record; never
-claim parity without passing evidence.
+after validation, repeat the checks. Include the relevant behavior and fixture
+comparisons in the verification record; never claim parity without passing
+evidence.
