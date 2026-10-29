@@ -6,6 +6,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use schemra_scene::{Rect, Scene, SceneFont};
 
 mod icons;
+mod links;
 mod nodes;
 mod text;
 mod theme;
@@ -38,6 +39,8 @@ pub enum SvgRenderError {
     InvalidCanvasBounds,
     InvalidNodeBounds,
     InvalidNodeStyle,
+    InvalidEdgeGeometry,
+    InvalidEdgeStyle,
 }
 
 impl fmt::Display for SvgRenderError {
@@ -52,6 +55,12 @@ impl fmt::Display for SvgRenderError {
             Self::InvalidNodeStyle => formatter.write_str(
                 "node opacity and radius must be finite, with opacity between zero and one",
             ),
+            Self::InvalidEdgeGeometry => {
+                formatter.write_str("edge path coordinates must be finite")
+            }
+            Self::InvalidEdgeStyle => {
+                formatter.write_str("edge opacity must be finite and between zero and one")
+            }
         }
     }
 }
@@ -80,6 +89,31 @@ pub fn render_svg(scene: &Scene) -> Result<String, SvgRenderError> {
             || node.style.radius.is_some_and(|radius| !radius.is_finite())
     }) {
         return Err(SvgRenderError::InvalidNodeStyle);
+    }
+    if scene.edges.iter().any(|edge| {
+        edge.path.iter().any(|segment| {
+            [
+                segment.start.x,
+                segment.start.y,
+                segment.control1.x,
+                segment.control1.y,
+                segment.control2.x,
+                segment.control2.y,
+                segment.end.x,
+                segment.end.y,
+            ]
+            .into_iter()
+            .any(|coordinate| !coordinate.is_finite())
+        })
+    }) {
+        return Err(SvgRenderError::InvalidEdgeGeometry);
+    }
+    if scene.edges.iter().any(|edge| {
+        edge.style
+            .opacity
+            .is_some_and(|opacity| !opacity.is_finite() || !(0.0..=1.0).contains(&opacity))
+    }) {
+        return Err(SvgRenderError::InvalidEdgeStyle);
     }
 
     let colors = theme::palette_colors(&scene.theme);
@@ -113,10 +147,11 @@ pub fn render_svg(scene: &Scene) -> Result<String, SvgRenderError> {
     svg.push_str("</title><desc id=\"schemra-description\">Schemra architecture visual</desc>");
     write!(
         svg,
-        "<defs><filter id=\"schemra-shadow\" x=\"-20%\" y=\"-20%\" width=\"140%\" height=\"150%\"><feDropShadow dx=\"0\" dy=\"5\" stdDeviation=\"8\" flood-color=\"{}\" flood-opacity=\"0.08\"/></filter></defs>",
+        "<defs><filter id=\"schemra-shadow\" x=\"-20%\" y=\"-20%\" width=\"140%\" height=\"150%\"><feDropShadow dx=\"0\" dy=\"5\" stdDeviation=\"8\" flood-color=\"{}\" flood-opacity=\"0.08\"/></filter>",
         colors.shadow,
     )
     .expect("writing to a String cannot fail");
+    svg.push_str("</defs>");
     write_font_faces(&mut svg, &used_fonts);
     write!(
         svg,
@@ -126,6 +161,9 @@ pub fn render_svg(scene: &Scene) -> Result<String, SvgRenderError> {
         colors.canvas,
     )
     .expect("writing to a String cannot fail");
+
+    links::write_paths(&mut svg, scene, colors.edge);
+    links::write_labels(&mut svg, scene, colors.canvas, colors.muted);
 
     for node in &scene.nodes {
         nodes::write_node(
@@ -161,6 +199,22 @@ fn used_font_profiles(scene: &Scene) -> [bool; 3] {
             {
                 used[index] |= selected;
             }
+        }
+    }
+    for edge in &scene.edges {
+        let Some(label) = edge.label.as_deref() else {
+            continue;
+        };
+        let font = edge.style.font.unwrap_or(scene.theme.font);
+        let weight = edge.style.weight.unwrap_or(550);
+        if !label.is_empty() {
+            mark_font(&mut used, font);
+        }
+        for (index, selected) in text::font_profiles_for_text(font, label, weight)
+            .into_iter()
+            .enumerate()
+        {
+            used[index] |= selected;
         }
     }
     used

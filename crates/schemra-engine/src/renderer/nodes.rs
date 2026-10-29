@@ -262,7 +262,7 @@ fn write_text_lines(
     }
 }
 
-fn write_text_runs(svg: &mut String, line: &TextLine, base_profile: SceneFont) {
+pub(super) fn write_text_runs(svg: &mut String, line: &TextLine, base_profile: SceneFont) {
     let Some(runs) = &line.runs else {
         write_xml(svg, &line.text);
         return;

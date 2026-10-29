@@ -120,6 +120,38 @@ pub(super) fn wrap_text_runs(
     }
 }
 
+pub(super) fn unwrapped_text_line(
+    font: SceneFont,
+    text: &str,
+    font_size: f32,
+    font_weight: u16,
+) -> TextLine {
+    if text.is_empty() || text.contains('\n') || !font_size.is_finite() || font_size <= 0.0 {
+        return fallback_line(text);
+    }
+    let mut system = font_system()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut buffer = Buffer::new(&mut system, Metrics::new(font_size, font_size));
+    buffer.set_size(&mut system, None, None);
+    buffer.set_wrap(&mut system, Wrap::None);
+    buffer.set_text(
+        &mut system,
+        text,
+        &Attrs::new()
+            .family(Family::Name(family_name(font)))
+            .weight(Weight(font_weight)),
+        Shaping::Advanced,
+        None,
+    );
+    buffer.shape_until_scroll(&mut system, false);
+    buffer
+        .layout_runs()
+        .next()
+        .map(|run| line_from_layout_run(&system, run, font))
+        .unwrap_or_else(|| fallback_line(text))
+}
+
 fn fallback_line(text: &str) -> TextLine {
     TextLine {
         text: text.to_owned(),
