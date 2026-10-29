@@ -106,10 +106,11 @@ bunx --bun playwright install chromium
 bun run test:e2e
 ```
 
-The Playwright configuration launches its own Studio server on `127.0.0.1:5174`
-and does not reuse or stop a developer's preview server. Chromium's required
-shared libraries must be available on the host. When component suites are
-introduced, add their runner dependencies and package scripts in the same
+Playwright uses the Studio server on `127.0.0.1:5173`, reusing the running
+preview when available. Start it with `bun run dev -- --port 5173 --strictPort`
+before browser checks when you need it to remain open afterward. Chromium's
+required shared libraries must be available on the host. When component suites
+are introduced, add their runner dependencies and package scripts in the same
 change, then run `bun run test:components`. Browser coverage must exercise real
 workflows; a successful type check or build is not a substitute.
 

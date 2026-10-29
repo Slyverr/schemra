@@ -27,7 +27,11 @@ afterEach(() => storage.restore());
 describe('appearance preferences', () => {
 	test('defaults to system appearance with Studio-matched editor colors', () => {
 		expect(readThemePreferences()).toEqual(DEFAULT_THEME_PREFERENCES);
-		expect(studioThemeOptions.map(({ value }) => value)).toEqual(['system', 'schemra-light', 'schemra-dark']);
+		expect(studioThemeOptions.map(({ value }) => value)).toEqual([
+			'system', 'schemra-light', 'schemra-dark', 'monochrome-light', 'monochrome-dark',
+			'catppuccin-latte', 'catppuccin-mocha', 'nord', 'dracula'
+		]);
+		expect(studioThemeOptions.every(({ labelKey, previewClass }) => labelKey && previewClass)).toBe(true);
 	});
 
 	test('resolves system appearance to Schemra light or dark', () => {
@@ -35,6 +39,12 @@ describe('appearance preferences', () => {
 		expect(resolveStudioTheme('system', true)).toBe('schemra-dark');
 		expect(isDarkStudioTheme('schemra-dark')).toBe(true);
 		expect(isDarkStudioTheme('schemra-light')).toBe(false);
+		expect(isDarkStudioTheme('monochrome-dark')).toBe(true);
+		expect(isDarkStudioTheme('catppuccin-mocha')).toBe(true);
+		expect(isDarkStudioTheme('nord')).toBe(true);
+		expect(isDarkStudioTheme('dracula')).toBe(true);
+		expect(isDarkStudioTheme('monochrome-light')).toBe(false);
+		expect(isDarkStudioTheme('catppuccin-latte')).toBe(false);
 	});
 
 	test('round-trips supported theme and motion choices', () => {
@@ -43,9 +53,9 @@ describe('appearance preferences', () => {
 		expect(readThemePreferences()).toEqual(preferences);
 	});
 
-	test('normalizes unsupported settings into supported Schemra defaults', () => {
+	test('preserves supported palette selections and normalizes unsupported settings', () => {
 		expect(normalizeThemePreferences({ studio: 'catppuccin-mocha', editor: 'unknown', reduceMotion: 1 }))
-			.toEqual({ studio: 'schemra-dark', editor: 'app', reduceMotion: false });
+			.toEqual({ studio: 'catppuccin-mocha', editor: 'app', reduceMotion: false });
 		expect(normalizeThemePreferences({ studio: 'not-a-theme' }).studio).toBe('system');
 	});
 
@@ -70,6 +80,15 @@ describe('appearance preferences', () => {
 		]);
 		expect(resolveEditorTheme('app', 'schemra-light')).toBe('studio-schemra-light');
 		expect(resolveEditorTheme('app', 'schemra-dark')).toBe('studio-schemra-dark');
+		expect(resolveEditorTheme('app', 'monochrome-light')).toBe('studio-monochrome-light');
+		expect(resolveEditorTheme('app', 'monochrome-dark')).toBe('studio-monochrome-dark');
+		expect(resolveEditorTheme('app', 'catppuccin-latte')).toBe('studio-catppuccin-latte');
+		expect(resolveEditorTheme('app', 'catppuccin-mocha')).toBe('studio-catppuccin-mocha');
+		expect(resolveEditorTheme('app', 'nord')).toBe('studio-nord');
+		expect(resolveEditorTheme('app', 'dracula')).toBe('studio-dracula');
+		for (const theme of studioThemeOptions.filter(({ value }) => value !== 'system').map(({ value }) => value)) {
+			expect(editorThemeStyles(resolveEditorTheme('app', theme))).toContain('--editor-color-scheme:');
+		}
 		expect(resolveEditorTheme('dracula', 'schemra-light')).toBe('dracula');
 		expect(editorThemeStyles('studio-schemra-light')).toContain('--editor-syntax-property:#0758C8');
 	});

@@ -8,6 +8,7 @@
 		type EditorSymbol
 	} from '../schemra.js';
 	import { createBracketMatcher } from './bracket-matching.js';
+	import EditorCompletions from './EditorCompletions.svelte';
 	import { getDelimiterEdit } from './delimiters.js';
 	import { formatSourceForSave } from './format-on-save.js';
 	import { getIndentationEdit } from './indentation.js';
@@ -27,6 +28,7 @@
 		type EditorDiagnostic
 	} from './source-model.js';
 	import { getActiveScopeGuideId, getScopeRanges } from './scope-guides.js';
+	import { getScopeGuideGeometry, measureSourceGlyphInkStartX } from './scope-guide-geometry.js';
 	import { findEditorSymbolAtOffset } from './symbol-navigation.js';
 	import {
 		editorDocumentKey,
@@ -38,6 +40,7 @@
 		normalizeEditorPreferences,
 		type EditorPreferences
 	} from '../settings/editor.js';
+	import { studioMessage } from '../i18n/messages.js';
 
 	interface Props {
 		projectId?: string | null;
@@ -80,6 +83,7 @@
 	const props: Props = $props();
 	const instanceId = $props.id();
 	const completionListId = `${instanceId}-completions`;
+	const diagnosticListId = `${instanceId}-diagnostics`;
 	const baseLineHeight = 24;
 	const verticalPadding = 8;
 	const baseFontSize = 14;
@@ -123,8 +127,8 @@
 	const scopeRanges = $derived(getScopeRanges(props.source));
 	const activeScopeId = $derived(getActiveScopeGuideId(scopeRanges, caretOffset(selection)));
 	const currentCompile = $derived(compiledSource === props.source);
-	const visibleTokens = $derived(props.tokens ?? (currentCompile ? syntaxTokens : []));
-	const visibleDiagnostics = $derived(props.diagnostics ?? (currentCompile ? diagnostics : []));
+	const visibleTokens = $derived(props.tokens?.length ? props.tokens : syntaxTokens);
+	const visibleDiagnostics = $derived(props.diagnostics?.length ? props.diagnostics : (currentCompile ? diagnostics : []));
 	const lines = $derived(buildEditorLines(props.source, visibleTokens, visibleDiagnostics, matchingOffsets));
 	const activeLineIndex = $derived(props.source.slice(0, caretOffset(selection)).split('\n').length - 1);
 	const completionActiveId = $derived(completion ? `${completionListId}-${selectedCompletion}` : undefined);
@@ -139,19 +143,34 @@
 		};
 	});
 
+	function describeDiagnostic(diagnostic: EditorDiagnostic) {
+		const severity = diagnostic.severity === 'error'
+			? studioMessage('editor.severity.error')
+			: diagnostic.severity === 'warning'
+				? studioMessage('editor.severity.warning')
+				: studioMessage('editor.severity.information');
+		const location = studioMessage('editor.diagnosticLocation', {
+			severity,
+			line: diagnostic.span.start.line,
+			column: diagnostic.span.start.column,
+			message: diagnostic.message
+		});
+		return diagnostic.hint ? `${location} ${diagnostic.hint}` : location;
+	}
+
 	$effect(() => {
 		const sourceSnapshot = props.source;
 		const externalTokens = props.tokens;
 		const externalDiagnostics = props.diagnostics;
 		const requestId = ++compileRequestId;
 		clearTimeout(compileTimer);
-		if (externalTokens !== undefined && externalDiagnostics !== undefined) {
+		if (externalTokens?.length) {
+			syntaxTokens = readEditorSyntaxTokens(externalTokens);
+			if (externalDiagnostics !== undefined) diagnostics = readEditorDiagnostics(externalDiagnostics);
 			compiledSource = sourceSnapshot;
 			return;
 		}
 		compiledSource = null;
-		syntaxTokens = [];
-		diagnostics = [];
 		compileTimer = setTimeout(() => {
 			compileTimer = undefined;
 			void compileSource(sourceSnapshot).then((result) => {
@@ -496,20 +515,42 @@
 			return;
 		}
 
-		if (input && formatted !== input.value) {
-			const sourceBeforeFormat = input.value;
-			const previousSelection = {
-				start: input.selectionStart,
-				end: input.selectionEnd,
-				direction: input.selectionDirection
-			};
-			input.setRangeText(formatted, 0, sourceBeforeFormat.length, 'end');
-			const mapped = mapEditorSelection(sourceBeforeFormat, formatted, previousSelection);
-			input.setSelectionRange(mapped.start, mapped.end, mapped.direction);
-			syncSelection();
-			props.onChange(formatted);
+		let sourceToSave = formatted;
+		const sourceBeforeFormat = input?.value;
+		if (sourceBeforeFormat !== undefined && formatted !== sourceBeforeFormat) {
+			if (!applyFormattedSource(sourceBeforeFormat, formatted)) sourceToSave = input?.value ?? props.source;
 		}
-		props.onSave?.(formatted, context);
+		props.onSave?.(sourceToSave, context);
+	}
+
+	export async function formatDocument(): Promise<'formatted' | 'unchanged' | 'stale'> {
+		const currentInput = input;
+		if (!currentInput) return 'stale';
+		const documentKey = editorDocumentKey(props.projectId, props.documentId);
+		const sourceBeforeFormat = currentInput.value;
+		const formatted = await formatSource(sourceBeforeFormat);
+		if (
+			input !== currentInput ||
+			editorDocumentKey(props.projectId, props.documentId) !== documentKey ||
+			currentInput.value !== sourceBeforeFormat
+		) return 'stale';
+		if (formatted === sourceBeforeFormat) return 'unchanged';
+		return applyFormattedSource(sourceBeforeFormat, formatted) ? 'formatted' : 'stale';
+	}
+
+	function applyFormattedSource(sourceBeforeFormat: string, formatted: string) {
+		if (!input || input.value !== sourceBeforeFormat) return false;
+		const previousSelection = {
+			start: input.selectionStart,
+			end: input.selectionEnd,
+			direction: input.selectionDirection
+		};
+		input.setRangeText(formatted, 0, sourceBeforeFormat.length, 'end');
+		const mapped = mapEditorSelection(sourceBeforeFormat, formatted, previousSelection);
+		input.setSelectionRange(mapped.start, mapped.end, mapped.direction);
+		syncSelection();
+		props.onChange(formatted);
+		return true;
 	}
 
 	function handleEditorPointerMove(event: PointerEvent) {
@@ -607,6 +648,11 @@
 		dismissCompletions();
 		input.focus();
 		return true;
+	}
+
+	function selectCompletion(index: number) {
+		selectedCompletion = index;
+		acceptCompletion();
 	}
 
 	function dismissCompletions() {
@@ -721,7 +767,7 @@
 		if (!preferences.indentGuides || !codeSurface || !highlightedLines) return;
 		const context = getSourceMeasureContext();
 		if (!context) return;
-		const surfaceRect = codeSurface.getBoundingClientRect();
+		const surfaceRect = highlightedLines.getBoundingClientRect();
 		const next: Record<number, { left: number; top: number; height: number }> = {};
 		for (const guide of scopeRanges) {
 			const openingLine = highlightedLines.querySelector<HTMLElement>(`[data-line-index="${guide.openLine}"]`);
@@ -729,14 +775,15 @@
 			const lastBodyLine = highlightedLines.querySelector<HTMLElement>(`[data-line-index="${bodyLineIndex}"]`);
 			if (!openingLine || !lastBodyLine) continue;
 			const lineStart = props.source.lastIndexOf('\n', guide.anchorOffset - 1) + 1;
-			const prefix = props.source.slice(lineStart, guide.anchorOffset);
-			const lineRect = openingLine.getBoundingClientRect();
-			const endRect = lastBodyLine.getBoundingClientRect();
-			next[guide.id] = {
-				left: lineRect.left - surfaceRect.left + measureSourcePrefix(context, prefix),
-				top: lineRect.top - surfaceRect.top,
-				height: Math.max(lineHeight, endRect.bottom - lineRect.top)
-			};
+			const sourceColumn = guide.anchorOffset - lineStart;
+			const glyphX = measureSourceGlyphInkStartX(openingLine, sourceColumn, context);
+			if (glyphX === null) continue;
+			next[guide.id] = getScopeGuideGeometry(
+				surfaceRect,
+				openingLine.getBoundingClientRect(),
+				lastBodyLine.getBoundingClientRect(),
+				glyphX
+			);
 		}
 		scopeGuidePositions = next;
 	}
@@ -747,16 +794,6 @@
 		const context = sourceMeasureCanvas.getContext('2d');
 		if (context) context.font = getComputedStyle(codeSurface).font;
 		return context;
-	}
-
-	function measureSourcePrefix(context: CanvasRenderingContext2D, text: string) {
-		const tabWidth = context.measureText(' ').width * preferences.indentSize;
-		let width = 0;
-		for (const character of text) {
-			if (character === '\t') width = (Math.floor(width / tabWidth) + 1) * tabWidth;
-			else width += context.measureText(character).width;
-		}
-		return width;
 	}
 
 	function sameOffsetSet(left: ReadonlySet<number>, right: ReadonlySet<number>) {
@@ -775,7 +812,7 @@
 	bind:this={root}
 	class="source-editor"
 	role="group"
-	aria-label={props.label ?? 'Schemra source editor'}
+	aria-label={props.label ?? studioMessage('editor.sourceLabel')}
 	title={props.editorSymbols?.length ? 'Ctrl/Cmd-click a reference to navigate; F2 renames the symbol at the caret' : undefined}
 	style={`--editor-font-size:${fontSize}px;--editor-line-height:${lineHeight}px;--editor-indent-size:${preferences.indentSize};--editor-gutter-width:${preferences.lineNumbers ? '3.5rem' : '0px'}`}
 	data-diagnostic-presentation={preferences.diagnosticPresentation}
@@ -798,6 +835,7 @@
 						{@const position = scopeGuidePositions[guide.id]}
 						<span
 							class="scope-guide"
+							data-scope-guide={guide.id}
 							class:scope-guide-active={guide.id === activeScopeId}
 							style:left={`${position?.left ?? 0}px`}
 							style:top={`${position?.top ?? 0}px`}
@@ -831,9 +869,10 @@
 				class="editor-input"
 				value={props.source}
 				disabled={props.disabled ?? false}
-				aria-label={props.label ?? 'Schemra source editor'}
+				aria-label={props.label ?? studioMessage('editor.sourceLabel')}
 				onclick={handleSymbolClick}
 				aria-invalid={visibleDiagnostics.some((item) => item.severity === 'error')}
+				aria-describedby={visibleDiagnostics.length ? diagnosticListId : undefined}
 				aria-autocomplete="list"
 				aria-controls={completion ? completionListId : undefined}
 				aria-activedescendant={completionActiveId}
@@ -869,7 +908,7 @@
 			{#if tooltip.diagnostic.hint}<div class="diagnostic-hint">{tooltip.diagnostic.hint}</div>{/if}
 			{#if tooltipQuickFixes.options.length > 0 && props.onQuickFix && tooltipQuickFixes.diagnostic}
 				<div class="diagnostic-quick-fixes">
-					<span>Replace with</span>
+						<span>{studioMessage('editor.quickFixReplace')}</span>
 					{#each tooltipQuickFixes.options as quickFix (`${tooltipQuickFixes.diagnostic.code}-${quickFix.replacement}`)}
 						<button
 							type="button"
@@ -885,36 +924,23 @@
 			{/if}
 		</div>
 	{/if}
-	{#if completion}
-		<ul
-			id={completionListId}
-			class="editor-completions"
-			role="listbox"
-			aria-label="Schemra code suggestions"
-			style:left={`${completionPosition.left}px`}
-			style:top={`${completionPosition.top}px`}
-			style:width={`${completionPosition.width}px`}
-		>
-			{#each completion.items as item, index (index)}
-				<li role="presentation">
-					<button
-						id={`${completionListId}-${index}`}
-						class="completion-option"
-						class:completion-selected={index === selectedCompletion}
-						role="option"
-						aria-selected={index === selectedCompletion}
-						type="button"
-						tabindex="-1"
-						title={item.detail}
-						onmousedown={(event) => event.preventDefault()}
-						onclick={() => { selectedCompletion = index; acceptCompletion(); }}
-					>
-						<span class="completion-heading"><code>{item.label}</code><small>{item.kind}</small></span>
-						<span class="completion-detail">{item.detail}</span>
-					</button>
-				</li>
+	{#if visibleDiagnostics.length}
+		<ul id={diagnosticListId} class="sr-only" aria-label={studioMessage('editor.diagnosticList')}>
+			{#each visibleDiagnostics as diagnostic, index (`${diagnostic.code}-${index}`)}
+				<li>{describeDiagnostic(diagnostic)}</li>
 			{/each}
 		</ul>
+	{/if}
+	{#if completion}
+		<EditorCompletions
+			id={completionListId}
+			items={completion.items}
+			selectedIndex={selectedCompletion}
+			left={completionPosition.left}
+			top={completionPosition.top}
+			width={completionPosition.width}
+			onSelect={selectCompletion}
+		/>
 	{/if}
 </div>
 
@@ -977,7 +1003,7 @@
 		z-index: 1;
 		width: max-content;
 		min-width: 100%;
-		white-space: pre;
+		white-space: normal;
 		tab-size: var(--editor-indent-size);
 		font: inherit;
 		font-variant-ligatures: none;
@@ -1058,7 +1084,7 @@
 	.editor-diagnostic-error { text-decoration-style: wavy; text-decoration-color: var(--destructive); }
 	.editor-diagnostic-warning { text-decoration-style: wavy; text-decoration-color: #b77900; }
 	.editor-diagnostic-information { text-decoration-style: dotted; text-decoration-color: var(--primary); }
-	.editor-diagnostic-tooltip, .editor-completions {
+	.editor-diagnostic-tooltip {
 		position: absolute;
 		z-index: 10;
 		box-sizing: border-box;
@@ -1087,29 +1113,6 @@
 	.diagnostic-quick-fixes button { padding: 0.12rem 0.35rem; border: 1px solid var(--border); border-radius: 0.25rem; color: var(--foreground); background: var(--background); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; cursor: pointer; }
 	.diagnostic-quick-fixes button:hover:not(:disabled) { background: var(--accent); }
 	.diagnostic-quick-fixes button:disabled { cursor: wait; opacity: 0.55; }
-	.editor-completions {
-		max-height: 17.5rem;
-		margin: 0;
-		overflow-y: auto;
-		padding: 0.25rem;
-		list-style: none;
-	}
-	.completion-option {
-		display: block;
-		width: 100%;
-		padding: 0.5rem;
-		border: 0;
-		border-radius: 0.25rem;
-		background: transparent;
-		color: inherit;
-		text-align: left;
-		cursor: pointer;
-	}
-	.completion-selected, .completion-option:hover { background: var(--accent); color: var(--accent-foreground); }
-	.completion-heading { display: flex; align-items: center; gap: 0.5rem; }
-	.completion-heading code { flex: 1; overflow: hidden; font: inherit; text-overflow: ellipsis; white-space: nowrap; }
-	.completion-heading small { color: var(--muted-foreground); font-size: 0.625rem; text-transform: uppercase; }
-	.completion-detail { display: block; margin-top: 0.125rem; color: var(--muted-foreground); font-family: var(--font-sans, sans-serif); font-size: 0.6875rem; line-height: 1rem; }
 	@media (prefers-reduced-motion: reduce) {
 		.editor-viewport { scroll-behavior: auto; }
 	}

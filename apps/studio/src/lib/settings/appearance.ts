@@ -1,27 +1,44 @@
 import { readStoredJson, writeStoredJson } from './storage.js';
+import type { StudioMessageId } from '../i18n/messages.js';
 
-export type StudioTheme = 'system' | 'schemra-light' | 'schemra-dark';
+export type StudioTheme =
+	| 'system'
+	| 'schemra-light'
+	| 'schemra-dark'
+	| 'monochrome-light'
+	| 'monochrome-dark'
+	| 'catppuccin-latte'
+	| 'catppuccin-mocha'
+	| 'nord'
+	| 'dracula';
 export type ResolvedTheme = Exclude<StudioTheme, 'system'>;
 
-export const studioThemeOptions: Array<{ value: StudioTheme; label: string; previewClass: ResolvedTheme | 'system' }> = [
-	{ value: 'system', label: 'System', previewClass: 'system' },
-	{ value: 'schemra-light', label: 'Schemra Light', previewClass: 'schemra-light' },
-	{ value: 'schemra-dark', label: 'Schemra Dark', previewClass: 'schemra-dark' }
+export const studioThemeOptions: Array<{
+	value: StudioTheme;
+	labelKey: StudioMessageId;
+	previewClass: ResolvedTheme | 'system';
+}> = [
+	{ value: 'system', labelKey: 'theme.system', previewClass: 'system' },
+	{ value: 'schemra-light', labelKey: 'theme.schemraLight', previewClass: 'schemra-light' },
+	{ value: 'schemra-dark', labelKey: 'theme.schemraDark', previewClass: 'schemra-dark' },
+	{ value: 'monochrome-light', labelKey: 'theme.monochromeLight', previewClass: 'monochrome-light' },
+	{ value: 'monochrome-dark', labelKey: 'theme.monochromeDark', previewClass: 'monochrome-dark' },
+	{ value: 'catppuccin-latte', labelKey: 'theme.catppuccinLatte', previewClass: 'catppuccin-latte' },
+	{ value: 'catppuccin-mocha', labelKey: 'theme.catppuccinMocha', previewClass: 'catppuccin-mocha' },
+	{ value: 'nord', labelKey: 'theme.nord', previewClass: 'nord' },
+	{ value: 'dracula', labelKey: 'theme.dracula', previewClass: 'dracula' }
 ];
 
 export const editorThemeOptions = [
-	{ value: 'app', label: 'Follow Studio', description: 'Use Schemra syntax colors with the current Studio theme.' },
-	{ value: 'github-light', label: 'GitHub Light', description: 'A familiar light syntax palette.' },
-	{ value: 'github-dark', label: 'GitHub Dark', description: 'A familiar dark syntax palette.' },
-	{ value: 'one-dark', label: 'One Dark', description: 'A subdued dark syntax palette.' },
-	{ value: 'dracula', label: 'Dracula', description: 'A high contrast dark syntax palette.' }
+	{ value: 'app', labelKey: 'settings.editorTheme.followStudio' },
+	{ value: 'github-light', labelKey: 'settings.editorTheme.githubLight' },
+	{ value: 'github-dark', labelKey: 'settings.editorTheme.githubDark' },
+	{ value: 'one-dark', labelKey: 'settings.editorTheme.oneDark' },
+	{ value: 'dracula', labelKey: 'settings.editorTheme.dracula' }
 ] as const;
 
 export type EditorTheme = (typeof editorThemeOptions)[number]['value'];
-export type ResolvedEditorTheme =
-	| 'studio-schemra-light'
-	| 'studio-schemra-dark'
-	| Exclude<EditorTheme, 'app'>;
+export type ResolvedEditorTheme = `studio-${ResolvedTheme}` | Exclude<EditorTheme, 'app'>;
 
 type EditorPalette = Record<
 	| '--editor-color-scheme'
@@ -134,6 +151,114 @@ const editorPalettes: Record<ResolvedEditorTheme, EditorPalette> = {
 		'--editor-syntax-punctuation': '#abb2bf',
 		'--editor-error': '#e06c75'
 	},
+	'studio-monochrome-light': {
+		'--editor-color-scheme': 'light',
+		'--editor-background': 'var(--background)',
+		'--editor-foreground': 'var(--foreground)',
+		'--editor-gutter-background': 'var(--muted)',
+		'--editor-gutter-foreground': 'var(--muted-foreground)',
+		'--editor-border': 'var(--border)',
+		'--editor-selection': 'color-mix(in srgb, var(--primary) 18%, transparent)',
+		'--editor-caret': 'var(--primary)',
+		'--editor-syntax-keyword': '#4a4a4a',
+		'--editor-syntax-property': '#111111',
+		'--editor-syntax-value': '#666666',
+		'--editor-syntax-number': '#333333',
+		'--editor-syntax-string': '#666666',
+		'--editor-syntax-comment': '#777777',
+		'--editor-syntax-punctuation': '#777777',
+		'--editor-error': 'var(--destructive)'
+	},
+	'studio-monochrome-dark': {
+		'--editor-color-scheme': 'dark',
+		'--editor-background': 'var(--background)',
+		'--editor-foreground': 'var(--foreground)',
+		'--editor-gutter-background': 'var(--muted)',
+		'--editor-gutter-foreground': 'var(--muted-foreground)',
+		'--editor-border': 'var(--border)',
+		'--editor-selection': 'color-mix(in srgb, var(--primary) 24%, transparent)',
+		'--editor-caret': 'var(--primary)',
+		'--editor-syntax-keyword': '#eeeeee',
+		'--editor-syntax-property': '#ffffff',
+		'--editor-syntax-value': '#bdbdbd',
+		'--editor-syntax-number': '#d8d8d8',
+		'--editor-syntax-string': '#bdbdbd',
+		'--editor-syntax-comment': '#888888',
+		'--editor-syntax-punctuation': '#888888',
+		'--editor-error': 'var(--destructive)'
+	},
+	'studio-catppuccin-latte': {
+		'--editor-color-scheme': 'light',
+		'--editor-background': 'var(--background)',
+		'--editor-foreground': 'var(--foreground)',
+		'--editor-gutter-background': 'var(--muted)',
+		'--editor-gutter-foreground': 'var(--muted-foreground)',
+		'--editor-border': 'var(--border)',
+		'--editor-selection': 'color-mix(in srgb, var(--primary) 18%, transparent)',
+		'--editor-caret': 'var(--primary)',
+		'--editor-syntax-keyword': '#8839ef',
+		'--editor-syntax-property': '#1e66f5',
+		'--editor-syntax-value': '#40a02b',
+		'--editor-syntax-number': '#fe640b',
+		'--editor-syntax-string': '#179299',
+		'--editor-syntax-comment': '#6c6f85',
+		'--editor-syntax-punctuation': '#6c6f85',
+		'--editor-error': 'var(--destructive)'
+	},
+	'studio-catppuccin-mocha': {
+		'--editor-color-scheme': 'dark',
+		'--editor-background': 'var(--background)',
+		'--editor-foreground': 'var(--foreground)',
+		'--editor-gutter-background': 'var(--muted)',
+		'--editor-gutter-foreground': 'var(--muted-foreground)',
+		'--editor-border': 'var(--border)',
+		'--editor-selection': 'color-mix(in srgb, var(--primary) 24%, transparent)',
+		'--editor-caret': 'var(--primary)',
+		'--editor-syntax-keyword': '#cba6f7',
+		'--editor-syntax-property': '#89b4fa',
+		'--editor-syntax-value': '#a6e3a1',
+		'--editor-syntax-number': '#fab387',
+		'--editor-syntax-string': '#94e2d5',
+		'--editor-syntax-comment': '#a6adc8',
+		'--editor-syntax-punctuation': '#a6adc8',
+		'--editor-error': 'var(--destructive)'
+	},
+	'studio-nord': {
+		'--editor-color-scheme': 'dark',
+		'--editor-background': 'var(--background)',
+		'--editor-foreground': 'var(--foreground)',
+		'--editor-gutter-background': 'var(--muted)',
+		'--editor-gutter-foreground': 'var(--muted-foreground)',
+		'--editor-border': 'var(--border)',
+		'--editor-selection': 'color-mix(in srgb, var(--primary) 24%, transparent)',
+		'--editor-caret': 'var(--primary)',
+		'--editor-syntax-keyword': '#b48ead',
+		'--editor-syntax-property': '#88c0d0',
+		'--editor-syntax-value': '#a3be8c',
+		'--editor-syntax-number': '#ebcb8b',
+		'--editor-syntax-string': '#a3be8c',
+		'--editor-syntax-comment': '#d8dee9',
+		'--editor-syntax-punctuation': '#d8dee9',
+		'--editor-error': 'var(--destructive)'
+	},
+	'studio-dracula': {
+		'--editor-color-scheme': 'dark',
+		'--editor-background': 'var(--background)',
+		'--editor-foreground': 'var(--foreground)',
+		'--editor-gutter-background': 'var(--muted)',
+		'--editor-gutter-foreground': 'var(--muted-foreground)',
+		'--editor-border': 'var(--border)',
+		'--editor-selection': 'color-mix(in srgb, var(--primary) 24%, transparent)',
+		'--editor-caret': 'var(--primary)',
+		'--editor-syntax-keyword': '#ff79c6',
+		'--editor-syntax-property': '#8be9fd',
+		'--editor-syntax-value': '#50fa7b',
+		'--editor-syntax-number': '#bd93f9',
+		'--editor-syntax-string': '#f1fa8c',
+		'--editor-syntax-comment': '#919bb8',
+		'--editor-syntax-punctuation': '#a6a9c4',
+		'--editor-error': 'var(--destructive)'
+	},
 	dracula: {
 		'--editor-color-scheme': 'dark',
 		'--editor-background': '#282a36',
@@ -202,12 +327,21 @@ export function resolveStudioTheme(theme: StudioTheme, systemPrefersDark: boolea
 }
 
 export function isDarkStudioTheme(theme: ResolvedTheme): boolean {
-	return theme === 'schemra-dark';
+	switch (theme) {
+		case 'schemra-dark':
+		case 'monochrome-dark':
+		case 'catppuccin-mocha':
+		case 'nord':
+		case 'dracula':
+			return true;
+		default:
+			return false;
+	}
 }
 
 export function resolveEditorTheme(theme: EditorTheme, studioTheme: ResolvedTheme): ResolvedEditorTheme {
 	if (theme !== 'app') return theme;
-	return studioTheme === 'schemra-dark' ? 'studio-schemra-dark' : 'studio-schemra-light';
+	return `studio-${studioTheme}`;
 }
 
 export function editorThemeStyles(theme: ResolvedEditorTheme): string {
@@ -217,12 +351,9 @@ export function editorThemeStyles(theme: ResolvedEditorTheme): string {
 }
 
 function normalizeStudioTheme(value: unknown): StudioTheme {
-	if (value === 'schemra-light' || value === 'schemra-dark' || value === 'system') return value;
-	if (value === 'light' || value === 'monochrome-light' || value === 'catppuccin-latte') return 'schemra-light';
-	if (
-		value === 'dark' || value === 'monochrome-dark' || value === 'catppuccin-mocha' ||
-		value === 'nord' || value === 'dracula'
-	) return 'schemra-dark';
+	if (studioThemeOptions.some((option) => option.value === value)) return value as StudioTheme;
+	if (value === 'light') return 'schemra-light';
+	if (value === 'dark') return 'schemra-dark';
 	return DEFAULT_THEME_PREFERENCES.studio;
 }
 

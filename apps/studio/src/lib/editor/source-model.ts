@@ -36,6 +36,19 @@ export interface EditorLine {
 	hasErrors: boolean;
 }
 
+/** Convert a one-based editor position into a JavaScript string offset. */
+export function editorOffsetAtPosition(source: string, position: EditorPosition): number {
+	const targetLine = Math.max(1, Math.floor(position.line));
+	const targetColumn = Math.max(1, Math.floor(position.column));
+	const lines = source.split('\n');
+	let offset = 0;
+	for (let index = 0; index < Math.min(targetLine - 1, lines.length - 1); index += 1) {
+		offset += (lines[index]?.length ?? 0) + 1;
+	}
+	const line = lines[Math.min(targetLine - 1, lines.length - 1)] ?? '';
+	return offset + Array.from(line).slice(0, targetColumn - 1).join('').length;
+}
+
 /** Map coordinates within the source text area to a one-based source position. */
 export function getEditorPositionAtPoint(
 	lines: readonly EditorLine[],

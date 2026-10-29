@@ -59,6 +59,25 @@ describe('workspace controller initialization', () => {
 		expect(storage.writes).toHaveLength(1);
 	});
 
+	it('keeps fallback edits exportable without overwriting a workspace that failed to restore', async () => {
+		const storage = memoryStorage();
+		let writeCount = 0;
+		storage.adapter.loadStudioWorkspace = async () => { throw new Error('storage unavailable'); };
+		storage.adapter.saveStudioWorkspace = async () => { writeCount += 1; };
+		const controller = createWorkspaceController({ exampleProject: exampleProject(), storage: storage.adapter, autosaveDelayMs: 0 });
+
+		const initialized = await controller.initialize();
+		expect(initialized.ok).toBe(false);
+		expect(controller.getState().restoreError?.message).toBe('storage unavailable');
+
+		const file = controller.getState().projects[0]!.files[0]!;
+		controller.updateSource('project-example', file.id, 'edited fallback');
+		const saved = await controller.flush();
+		expect(saved.ok).toBe(false);
+		expect(writeCount).toBe(0);
+		expect(controller.exportBundle().ok).toBe(true);
+	});
+
 	it('refreshes an outdated bundled seed while retaining user projects and active selection', async () => {
 		const oldExample = exampleProject();
 		oldExample.files = [

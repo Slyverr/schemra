@@ -10,6 +10,7 @@ import {
 	getAnimationExportFrameTime,
 	getAnimationExportRenderTimeMs
 } from './animation-frame-timing.js';
+import { studioMessage } from '../i18n/messages.js';
 
 export type AnimationFrameRenderer = (timeMs: number, background: string) => string;
 
@@ -193,7 +194,7 @@ export function cancelActiveAnimationExport() {
 }
 
 function abortError(): Error {
-	const error = new Error('Animation export was cancelled.');
+	const error = new Error(studioMessage('export.cancelled'));
 	error.name = 'AbortError';
 	return error;
 }
@@ -212,7 +213,7 @@ function loadSvgImageElement(
 		image = new Image();
 	} catch {
 		URL.revokeObjectURL(url);
-		return Promise.reject(new Error('A diagram frame could not be rendered.'));
+		return Promise.reject(new Error(studioMessage('export.frameRenderFailed')));
 	}
 	return new Promise((resolve, reject) => {
 		let released = false;
@@ -231,7 +232,7 @@ function loadSvgImageElement(
 			reject(error);
 		};
 		const cancel = () => fail(abortError());
-		loadTimer = window.setTimeout(() => fail(new Error('A diagram frame took too long to render.')), FRAME_LOAD_TIMEOUT_MS);
+		loadTimer = window.setTimeout(() => fail(new Error(studioMessage('export.frameTimeout'))), FRAME_LOAD_TIMEOUT_MS);
 		image.onload = () => {
 			if (signal.aborted) {
 				fail(abortError());
@@ -240,14 +241,14 @@ function loadSvgImageElement(
 			signal.removeEventListener('abort', cancel);
 			resolve({ image, release });
 		};
-		image.onerror = () => fail(new Error('A diagram frame could not be rendered.'));
+		image.onerror = () => fail(new Error(studioMessage('export.frameRenderFailed')));
 		signal.addEventListener('abort', cancel, { once: true });
 		if (signal.aborted) cancel();
 		else {
 			try {
 				image.src = url;
 			} catch {
-				fail(new Error('A diagram frame could not be rendered.'));
+				fail(new Error(studioMessage('export.frameRenderFailed')));
 			}
 		}
 	});
@@ -300,7 +301,7 @@ async function createTransferableSvgImage(
 		canvas.height = image instanceof HTMLImageElement ? image.naturalHeight : image.height;
 		const context = canvas.getContext('2d');
 		if (!context || canvas.width <= 0 || canvas.height <= 0) {
-			throw new Error('A diagram frame could not be transferred to the animation worker.');
+			throw new Error(studioMessage('export.frameTransferFailed'));
 		}
 		context.drawImage(image, 0, 0);
 		const bitmap = await createImageBitmap(canvas);
@@ -335,7 +336,7 @@ function estimatedOutputBytes(durationMs: number, videoBitsPerSecond: number): n
 }
 
 function outputTooLargeError(): Error {
-	const error = new Error('This export is too large to safely hold in browser memory. Lower the duration or bitrate, or use a browser that supports saving directly to a file.');
+	const error = new Error(studioMessage('export.tooLarge'));
 	error.name = 'AnimationOutputTooLargeError';
 	return error;
 }
@@ -343,7 +344,7 @@ function outputTooLargeError(): Error {
 function savePickerOptions(options: AnimationExportOptions): SavePickerOptionsLike {
 	return {
 		suggestedName: safeAnimationFileName(options.fileName),
-		types: [{ description: 'MP4 video', accept: { 'video/mp4': ['.mp4'] } }]
+		types: [{ description: studioMessage('export.fileType'), accept: { 'video/mp4': ['.mp4'] } }]
 	};
 }
 
@@ -416,9 +417,9 @@ async function encodeAnimationInWorker(
 	};
 	worker.onerror = (event) => {
 		event.preventDefault();
-		fail(new Error(event.message || 'The animation export worker stopped unexpectedly.'));
+		fail(new Error(event.message || studioMessage('export.workerStopped')));
 	};
-	worker.onmessageerror = () => fail(new Error('The animation export worker returned an unreadable response.'));
+	worker.onmessageerror = () => fail(new Error(studioMessage('export.workerUnreadable')));
 
 	const onAbort = () => {
 		fail(abortError());
@@ -429,7 +430,7 @@ async function encodeAnimationInWorker(
 			worker.postMessage({
 				kind: 'write-ack',
 				writeId,
-				error: 'No output stream is available for this animation export.'
+				error: studioMessage('export.workerOutputUnavailable')
 			});
 			return;
 		}
@@ -464,7 +465,7 @@ async function encodeAnimationInWorker(
 	try {
 		options.onProgress?.(0);
 		const ready = await send({ kind: 'start', settings });
-		if (ready.kind !== 'ready') throw new Error('The animation export worker did not initialize.');
+		if (ready.kind !== 'ready') throw new Error(studioMessage('export.workerInitializeFailed'));
 		for (let index = 0; index < frameCount; index++) {
 			throwIfAborted(signal);
 			const frameTime = getAnimationExportFrameTime(options.durationMs, options.fps, index);
@@ -484,12 +485,12 @@ async function encodeAnimationInWorker(
 				rendered.release();
 			}
 			const frame = await framePromise;
-			if (frame.kind !== 'frame-done') throw new Error('The animation export worker failed to render a frame.');
+			if (frame.kind !== 'frame-done') throw new Error(studioMessage('export.workerFrameFailed'));
 			options.onProgress?.(Math.min(0.97, (index + 1) / frameCount * 0.97));
 		}
 		options.onProgress?.(0.98);
 		const result = await send({ kind: 'finish' });
-		if (result.kind !== 'complete') throw new Error('The animation export worker did not produce a video.');
+		if (result.kind !== 'complete') throw new Error(studioMessage('export.workerVideoFailed'));
 		return result.buffer;
 	} finally {
 		signal.removeEventListener('abort', onAbort);
@@ -500,28 +501,28 @@ async function encodeAnimationInWorker(
 /** Encodes deterministic frame samples into MP4 through WebCodecs. */
 export async function exportAnimation(options: AnimationExportOptions): Promise<void> {
 	if (typeof HTMLCanvasElement === 'undefined') {
-		throw new Error('Animation rendering is not supported in this browser.');
+		throw new Error(studioMessage('export.unsupported'));
 	}
 	if (!isValidAnimationExportDuration(options.durationMs) ||
 		!Number.isFinite(options.width) || options.width <= 0 ||
 		!Number.isFinite(options.height) || options.height <= 0) {
-		throw new Error('Choose a finite export duration greater than 0 and no more than 120 seconds.');
+		throw new Error(studioMessage('export.durationInvalid'));
 	}
 	if (!isValidAnimationExportFps(options.fps)) {
-		throw new Error('Choose a frame rate of 24, 30, or 60 FPS.');
+		throw new Error(studioMessage('export.frameRateInvalid'));
 	}
 	if (!isValidAnimationExportBitrate(options.videoBitsPerSecond)) {
-		throw new Error('Choose a video bitrate between 0.1 and 50 Mbps.');
+		throw new Error(studioMessage('export.bitrateInvalid'));
 	}
 	const frameCount = getAnimationExportFrameCount(options.durationMs, options.fps);
-	if (!Number.isSafeInteger(frameCount)) throw new Error('The selected scenario is too long to render.');
-	if (activeExportControllers.size > 0) throw new Error('An animation export is already running.');
+	if (!Number.isSafeInteger(frameCount)) throw new Error(studioMessage('export.scenarioTooLong'));
+	if (activeExportControllers.size > 0) throw new Error(studioMessage('export.alreadyRunning'));
 
 	const pixelWidth = Math.round(options.width);
 	const pixelHeight = Math.round(options.height);
 	if (!Number.isSafeInteger(pixelWidth) || !Number.isSafeInteger(pixelHeight) ||
 		!isValidAnimationExportDimensions(pixelWidth, pixelHeight)) {
-		throw new Error('Choose dimensions between 320×180 and 3840×3840, with no more than 8.3 megapixels.');
+		throw new Error(studioMessage('export.dimensionsInvalid'));
 	}
 
 	const controller = new AbortController();
@@ -561,7 +562,7 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 		};
 		const codec = await findMp4Codec(settings);
 		if (!codec) {
-			const unavailable = new Error('MP4 export is not supported by an available frame-accurate encoder in this browser.');
+			const unavailable = new Error(studioMessage('export.encoderUnavailable'));
 			unavailable.name = 'AnimationFormatUnavailableError';
 			throw unavailable;
 		}
@@ -590,7 +591,7 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 				signal,
 				fileWritable ? {
 					write: (chunk) => {
-						if (!fileWritable || !fileWritableOpen) throw new Error('The output file is no longer available.');
+						if (!fileWritable || !fileWritableOpen) throw new Error(studioMessage('export.outputFileUnavailable'));
 						return fileWritable.write(chunk);
 					},
 					close: async () => {
@@ -608,7 +609,7 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 			throwIfAborted(signal);
 			if (fileWritable) fileWritableOpen = false;
 			else {
-				if (!buffer?.byteLength) throw new Error('The browser produced an empty animation file.');
+				if (!buffer?.byteLength) throw new Error(studioMessage('export.emptyAnimation'));
 				downloadBlob(new Blob([buffer], { type: 'video/mp4' }), safeAnimationFileName(options.fileName));
 			}
 			options.onProgress?.(1);
@@ -620,7 +621,7 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 		exportCanvas.width = pixelWidth;
 		exportCanvas.height = pixelHeight;
 		const context = exportCanvas.getContext('2d', { alpha: false });
-		if (!context) throw new Error('Could not initialize the animation renderer.');
+		if (!context) throw new Error(studioMessage('export.rendererInitializeFailed'));
 		context.imageSmoothingEnabled = true;
 		context.imageSmoothingQuality = 'high';
 
@@ -645,7 +646,7 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 		const target = fileWritable
 			? new mediabunny.StreamTarget(new WritableStream<import('mediabunny').StreamTargetChunk>({
 				write: async (chunk) => {
-					if (!fileWritable) throw new Error('The output file is no longer available.');
+					if (!fileWritable) throw new Error(studioMessage('export.outputFileUnavailable'));
 					await fileWritable.write(chunk);
 				},
 				close: async () => {
@@ -722,7 +723,7 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 				if (exceededBufferLimit || !isBufferedAnimationOutputWithinLimit(buffer?.byteLength ?? 0)) {
 					throw outputTooLargeError();
 				}
-				if (!buffer?.byteLength) throw new Error('The browser produced an empty animation file.');
+				if (!buffer?.byteLength) throw new Error(studioMessage('export.emptyAnimation'));
 				downloadBlob(new Blob([buffer], { type: format.mimeType }), safeAnimationFileName(options.fileName));
 			}
 			options.onProgress?.(1);

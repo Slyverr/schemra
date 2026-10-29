@@ -1,4 +1,5 @@
 import { sanitizeSvgMarkup } from './model.js';
+import { studioMessage } from '../i18n/messages.js';
 
 const PLAYBACK_LAYERS = [
 	':scope > g[data-schemra-preview-links]',
@@ -27,7 +28,7 @@ export function serializeDiagramSvg(svg: SVGSVGElement, adapter = browserSvgMark
 	const clone = svg.cloneNode(true) as SVGSVGElement;
 	for (const selector of PLAYBACK_LAYERS) clone.querySelector(selector)?.remove();
 	const sanitized = adapter.sanitize(adapter.serialize(clone));
-	if (!sanitized) throw new Error('The diagram could not be serialized as safe SVG.');
+	if (!sanitized) throw new Error(studioMessage('preview.safeSvgUnavailable'));
 	return sanitized;
 }
 
@@ -45,7 +46,7 @@ export function getDiagramDimensions(svg: Pick<SVGSVGElement, 'getAttribute'>): 
 	const width = parseSvgLength(svg.getAttribute('width'));
 	const height = parseSvgLength(svg.getAttribute('height'));
 	if (width > 0 && height > 0) return { width, height };
-	throw new RangeError('The diagram does not have valid intrinsic dimensions.');
+	throw new RangeError(studioMessage('preview.intrinsicDimensionsInvalid'));
 }
 
 /** Calculate a high-resolution raster size while keeping canvas allocation bounded. */
@@ -57,7 +58,7 @@ export function calculatePngDimensions(
 	maxPixels = 32_000_000
 ): { width: number; height: number } {
 	if (![width, height, scale, maxSide, maxPixels].every(Number.isFinite) || width <= 0 || height <= 0 || scale <= 0 || maxSide < 1 || maxPixels < 1) {
-		throw new RangeError('PNG dimensions and scale must be positive finite numbers.');
+		throw new RangeError(studioMessage('preview.pngDimensionsInvalid'));
 	}
 	const boundedScale = Math.min(scale, maxSide / width, maxSide / height, Math.sqrt(maxPixels / (width * height)));
 	return {
@@ -81,10 +82,10 @@ export async function createDiagramPngBlob(
 		const image = await platform.loadImage(url);
 		const canvas = platform.createCanvas(dimensions.width, dimensions.height);
 		const context = canvas.getContext('2d');
-		if (!context) throw new Error('A 2D canvas is unavailable for PNG export.');
+		if (!context) throw new Error(studioMessage('preview.pngCanvasUnavailable'));
 		context.drawImage(image, 0, 0, dimensions.width, dimensions.height);
 		return await new Promise<Blob>((resolve, reject) => {
-			canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('The browser could not encode the diagram as PNG.')), 'image/png');
+			canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error(studioMessage('preview.pngEncodeFailed'))), 'image/png');
 		});
 	} finally {
 		platform.revokeObjectUrl(url);
@@ -106,7 +107,7 @@ export function diagramExportFileName(name: string, format: 'svg' | 'png'): stri
 /** Start a browser download for a prepared SVG or PNG blob. */
 export function downloadDiagramBlob(blob: Blob, fileName: string): void {
 	if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') {
-		throw new Error('Diagram downloads are only available in a browser.');
+		throw new Error(studioMessage('preview.browserDownloadRequired'));
 	}
 	const url = URL.createObjectURL(blob);
 	const link = document.createElement('a');
@@ -126,7 +127,7 @@ function browserSvgMarkupAdapter(): SvgMarkupAdapter {
 
 function browserPngExportPlatform(): PngExportPlatform {
 	if (typeof document === 'undefined' || typeof Image === 'undefined' || typeof URL.createObjectURL !== 'function') {
-		throw new Error('PNG export requires browser image and canvas support.');
+		throw new Error(studioMessage('preview.pngUnsupported'));
 	}
 	return {
 		...browserSvgMarkupAdapter(),
@@ -135,7 +136,7 @@ function browserPngExportPlatform(): PngExportPlatform {
 		loadImage: (url) => new Promise((resolve, reject) => {
 			const image = new Image();
 			image.onload = () => resolve(image);
-			image.onerror = () => reject(new Error('The browser could not load the SVG for PNG export.'));
+			image.onerror = () => reject(new Error(studioMessage('preview.pngSvgLoadFailed')));
 			image.src = url;
 		}),
 		createCanvas: (width, height) => {

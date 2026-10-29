@@ -35,6 +35,7 @@
 		createWorkspaceController,
 		type WorkspaceControllerState
 	} from '../project/workspace-controller.js';
+import { shouldWarnBeforeUnload } from '../project/workspace-lifecycle.js';
 	import { createExampleProject } from '../project/example-project.js';
 	import {
 		readEditorPreferences,
@@ -309,12 +310,28 @@
 		editorPreferences = readEditorPreferences();
 		const themeQuery = window.matchMedia('(prefers-color-scheme: dark)');
 		const syncTheme = () => { systemPrefersDark = themeQuery.matches; };
+		const flushWhenHidden = () => {
+			if (document.visibilityState === 'hidden') void controller.flush().catch(() => undefined);
+		};
+		const flushOnPageHide = () => { void controller.flush().catch(() => undefined); };
+		const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+			if (!shouldWarnBeforeUnload(controller.getState())) return;
+			void controller.flush().catch(() => undefined);
+			event.preventDefault();
+			event.returnValue = '';
+		};
 		syncTheme();
 		themeQuery.addEventListener('change', syncTheme);
+		document.addEventListener('visibilitychange', flushWhenHidden);
+		window.addEventListener('pagehide', flushOnPageHide);
+		window.addEventListener('beforeunload', warnBeforeUnload);
 		void controller.initialize();
 		return () => {
 			stop();
 			themeQuery.removeEventListener('change', syncTheme);
+			document.removeEventListener('visibilitychange', flushWhenHidden);
+			window.removeEventListener('pagehide', flushOnPageHide);
+			window.removeEventListener('beforeunload', warnBeforeUnload);
 			void controller.dispose();
 		};
 	});

@@ -1,12 +1,14 @@
 # Schemra
 
 Schemra is a local authoring environment for structured diagrams and their
-animated scenarios. This repository contains a minimal Rust CLI and SvelteKit
-Studio shell.
+animated scenarios. The Rust workspace provides the language, compiler,
+renderer, playback engine, CLI, and browser-facing WASM API. The SvelteKit Studio
+provides local project authoring, editing, and diagram preview.
 
 ## Requirements
 
-- Rust 1.88.0 with Cargo, rustfmt, and Clippy
+- Rust 1.85 or newer (the repository toolchain pins Rust 1.88.0) with Cargo,
+  rustfmt, and Clippy
 - Bun 1.4.2
 - `wasm32-unknown-unknown` Rust target and `wasm-bindgen-cli` 0.2.129 for the
   Studio bindings and WASM parity checks

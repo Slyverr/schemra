@@ -4,6 +4,10 @@
   "version": "0.1.0",
   "license": "MIT OR Apache-2.0",
   "type": "module",
+  "imports": {
+    "#lib": "./src/lib/index.js",
+    "#lib/*": "./src/lib/*"
+  },
   "packageManager": "bun@1.4.2",
   "scripts": {
     "build:wasm": "test \"$(wasm-bindgen --version)\" = \"wasm-bindgen 0.2.129\" && cargo build --locked --release --target wasm32-unknown-unknown -p schemra-wasm && wasm-bindgen --target web --out-dir src/lib/generated ../../target/wasm32-unknown-unknown/release/schemra_wasm.wasm && sed -i '1i// @ts-nocheck' src/lib/generated/schemra_wasm.js",

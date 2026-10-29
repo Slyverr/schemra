@@ -8,10 +8,10 @@ fn run_cli(arguments: &[&str]) -> Output {
 }
 
 #[test]
-fn no_arguments_print_help_and_succeed() {
+fn no_arguments_print_help_and_require_a_subcommand() {
     let output = run_cli(&[]);
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stdout).contains("Usage: schemra"));
 }
 

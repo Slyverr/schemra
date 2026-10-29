@@ -74,3 +74,27 @@ test('restores the caret and vertical scroll when returning to a source tab', as
 	await expect.poll(() => editor.evaluate((element: HTMLTextAreaElement) => element.selectionStart)).toBe(savedView.selectionStart);
 	await expect.poll(() => editor.evaluate((element: HTMLTextAreaElement) => element.parentElement?.parentElement?.scrollTop ?? 0)).toBe(savedView.scrollTop);
 });
+
+test('flushes edits when hidden and warns before leaving unsaved source changes', async ({ page }) => {
+	await page.goto('/');
+	await expect(page.getByRole('button', { name: 'Save workspace' })).toBeEnabled();
+
+	const editor = page.getByRole('textbox', { name: / editor$/ });
+	const updatedSource = `${await editor.inputValue()}\n// lifecycle persistence`;
+	await editor.fill(updatedSource);
+	await page.evaluate(() => {
+		Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+		document.dispatchEvent(new Event('visibilitychange'));
+	});
+	await expect(page.locator('.save-state')).toContainText('Saved locally');
+
+	const beforeUnload = page.waitForEvent('dialog');
+	const reload = page.reload();
+	const dialog = await beforeUnload;
+	expect(dialog.type()).toBe('beforeunload');
+	await dialog.accept();
+	await reload;
+
+	await expect(page.getByRole('button', { name: 'Save workspace' })).toBeEnabled();
+	await expect(editor).toHaveValue(updatedSource);
+});

@@ -4,6 +4,7 @@ import {
 	normalizeProjectName,
 	type StudioProject
 } from './session.js';
+import { studioMessage, type StudioMessageId } from '../i18n/messages.js';
 
 const DATABASE_NAME = 'schemra-studio-workspace';
 const DATABASE_VERSION = 1;
@@ -95,7 +96,7 @@ let pendingWritePromise: Promise<void> | null = null;
 
 /** Loads the saved Studio workspace, or returns null when this browser has no snapshot yet. */
 export async function loadStudioWorkspace(): Promise<StudioWorkspaceSnapshot | null> {
-	await withStorageDeadline(pendingWrites, 'waiting for previous workspace writes');
+	await withStorageDeadline(pendingWrites, 'storage.phase.waitingForWrites');
 	workspaceRevision = undefined;
 	lastPersistedSnapshotKey = null;
 	const database = await openDatabase();
@@ -112,7 +113,7 @@ export async function loadStudioWorkspace(): Promise<StudioWorkspaceSnapshot | n
 		return null;
 	}
 	if (!isRecord(stored) || stored.schemaVersion !== SNAPSHOT_VERSION || !('snapshot' in stored)) {
-		throw new StudioWorkspaceStorageError('The saved Studio workspace uses an unsupported storage format.');
+		throw new StudioWorkspaceStorageError(studioMessage('storage.unsupportedFormat'));
 	}
 
 	try {
@@ -122,7 +123,9 @@ export async function loadStudioWorkspace(): Promise<StudioWorkspaceSnapshot | n
 		return snapshot;
 	} catch (error) {
 		throw new StudioWorkspaceStorageError(
-			`The saved Studio workspace is invalid: ${errorMessage(error, 'the stored data could not be validated.')}`
+			studioMessage('storage.invalidWorkspace', {
+				details: errorMessage(error, studioMessage('storage.validationFailed'))
+			})
 		);
 	}
 }
@@ -161,10 +164,12 @@ function snapshotKey(snapshot: StudioWorkspaceSnapshot): string {
 	return JSON.stringify(snapshot);
 }
 
-function withStorageDeadline<T>(operation: Promise<T>, phase: string): Promise<T> {
+function withStorageDeadline<T>(operation: Promise<T>, phase: RestorePhaseMessage): Promise<T> {
 	return new Promise((resolve, reject) => {
 		const timeout = setTimeout(() => {
-			reject(new StudioWorkspaceStorageError(`Workspace restore timed out while ${phase}.`));
+			reject(new StudioWorkspaceStorageError(studioMessage('storage.restoreTimedOut', {
+				phase: studioMessage(phase)
+			})));
 		}, WORKSPACE_STORAGE_TIMEOUT_MS);
 		operation.then(
 			(value) => {
@@ -185,9 +190,7 @@ function openDatabase(): Promise<IDBDatabase> {
 	const indexedDb = globalThis.indexedDB;
 	if (!indexedDb) {
 		return Promise.reject(
-			new StudioWorkspaceStorageError(
-				'Browser workspace storage is unavailable because IndexedDB is not supported or has been disabled.'
-			)
+			new StudioWorkspaceStorageError(studioMessage('storage.indexedDbUnavailable'))
 		);
 	}
 
@@ -195,7 +198,9 @@ function openDatabase(): Promise<IDBDatabase> {
 		let settled = false;
 		let request: IDBOpenDBRequest;
 		const timeout = setTimeout(() => {
-			fail(new StudioWorkspaceStorageError('Workspace restore timed out while opening browser storage.'));
+			fail(new StudioWorkspaceStorageError(studioMessage('storage.restoreTimedOut', {
+				phase: studioMessage('storage.phase.openingBrowserStorage')
+			})));
 		}, WORKSPACE_STORAGE_TIMEOUT_MS);
 		const fail = (error: StudioWorkspaceStorageError) => {
 			if (settled) return;
@@ -217,14 +222,16 @@ function openDatabase(): Promise<IDBDatabase> {
 		request.onblocked = () => {
 			fail(
 				new StudioWorkspaceStorageError(
-					'Opening browser workspace storage is blocked by another Studio tab. Close the other tab and try again.'
+					studioMessage('storage.openBlocked')
 				)
 			);
 		};
 		request.onerror = () => {
 			fail(
 				new StudioWorkspaceStorageError(
-					`Could not open browser workspace storage: ${request.error?.message ?? 'check browser storage permissions.'}`
+					studioMessage('storage.openFailed', {
+						reason: request.error?.message ?? studioMessage('storage.checkPermissions')
+					})
 				)
 			);
 		};
@@ -264,9 +271,7 @@ async function persistWorkspace(
 	expectedSnapshotKey: string | null
 ): Promise<number> {
 	if (expectedRevision === undefined) {
-		throw new StudioWorkspaceConflictError(
-			'The saved workspace could not be safely checked. Your edits are still open in this tab; export the active project before reloading.'
-		);
+		throw new StudioWorkspaceConflictError(studioMessage('storage.unsafeSave'));
 	}
 
 	try {
@@ -305,7 +310,9 @@ function readWorkspaceRecord(database: IDBDatabase): Promise<unknown> {
 		};
 		const timeout = setTimeout(() => {
 			finish(() => {
-				reject(new StudioWorkspaceStorageError('Workspace restore timed out while reading saved data.'));
+				reject(new StudioWorkspaceStorageError(studioMessage('storage.restoreTimedOut', {
+					phase: studioMessage('storage.phase.readingSavedData')
+				})));
 				try {
 					transaction.abort();
 				} catch {
@@ -407,15 +414,13 @@ function storedRevision(value: unknown): number {
 
 function requireRevision(value: unknown): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
-		throw new StudioWorkspaceConflictError('The saved workspace revision is invalid.');
+		throw new StudioWorkspaceConflictError(studioMessage('storage.invalidRevision'));
 	}
 	return value;
 }
 
 function workspaceConflictError(): StudioWorkspaceConflictError {
-	return new StudioWorkspaceConflictError(
-		'The saved workspace changed after this tab loaded. It may have been edited in another Studio tab. Your current edits are still open here; export the active project before reloading, then reload to continue from the latest saved workspace.'
-	);
+	return new StudioWorkspaceConflictError(studioMessage('storage.workspaceConflict'));
 }
 
 export class StudioWorkspaceConflictError extends StudioWorkspaceStorageError {
@@ -446,48 +451,48 @@ function clearClosedDatabase(database: IDBDatabase) {
 }
 
 function normalizeSnapshot(value: unknown): StudioWorkspaceSnapshot {
-	if (!isRecord(value)) throw new TypeError('The workspace snapshot must be an object.');
-	if (!Array.isArray(value.projects)) throw new TypeError('The workspace snapshot is missing its project list.');
+	if (!isRecord(value)) throw new TypeError(studioMessage('storage.snapshotMustBeObject'));
+	if (!Array.isArray(value.projects)) throw new TypeError(studioMessage('storage.snapshotMissingProjects'));
 	if (value.activeProjectId !== null && typeof value.activeProjectId !== 'string') {
-		throw new TypeError('The active project ID must be a string or null.');
+		throw new TypeError(studioMessage('storage.activeProjectIdInvalid'));
 	}
 	if (!isRecord(value.selectedFileByProject)) {
-		throw new TypeError('The selected-file map must be an object.');
+		throw new TypeError(studioMessage('storage.selectedFileMapInvalid'));
 	}
 	const rawScenarioSelections = value.selectedScenarioByProject === undefined
 		? {}
 		: value.selectedScenarioByProject;
 	if (!isRecord(rawScenarioSelections)) {
-		throw new TypeError('The selected-scenario map must be an object.');
+		throw new TypeError(studioMessage('storage.selectedScenarioMapInvalid'));
 	}
 
 	const projectIds = new Set<string>();
 	const fileIds = new Set<string>();
 	const projects = value.projects.map((entry, projectIndex): StudioWorkspaceProjectSnapshot => {
-		const label = `Project ${projectIndex + 1}`;
-		if (!isRecord(entry)) throw new TypeError(`${label} must be an object.`);
-		const id = requireIdentifier(entry.id, `${label} ID`);
-		if (projectIds.has(id)) throw new TypeError(`The workspace contains duplicate project ID "${id}".`);
+		const label = studioMessage('storage.projectLabel', { index: projectIndex + 1 });
+		if (!isRecord(entry)) throw new TypeError(studioMessage('storage.projectInvalid', { project: label }));
+		const id = requireIdentifier(entry.id);
+		if (projectIds.has(id)) throw new TypeError(studioMessage('storage.duplicateProjectId', { id }));
 		projectIds.add(id);
-		if (typeof entry.name !== 'string') throw new TypeError(`${label} must have a name.`);
-		if (!Array.isArray(entry.files)) throw new TypeError(`${label} must have a file list.`);
+		if (typeof entry.name !== 'string') throw new TypeError(studioMessage('storage.projectNameInvalid', { project: label }));
+		if (!Array.isArray(entry.files)) throw new TypeError(studioMessage('storage.projectFilesInvalid', { project: label }));
 		// Local snapshots can exceed portable bundle size limits; IndexedDB and its quota govern storage.
 		if (entry.files.length > MAX_PROJECT_FILES) {
-			throw new TypeError(`${label} can contain up to ${MAX_PROJECT_FILES} source files.`);
+			throw new TypeError(studioMessage('storage.projectFileLimit', { project: label, max: MAX_PROJECT_FILES }));
 		}
 
 		const paths = new Set<string>();
 		const files = entry.files.map((file, fileIndex): StudioWorkspaceFileSnapshot => {
-			if (!isRecord(file)) throw new TypeError(`${label} file ${fileIndex + 1} must be an object.`);
-			const fileId = requireIdentifier(file.id, `${label} file ${fileIndex + 1} ID`);
-			if (fileIds.has(fileId)) throw new TypeError(`The workspace contains duplicate file ID "${fileId}".`);
+			if (!isRecord(file)) throw new TypeError(studioMessage('storage.fileInvalid', { project: label, index: fileIndex + 1 }));
+			const fileId = requireIdentifier(file.id);
+			if (fileIds.has(fileId)) throw new TypeError(studioMessage('storage.duplicateFileId', { id: fileId }));
 			fileIds.add(fileId);
 			if (typeof file.path !== 'string' || typeof file.source !== 'string') {
-				throw new TypeError(`${label} file ${fileIndex + 1} must have a relative path and source text.`);
+				throw new TypeError(studioMessage('storage.fileSourceInvalid', { project: label, index: fileIndex + 1 }));
 			}
 			const path = normalizeProjectFilePath(file.path);
 			const pathKey = path.toLowerCase();
-			if (paths.has(pathKey)) throw new TypeError(`${label} contains duplicate file path "${path}".`);
+			if (paths.has(pathKey)) throw new TypeError(studioMessage('storage.duplicateFilePath', { path }));
 			paths.add(pathKey);
 			return { id: fileId, path, source: file.source };
 		});
@@ -502,7 +507,7 @@ function normalizeSnapshot(value: unknown): StudioWorkspaceSnapshot {
 	const projectById = new Map(projects.map((project) => [project.id, project]));
 	const selectedFileByProject: Record<string, string> = {};
 	for (const [projectId, fileIdValue] of Object.entries(value.selectedFileByProject)) {
-		const fileId = requireIdentifier(fileIdValue, `Selected file ID for project "${projectId}"`);
+		const fileId = requireIdentifier(fileIdValue);
 		const project = projectById.get(projectId);
 		if (project?.files.some((file) => file.id === fileId)) {
 			Object.defineProperty(selectedFileByProject, projectId, {
@@ -516,18 +521,18 @@ function normalizeSnapshot(value: unknown): StudioWorkspaceSnapshot {
 
 	const selectedScenarioByProject: Record<string, Record<string, string | null>> = {};
 	for (const [projectIdValue, selectionsValue] of Object.entries(rawScenarioSelections)) {
-		const projectId = requireIdentifier(projectIdValue, 'Selected-scenario project ID');
+		const projectId = requireIdentifier(projectIdValue);
 		const project = projectById.get(projectId);
 		if (!project) continue;
 		if (!isRecord(selectionsValue)) {
-			throw new TypeError(`Selected scenarios for project "${projectId}" must be an object.`);
+			throw new TypeError(studioMessage('storage.selectedScenariosInvalid', { projectId }));
 		}
 
 		const visualSelections: Record<string, string | null> = {};
 		for (const [visualIdValue, scenarioId] of Object.entries(selectionsValue)) {
-			const visualId = requireIdentifier(visualIdValue, `Selected-scenario visual ID for project "${projectId}"`);
+			const visualId = requireIdentifier(visualIdValue);
 			if (scenarioId !== null && typeof scenarioId !== 'string') {
-				throw new TypeError(`Selected scenario ID for visual "${visualId}" must be an ID or null.`);
+				throw new TypeError(studioMessage('storage.selectedScenarioInvalid', { visualId }));
 			}
 			Object.defineProperty(visualSelections, visualId, {
 				value: scenarioId,
@@ -546,7 +551,7 @@ function normalizeSnapshot(value: unknown): StudioWorkspaceSnapshot {
 
 	const requestedActiveProjectId = value.activeProjectId === null
 		? null
-		: requireIdentifier(value.activeProjectId, 'Active project ID');
+		: requireIdentifier(value.activeProjectId);
 	const activeProjectId = requestedActiveProjectId === null
 		? null
 		: projectById.has(requestedActiveProjectId)
@@ -555,7 +560,7 @@ function normalizeSnapshot(value: unknown): StudioWorkspaceSnapshot {
 
 	const exampleProjectRevision = value.exampleProjectRevision === undefined
 		? undefined
-		: requireNonNegativeInteger(value.exampleProjectRevision, 'Example project revision');
+		: requireNonNegativeInteger(value.exampleProjectRevision);
 	return {
 		projects,
 		activeProjectId,
@@ -565,21 +570,21 @@ function normalizeSnapshot(value: unknown): StudioWorkspaceSnapshot {
 	};
 }
 
-function requireNonNegativeInteger(value: unknown, label: string): number {
+function requireNonNegativeInteger(value: unknown): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
-		throw new TypeError(`${label} must be a non-negative safe integer.`);
+		throw new TypeError(studioMessage('storage.nonNegativeIntegerInvalid'));
 	}
 	return value;
 }
 
-function requireIdentifier(value: unknown, label: string): string {
+function requireIdentifier(value: unknown): string {
 	if (
 		typeof value !== 'string' ||
 		!value.trim() ||
 		value.length > 256 ||
 		/[\u0000-\u001f\u007f]/.test(value)
 	) {
-		throw new TypeError(`${label} is invalid.`);
+		throw new TypeError(studioMessage('storage.identifierInvalid'));
 	}
 	return value;
 }
@@ -590,13 +595,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asStorageError(operation: 'open' | 'read' | 'save', error: unknown): StudioWorkspaceStorageError {
 	if (error instanceof StudioWorkspaceStorageError) return error;
-	const message = errorMessage(error, 'browser storage may be unavailable or full.');
-	if (operation === 'open') {
-		return new StudioWorkspaceStorageError(`Could not open browser workspace storage: ${message}`);
-	}
-	return new StudioWorkspaceStorageError(`Could not ${operation} the Studio workspace in browser storage: ${message}`);
+	const reason = errorMessage(error, studioMessage('storage.unavailableOrFull'));
+	const messageId = ({
+		open: 'storage.openFailed',
+		read: 'storage.readFailed',
+		save: 'storage.saveFailed'
+	} as const satisfies Record<typeof operation, StudioMessageId>)[operation];
+	return new StudioWorkspaceStorageError(studioMessage(messageId, { reason }));
 }
 
 function errorMessage(error: unknown, fallback: string): string {
 	return error instanceof Error && error.message ? error.message : fallback;
 }
+
+type RestorePhaseMessage = Extract<StudioMessageId,
+	| 'storage.phase.waitingForWrites'
+	| 'storage.phase.openingBrowserStorage'
+	| 'storage.phase.readingSavedData'
+>;

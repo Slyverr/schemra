@@ -15,6 +15,7 @@ import {
 	type StudioProject
 } from './session.js';
 import type { ProjectDocument, SourceMode, SchemraFileHandle } from './session.js';
+import { studioMessage } from '../i18n/messages.js';
 import {
 	BUNDLED_EXAMPLE_PROJECT_REVISION,
 	refreshBundledExampleProject,
@@ -40,6 +41,7 @@ export interface WorkspaceControllerState {
 	initialized: boolean;
 	saveStatus: WorkspaceSaveStatus;
 	error: WorkspaceIssue | null;
+	restoreError: WorkspaceIssue | null;
 }
 
 export interface WorkspaceStorageAdapter {
@@ -116,7 +118,8 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 		selectedScenarioByProject: {},
 		initialized: false,
 		saveStatus: 'idle',
-		error: null
+		error: null,
+		restoreError: null
 	};
 	let initializePromise: Promise<WorkspaceActionResult<WorkspaceControllerState>> | null = null;
 	let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -159,7 +162,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 	}
 
 	function scheduleSave(delay = autosaveDelayMs) {
-		if (!state.initialized) return;
+		if (!state.initialized || state.restoreError) return;
 		if (autosaveTimer !== null) clearTimeout(autosaveTimer);
 		updateState({ saveStatus: 'dirty', error: null });
 		autosaveTimer = setTimeout(() => {
@@ -169,6 +172,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 	}
 
 	function saveCurrentSnapshot(): Promise<WorkspaceFlushResult> {
+		if (state.restoreError) return Promise.resolve({ ok: false, error: { ...state.restoreError } });
 		const snapshot = makeSnapshot();
 		const key = JSON.stringify(snapshot);
 		const revision = stateRevision;
@@ -202,7 +206,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 	}
 
 	function failSave(error: unknown, key: string, revision: number): WorkspaceFlushResult {
-		const issue = toWorkspaceIssue(error, 'Could not save the browser workspace.');
+		const issue = toWorkspaceIssue(error, studioMessage('project.workspaceSaveFailed'));
 		if (revision === stateRevision && JSON.stringify(makeSnapshot()) === key) {
 			updateState({ saveStatus: issue.kind === 'conflict' ? 'conflict' : 'error', error: issue });
 		}
@@ -218,7 +222,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 			try {
 				snapshot = await storage.loadStudioWorkspace();
 			} catch (error) {
-				const issue = toWorkspaceIssue(error, 'Could not restore the saved workspace.');
+				const issue = toWorkspaceIssue(error, studioMessage('project.workspaceRestoreFailed'));
 				publish({
 					...state,
 					projects: [cloneProject(exampleProject)],
@@ -227,7 +231,8 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 					selectedScenarioByProject: {},
 					initialized: true,
 					saveStatus: issue.kind === 'conflict' ? 'conflict' : 'error',
-					error: issue
+					error: issue,
+					restoreError: issue
 				});
 				return { ok: false, error: issue };
 			}
@@ -256,7 +261,8 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 				selectedScenarioByProject,
 				initialized: true,
 				saveStatus: 'ready',
-				error: null
+				error: null,
+				restoreError: null
 			});
 			stateRevision += 1;
 			if (!snapshot || refreshed || restored.projects.length === 0) scheduleSave(0);
@@ -268,7 +274,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 	}
 
 	function requireInitialized(): WorkspaceIssue | null {
-		return state.initialized ? null : { kind: 'not-initialized', message: 'Initialize the workspace before changing it.' };
+		return state.initialized ? null : { kind: 'not-initialized', message: studioMessage('project.initializeBeforeChange') };
 	}
 
 	function updateSource(projectId: string, fileId: string, source: string): WorkspaceActionResult<void> {
@@ -276,7 +282,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 		if (unavailable) return { ok: false, error: unavailable };
 		const projectIndex = state.projects.findIndex((project) => project.id === projectId);
 		const fileIndex = state.projects[projectIndex]?.files.findIndex((file) => file.id === fileId) ?? -1;
-		if (projectIndex < 0 || fileIndex < 0) return notFound('The selected project document no longer exists.');
+		if (projectIndex < 0 || fileIndex < 0) return notFound(studioMessage('project.selectedDocumentMissing'));
 		const project = state.projects[projectIndex]!;
 		if (project.files[fileIndex]!.source === source) return { ok: true, value: undefined };
 		const projects = state.projects.slice();
@@ -293,7 +299,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 		const unavailable = requireInitialized();
 		if (unavailable) return { ok: false, error: unavailable };
 		const project = state.projects.find((entry) => entry.id === projectId);
-		if (!project) return notFound('The selected project no longer exists.');
+		if (!project) return notFound(studioMessage('project.selectedProjectMissing'));
 		const selectedFileByProject = { ...state.selectedFileByProject };
 		if (!selectedFileByProject[projectId] && project.files[0]) defineValue(selectedFileByProject, projectId, project.files[0].id);
 		if (state.activeProjectId === projectId && selectedFileByProject[projectId] === state.selectedFileByProject[projectId]) {
@@ -310,7 +316,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 		if (unavailable) return { ok: false, error: unavailable };
 		const project = state.projects.find((entry) => entry.id === projectId);
 		if (!project || !project.files.some((file) => file.id === fileId)) {
-			return notFound('The selected project document no longer exists.');
+			return notFound(studioMessage('project.selectedDocumentMissing'));
 		}
 		if (state.activeProjectId === projectId && state.selectedFileByProject[projectId] === fileId) {
 			return { ok: true, value: undefined };
@@ -326,7 +332,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 	function selectScenario(projectId: string, visualId: string, scenarioId: string | null): WorkspaceActionResult<void> {
 		const unavailable = requireInitialized();
 		if (unavailable) return { ok: false, error: unavailable };
-		if (!state.projects.some((project) => project.id === projectId)) return notFound('The selected project no longer exists.');
+		if (!state.projects.some((project) => project.id === projectId)) return notFound(studioMessage('project.selectedProjectMissing'));
 		const projectSelections = { ...(state.selectedScenarioByProject[projectId] ?? {}) };
 		if (projectSelections[visualId] === scenarioId && Object.hasOwn(projectSelections, visualId)) {
 			return { ok: true, value: undefined };
@@ -353,7 +359,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 			scheduleSave();
 			return { ok: true, value: cloneProject(project) };
 		} catch (error) {
-			return { ok: false, error: toWorkspaceIssue(error, 'Could not create the project.') };
+			return { ok: false, error: toWorkspaceIssue(error, studioMessage('project.createFailed')) };
 		}
 	}
 
@@ -361,7 +367,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 		const unavailable = requireInitialized();
 		if (unavailable) return { ok: false, error: unavailable };
 		const projectIndex = state.projects.findIndex((project) => project.id === projectId);
-		if (projectIndex < 0) return notFound('The selected project no longer exists.');
+		if (projectIndex < 0) return notFound(studioMessage('project.selectedProjectMissing'));
 		try {
 			const current = state.projects[projectIndex]!;
 			const renamed = {
@@ -375,7 +381,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 			scheduleSave();
 			return { ok: true, value: cloneProject(renamed) };
 		} catch (error) {
-			return { ok: false, error: toWorkspaceIssue(error, 'Could not rename the project.') };
+			return { ok: false, error: toWorkspaceIssue(error, studioMessage('project.renameFailed')) };
 		}
 	}
 
@@ -383,7 +389,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 		const unavailable = requireInitialized();
 		if (unavailable) return { ok: false, error: unavailable };
 		const projectIndex = state.projects.findIndex((project) => project.id === projectId);
-		if (projectIndex < 0) return notFound('The selected project no longer exists.');
+		if (projectIndex < 0) return notFound(studioMessage('project.selectedProjectMissing'));
 		try {
 			const project = state.projects[projectIndex]!;
 			const normalizedTitle = normalizeResourceTitle(title);
@@ -393,7 +399,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 			insertDocument(projectIndex, file);
 			return { ok: true, value: { ...file } };
 		} catch (error) {
-			return { ok: false, error: toWorkspaceIssue(error, 'Could not create the visual.') };
+			return { ok: false, error: toWorkspaceIssue(error, studioMessage('project.visualCreateFailed')) };
 		}
 	}
 
@@ -404,17 +410,17 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 		const unavailable = requireInitialized();
 		if (unavailable) return { ok: false, error: unavailable };
 		const projectIndex = state.projects.findIndex((project) => project.id === projectId);
-		if (projectIndex < 0) return notFound('The selected project no longer exists.');
+		if (projectIndex < 0) return notFound(studioMessage('project.selectedProjectMissing'));
 		try {
 			const project = state.projects[projectIndex]!;
 			const title = normalizeResourceTitle(resource.title);
 			if (!/^[a-z_][a-z0-9_]{0,31}$/.test(resource.scenarioId)) {
-				throw new TypeError('The scenario identifier is not valid.');
+				throw new TypeError(studioMessage('project.invalidScenarioId'));
 			}
 			if (!/^[a-z_][a-zA-Z0-9_]*$/.test(resource.visualId)) {
-				throw new TypeError('The visual identifier is not valid.');
+				throw new TypeError(studioMessage('project.invalidVisualId'));
 			}
-			if (!resource.source.trim()) throw new TypeError('Scenario source cannot be empty.');
+			if (!resource.source.trim()) throw new TypeError(studioMessage('project.emptyScenarioSource'));
 			const path = uniqueProjectPath(
 				project,
 				`scenarios/${resource.visualId}/${resourceSlug(title)}.schemra`
@@ -438,7 +444,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 			scheduleSave();
 			return { ok: true, value: { ...file } };
 		} catch (error) {
-			return { ok: false, error: toWorkspaceIssue(error, 'Could not create the scenario.') };
+			return { ok: false, error: toWorkspaceIssue(error, studioMessage('project.scenarioCreateFailed')) };
 		}
 	}
 
@@ -449,7 +455,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 		const unavailable = requireInitialized();
 		if (unavailable) return { ok: false, error: unavailable };
 		const projectIndex = state.projects.findIndex((project) => project.id === projectId);
-		if (projectIndex < 0) return notFound('The selected project no longer exists.');
+		if (projectIndex < 0) return notFound(studioMessage('project.selectedProjectMissing'));
 		try {
 			const project = state.projects[projectIndex]!;
 			const requestedPath = normalizeProjectFilePath(input.path);
@@ -465,7 +471,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 			insertDocument(projectIndex, document);
 			return { ok: true, value: { ...document } };
 		} catch (error) {
-			return { ok: false, error: toWorkspaceIssue(error, 'Could not add the source document.') };
+			return { ok: false, error: toWorkspaceIssue(error, studioMessage('project.sourceAddFailed')) };
 		}
 	}
 
@@ -480,7 +486,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 		const projectIndex = state.projects.findIndex((project) => project.id === projectId);
 		const project = state.projects[projectIndex];
 		const fileIndex = project?.files.findIndex((file) => file.id === fileId) ?? -1;
-		if (!project || fileIndex < 0) return notFound('The selected project document no longer exists.');
+		if (!project || fileIndex < 0) return notFound(studioMessage('project.selectedDocumentMissing'));
 		try {
 			const current = project.files[fileIndex]!;
 			const directory = current.path.includes('/') ? `${current.path.slice(0, current.path.lastIndexOf('/') + 1)}` : '';
@@ -507,7 +513,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 			}
 			return { ok: true, value: { ...saved } };
 		} catch (error) {
-			return { ok: false, error: toWorkspaceIssue(error, 'Could not update the saved source document.') };
+			return { ok: false, error: toWorkspaceIssue(error, studioMessage('project.sourceUpdateFailed')) };
 		}
 	}
 
@@ -533,19 +539,19 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 		const unavailable = requireInitialized();
 		if (unavailable) return { ok: false, error: unavailable };
 		const projectIndex = state.projects.findIndex((project) => project.id === projectId);
-		if (projectIndex < 0) return notFound('The selected project no longer exists.');
+		if (projectIndex < 0) return notFound(studioMessage('project.selectedProjectMissing'));
 		const project = state.projects[projectIndex]!;
 		const removeIds = new Set(fileIds);
-		if (removeIds.size === 0) return { ok: false, error: { kind: 'invalid', message: 'Select at least one source document to remove.' } };
+		if (removeIds.size === 0) return { ok: false, error: { kind: 'invalid', message: studioMessage('project.selectSourceToRemove') } };
 		if (removeIds.size !== fileIds.length || fileIds.some((id) => !project.files.some((file) => file.id === id))) {
-			return notFound('One or more selected source documents no longer exist.');
+			return notFound(studioMessage('project.selectedDocumentsMissing'));
 		}
 		if (project.files.length - removeIds.size < 1) {
-			return { ok: false, error: { kind: 'invalid', message: 'A project must keep at least one source document.' } };
+			return { ok: false, error: { kind: 'invalid', message: studioMessage('resource.minimumSources') } };
 		}
 		const visualsToRemove = new Set(plan.visualIdsToRemove ?? []);
 		if (visualsToRemove.size > 0 && (plan.remainingVisualIds?.length ?? 0) === 0) {
-			return { ok: false, error: { kind: 'invalid', message: 'A project must keep at least one visual.' } };
+			return { ok: false, error: { kind: 'invalid', message: studioMessage('project.mustKeepVisual') } };
 		}
 
 		const projects = state.projects.slice();
@@ -576,7 +582,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 			project = createProjectFromBundle(parseProjectBundle(contents));
 			project.name = uniqueProjectName(state.projects.map((entry) => entry.name), project.name);
 		} catch (error) {
-			return { ok: false, error: toWorkspaceIssue(error, 'Could not import this project bundle.') };
+			return { ok: false, error: toWorkspaceIssue(error, studioMessage('project.importFailed')) };
 		}
 		const projects = [...state.projects, project];
 		const selectedFileByProject = { ...state.selectedFileByProject };
@@ -592,19 +598,19 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 	function exportBundle(projectId = state.activeProjectId): WorkspaceExportResult {
 		const unavailable = requireInitialized();
 		if (unavailable) return { ok: false, error: unavailable };
-		if (!projectId) return notFound('There is no active project to export.');
+		if (!projectId) return notFound(studioMessage('project.noActiveProject'));
 		const project = state.projects.find((entry) => entry.id === projectId);
-		if (!project) return notFound('The selected project no longer exists.');
+		if (!project) return notFound(studioMessage('project.selectedProjectMissing'));
 		try {
 			const safeName = project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'schemra-project';
 			return { ok: true, value: { fileName: `${safeName}.schemra-project.json`, contents: serializeProjectBundle(project) } };
 		} catch (error) {
-			return { ok: false, error: toWorkspaceIssue(error, 'Could not export this project.') };
+			return { ok: false, error: toWorkspaceIssue(error, studioMessage('project.exportFailed')) };
 		}
 	}
 
 	async function flush(): Promise<WorkspaceFlushResult> {
-		if (!state.initialized) return { ok: false, error: { kind: 'not-initialized', message: 'Initialize the workspace before saving it.' } };
+		if (!state.initialized) return { ok: false, error: { kind: 'not-initialized', message: studioMessage('project.initializeBeforeSave') } };
 		if (autosaveTimer !== null) {
 			clearTimeout(autosaveTimer);
 			autosaveTimer = null;
@@ -689,7 +695,8 @@ function cloneState(state: WorkspaceControllerState): WorkspaceControllerState {
 		projects: state.projects.map(cloneProject),
 		selectedFileByProject: { ...state.selectedFileByProject },
 		selectedScenarioByProject: cloneScenarioSelections(state.selectedScenarioByProject),
-		error: state.error ? { ...state.error } : null
+		error: state.error ? { ...state.error } : null,
+		restoreError: state.restoreError ? { ...state.restoreError } : null
 	};
 }
 

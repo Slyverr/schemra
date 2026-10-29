@@ -1,4 +1,5 @@
 import type { BufferTarget, Output, StreamTarget, StreamTargetChunk, VideoCodec } from 'mediabunny';
+import { studioMessage } from '../i18n/messages.js';
 
 export interface ExportSettings {
 	width: number;
@@ -100,10 +101,10 @@ async function handleRequest(request: Exclude<ExportWorkerRequest, { kind: 'writ
 }
 
 async function startExport(settings: ExportSettings) {
-	if (active) throw new Error('An animation export is already running.');
+	if (active) throw new Error(studioMessage('export.alreadyRunning'));
 	const canvas = new OffscreenCanvas(settings.width, settings.height);
 	const context = canvas.getContext('2d', { alpha: false });
-	if (!context) throw new Error('Could not initialize the animation renderer.');
+	if (!context) throw new Error(studioMessage('export.rendererInitializeFailed'));
 	context.imageSmoothingEnabled = true;
 	context.imageSmoothingQuality = 'high';
 
@@ -186,7 +187,7 @@ async function finishExport(): Promise<ArrayBuffer | undefined> {
 		? undefined
 		: ((current.target as BufferTarget).buffer ?? undefined);
 	if (!current.settings.directSave) {
-		if (!buffer?.byteLength) throw new Error('The browser produced an empty animation file.');
+		if (!buffer?.byteLength) throw new Error(studioMessage('export.emptyAnimation'));
 		if (buffer.byteLength > current.settings.maxOutputBytes) throw outputTooLargeError();
 	}
 	active = undefined;
@@ -237,12 +238,12 @@ async function cancelExport() {
 }
 
 function requireActive(): ActiveExport {
-	if (!active) throw new Error('The animation export worker is not ready.');
+	if (!active) throw new Error(studioMessage('export.workerNotReady'));
 	return active;
 }
 
 function outputTooLargeError() {
-	const error = new Error('The MP4 exceeds the safe buffered export limit. Choose a smaller duration, resolution, or bitrate.');
+	const error = new Error(studioMessage('export.workerTooLarge'));
 	error.name = 'AnimationOutputTooLargeError';
 	return error;
 }

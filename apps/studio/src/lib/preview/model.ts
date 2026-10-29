@@ -275,13 +275,19 @@ export function routePathData(segments: PreviewRouteSegment[], forward = true): 
 	).join(' ')}`;
 }
 
-export function sanitizeSvgMarkup(source: string, parser = new DOMParser(), serializer = new XMLSerializer()): string {
+export function sanitizeSvgMarkup(
+	source: string,
+	parser = new DOMParser(),
+	serializer = new XMLSerializer(),
+	options: { omitCanvasBackground?: boolean } = {}
+): string {
 	if (!source.trim()) return '';
 	const document = parser.parseFromString(source, 'image/svg+xml');
 	const root = document.documentElement;
 	if (root.localName !== 'svg' || root.namespaceURI !== 'http://www.w3.org/2000/svg' || document.querySelector('parsererror')) {
 		return '';
 	}
+	if (options.omitCanvasBackground) omitCanvasBackground(root);
 
 	const allowedElements = new Set([
 		'svg', 'title', 'desc', 'defs', 'filter', 'feDropShadow', 'style', 'rect', 'path', 'g', 'text',
@@ -321,6 +327,22 @@ export function sanitizeSvgMarkup(source: string, parser = new DOMParser(), seri
 	root.setAttribute('class', 'schemra-preview-svg');
 	root.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 	return serializer.serializeToString(root);
+}
+
+function omitCanvasBackground(root: Element): void {
+	const viewBox = root.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number);
+	const width = viewBox?.length === 4 ? viewBox[2] : Number(root.getAttribute('width'));
+	const height = viewBox?.length === 4 ? viewBox[3] : Number(root.getAttribute('height'));
+	if (!Number.isFinite(width) || !Number.isFinite(height)) return;
+
+	const background = [...root.children].find((element) =>
+		element.localName === 'rect' &&
+		(!element.hasAttribute('x') || Number(element.getAttribute('x')) === 0) &&
+		(!element.hasAttribute('y') || Number(element.getAttribute('y')) === 0) &&
+		Number(element.getAttribute('width')) === width &&
+		Number(element.getAttribute('height')) === height
+	);
+	background?.remove();
 }
 
 function isSafeColor(value: string): boolean {

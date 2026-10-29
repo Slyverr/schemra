@@ -4,6 +4,7 @@ import type {
 	WorkerRequestReply,
 	WorkerRequestTiming
 } from './worker-request-protocol.js';
+import { studioMessage } from '../i18n/messages.js';
 
 interface PendingRequest<Request> {
 	id: number;
@@ -77,7 +78,7 @@ export function createWorkerRequestClient<Request, Value>(createWorker: () => Wo
 		}
 
 		if (queued.length >= MAX_QUEUED_REQUESTS) {
-			const error = new Error(`The worker queue is full (${MAX_QUEUED_REQUESTS} pending requests).`);
+			const error = new Error(studioMessage('worker.queueFull', { count: MAX_QUEUED_REQUESTS }));
 			error.name = 'WorkerQueueFullError';
 			finish(job, undefined, error);
 			return;
@@ -97,9 +98,9 @@ export function createWorkerRequestClient<Request, Value>(createWorker: () => Wo
 			worker.onmessage = (event: MessageEvent<WorkerRequestReply<Value>>) => receive(event.data);
 			worker.onerror = (event) => {
 				event.preventDefault();
-				failWorker(new Error(event.message || 'The worker stopped unexpectedly.'));
+				failWorker(new Error(event.message || studioMessage('worker.stopped')));
 			};
-			worker.onmessageerror = () => failWorker(new Error('The worker returned an unreadable response.'));
+			worker.onmessageerror = () => failWorker(new Error(studioMessage('worker.unreadable')));
 			return worker;
 		} catch (error) {
 			workerUnavailable = true;
@@ -123,7 +124,7 @@ export function createWorkerRequestClient<Request, Value>(createWorker: () => Wo
 		const job = active;
 
 		if (!reply.ok && reply.stage === 'initialization') {
-			const error = new Error(`The worker could not initialize WASM: ${reply.error}`);
+			const error = new Error(studioMessage('worker.initializeWasmFailed', { details: reply.error }));
 			error.name = reply.name;
 			failWorker(error);
 			return;
@@ -185,7 +186,10 @@ export function createWorkerRequestClient<Request, Value>(createWorker: () => Wo
 			const fallbackError = asError(error);
 			if (workerFailure) {
 				const contextualError = new Error(
-					`The worker failed (${workerFailure.message}) and the main-thread fallback also failed: ${fallbackError.message}`
+					studioMessage('worker.fallbackFailed', {
+						workerError: workerFailure.message,
+						fallbackError: fallbackError.message
+					})
 				);
 				contextualError.name = fallbackError.name;
 				finish(job, undefined, contextualError);

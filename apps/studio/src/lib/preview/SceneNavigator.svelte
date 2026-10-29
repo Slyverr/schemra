@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { ArrowRight, CircleDot, ListTree, Search } from '@lucide/svelte';
-import { computeCommandScore } from 'bits-ui';
-import { searchPreviewScene, type PreviewScene } from './model';
+	import { computeCommandScore } from 'bits-ui';
+	import { studioMessage } from '../i18n/messages.js';
+	import { Button } from '../components/ui/button/index.js';
+	import { searchPreviewScene, type PreviewScene } from './model.js';
 
 	interface Props {
 		scene: PreviewScene;
@@ -15,7 +17,7 @@ import { searchPreviewScene, type PreviewScene } from './model';
 	const instanceId = $props.id();
 	const searchId = `${instanceId}-search`;
 	let root = $state<HTMLDivElement>();
-	let trigger = $state<HTMLButtonElement>();
+	let trigger = $state<HTMLButtonElement | null>(null);
 	let searchInput = $state<HTMLInputElement>();
 	let open = $state(false);
 	let searchQuery = $state('');
@@ -67,50 +69,51 @@ import { searchPreviewScene, type PreviewScene } from './model';
 </script>
 
 <div class="navigator" bind:this={root}>
-	<button
-		bind:this={trigger}
-		type="button"
-		class="trigger"
-		aria-label="Find a node, group, or connection in the diagram"
+	<Button
+		bind:ref={trigger}
+		variant="ghost"
+		size="icon-sm"
+		class="size-8"
+		aria-label={studioMessage('preview.findDiagram')}
 		aria-expanded={open}
 		aria-controls={`${instanceId}-panel`}
-		title="Find in diagram"
+		title={studioMessage('preview.findInDiagram')}
 		onclick={toggle}
 	>
 		<Search size={16} aria-hidden="true" />
-	</button>
+	</Button>
 
 	{#if open}
-		<div id={`${instanceId}-panel`} class="panel" role="dialog" aria-label="Find in diagram">
-			<label class="sr-only" for={searchId}>Search nodes, groups, and connections</label>
+		<div id={`${instanceId}-panel`} class="panel" role="dialog" aria-label={studioMessage('preview.findInDiagram')}>
+			<label class="sr-only" for={searchId}>{studioMessage('preview.searchScene')}</label>
 			<input
 				id={searchId}
 				bind:this={searchInput}
 				bind:value={searchQuery}
 				type="search"
-				placeholder="Search nodes, groups, and connections…"
+				placeholder={studioMessage('preview.searchScene')}
 				autocomplete="off"
 				onkeydown={handleSearchKeydown}
 			/>
 			<div class="results">
 				{#if results.totalMatches === 0}
-					<p class="empty" role="status">No matching diagram items.</p>
+					<p class="empty" role="status">{studioMessage('preview.noSearchMatches')}</p>
 				{:else}
 					{#if results.groups.length > 0}
-						<section aria-label="Groups">
-							<h2>Groups</h2>
+						<section aria-label={studioMessage('preview.groups')}>
+							<h2>{studioMessage('preview.groups')}</h2>
 							{#each results.groups as { item: group, index } (`${group.name}-${index}`)}
 								<button class="result" type="button" onclick={() => focusTarget(group.bounds)}>
 									<ListTree size={16} aria-hidden="true" />
 									<span class="result-label">{group.title}</span>
-									<span class="result-kind">Group</span>
+									<span class="result-kind">{studioMessage('preview.group')}</span>
 								</button>
 							{/each}
 						</section>
 					{/if}
 					{#if results.nodes.length > 0}
-						<section aria-label="Nodes">
-							<h2>Nodes</h2>
+						<section aria-label={studioMessage('preview.nodes')}>
+							<h2>{studioMessage('preview.nodes')}</h2>
 							{#each results.nodes as { item: node } (node.id)}
 								<button class="result" type="button" onclick={() => focusNode(node.id)}>
 									<CircleDot size={16} aria-hidden="true" />
@@ -121,8 +124,8 @@ import { searchPreviewScene, type PreviewScene } from './model';
 						</section>
 					{/if}
 					{#if results.connections.length > 0}
-						<section aria-label="Connections">
-							<h2>Connections</h2>
+						<section aria-label={studioMessage('preview.connections')}>
+							<h2>{studioMessage('preview.connections')}</h2>
 							{#each results.connections as { item: edge, index } (`${edge.from}-${edge.to}-${index}`)}
 								{@const source = props.scene.nodes.find(({ id }) => id === edge.from)}
 								{@const target = props.scene.nodes.find(({ id }) => id === edge.to)}
@@ -138,7 +141,7 @@ import { searchPreviewScene, type PreviewScene } from './model';
 				{/if}
 			</div>
 			{#if results.totalMatches > results.visibleMatches}
-				<p class="result-limit" role="status">Showing {results.visibleMatches} of {results.totalMatches}. Narrow your search to see more.</p>
+				<p class="result-limit" role="status">{studioMessage('preview.resultsLimit', { visible: results.visibleMatches, total: results.totalMatches })}</p>
 			{/if}
 		</div>
 	{/if}
@@ -146,7 +149,7 @@ import { searchPreviewScene, type PreviewScene } from './model';
 
 <style>
 	.navigator { position: relative; flex: 0 0 auto; }
-	.trigger, .result {
+	.result {
 		display: flex;
 		align-items: center;
 		border: 1px solid var(--border);
@@ -155,9 +158,8 @@ import { searchPreviewScene, type PreviewScene } from './model';
 		font: inherit;
 		cursor: pointer;
 	}
-	.trigger { justify-content: center; width: 2rem; height: 2rem; border-radius: .375rem; }
-	.trigger:hover, .result:hover { background: var(--muted); }
-	.trigger:focus-visible, .result:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+	.result:hover { background: var(--muted); }
+	.result:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 	.panel {
 		position: absolute;
 		z-index: 20;

@@ -1,4 +1,5 @@
 import { MAX_SOURCE_FILE_BYTES, type SchemraFileHandle } from './session.js';
+import { studioMessage } from '../i18n/messages.js';
 
 export interface LocalSchemraSource {
 	name: string;
@@ -52,7 +53,7 @@ export class LocalSourceFileError extends Error {
 }
 
 const SCHEMRA_FILE_TYPES: SourceFileType[] = [{
-	description: 'Schemra source',
+	description: studioMessage('file.schemraSourceType'),
 	accept: { 'text/plain': ['.schemra'] }
 }];
 
@@ -67,7 +68,7 @@ export async function openLocalSchemraSource(
 		handles = await platform.showOpenFilePicker({ multiple: false, types: SCHEMRA_FILE_TYPES });
 	} catch (error) {
 		if (isAbortError(error)) return { status: 'cancelled' };
-		throw fileError('open', 'The selected Schemra file could not be opened.', error);
+		throw fileError('open', studioMessage('file.openFailed'), error);
 	}
 
 	const handle = handles[0];
@@ -76,7 +77,7 @@ export async function openLocalSchemraSource(
 	try {
 		file = await handle.getFile();
 	} catch (error) {
-		throw fileError('read', `Could not read ${handle.name}.`, error);
+		throw fileError('read', studioMessage('file.readNamedFailed', { name: handle.name }), error);
 	}
 	return { status: 'opened', document: await readSourceFile(file, handle, 'local') };
 }
@@ -104,7 +105,7 @@ export async function saveLocalSchemraSource(
 			});
 		} catch (error) {
 			if (isAbortError(error)) return { status: 'cancelled' };
-			throw fileError('save', `Could not choose a destination for ${name}.`, error);
+			throw fileError('save', studioMessage('file.chooseDestinationFailed', { name }), error);
 		}
 	}
 
@@ -114,12 +115,12 @@ export async function saveLocalSchemraSource(
 	}
 
 	if (!platform.download) {
-		throw new LocalSourceFileError('save', 'This browser cannot save a local Schemra file or start a download.');
+		throw new LocalSourceFileError('save', studioMessage('file.localSaveUnsupported'));
 	}
 	try {
 		platform.download(name, options.source);
 	} catch (error) {
-		throw fileError('save', `Could not download ${name}.`, error);
+		throw fileError('save', studioMessage('file.downloadFailed', { name }), error);
 	}
 	return { status: 'saved', name, handle: null, mode: 'download' };
 }
@@ -127,7 +128,7 @@ export async function saveLocalSchemraSource(
 async function readSourceFile(file: File, handle: SchemraFileHandle | null, mode: LocalSchemraSource['mode']): Promise<LocalSchemraSource> {
 	const name = validateSourceName(file.name, 'read');
 	if (file.size > MAX_SOURCE_FILE_BYTES) {
-		throw new LocalSourceFileError('read', `${name} exceeds the ${MAX_SOURCE_FILE_BYTES / 1024 / 1024} MiB per-file limit.`);
+		throw new LocalSourceFileError('read', studioMessage('file.namedSourceTooLarge', { name, size: MAX_SOURCE_FILE_BYTES / 1024 / 1024 }));
 	}
 	try {
 		const source = await file.text();
@@ -135,7 +136,7 @@ async function readSourceFile(file: File, handle: SchemraFileHandle | null, mode
 		return { name, source, handle, mode };
 	} catch (error) {
 		if (error instanceof LocalSourceFileError) throw error;
-		throw fileError('read', `Could not read ${name}.`, error);
+		throw fileError('read', studioMessage('file.readNamedFailed', { name }), error);
 	}
 }
 
@@ -148,10 +149,10 @@ async function writeToHandle(handle: SchemraFileHandle, source: string): Promise
 				permission = await handle.requestPermission({ mode: 'readwrite' });
 			}
 		} catch (error) {
-			throw fileError('save', `Could not check write access for ${handle.name}.`, error);
+			throw fileError('save', studioMessage('file.checkWriteAccessFailed', { name: handle.name }), error);
 		}
 		if (permission !== 'granted') {
-			throw new LocalSourceFileError('save', `Write access to ${handle.name} was not granted.`);
+			throw new LocalSourceFileError('save', studioMessage('file.writeAccessDenied', { name: handle.name }));
 		}
 	}
 
@@ -166,13 +167,13 @@ async function writeToHandle(handle: SchemraFileHandle, source: string): Promise
 		} catch {
 			// Keep the write or close failure as the visible cause.
 		}
-		throw fileError('save', `Could not save ${handle.name}.`, error);
+		throw fileError('save', studioMessage('file.saveNamedFailed', { name: handle.name }), error);
 	}
 }
 
 function validateSourceName(name: string, operation: LocalSourceFileError['operation']): string {
 	if (!name || /[\\/\u0000-\u001f\u007f]/.test(name) || !name.toLowerCase().endsWith('.schemra')) {
-		throw new LocalSourceFileError(operation, 'Choose a file with a valid .schemra filename.');
+		throw new LocalSourceFileError(operation, studioMessage('file.invalidSchemraFilename'));
 	}
 	return name;
 }
@@ -180,7 +181,7 @@ function validateSourceName(name: string, operation: LocalSourceFileError['opera
 function validateSourceSize(source: string, operation: LocalSourceFileError['operation']): void {
 	const sourceBytes = new TextEncoder().encode(source).byteLength;
 	if (sourceBytes > MAX_SOURCE_FILE_BYTES) {
-		throw new LocalSourceFileError(operation, `A source file must be no larger than ${MAX_SOURCE_FILE_BYTES / 1024 / 1024} MiB.`);
+		throw new LocalSourceFileError(operation, studioMessage('file.sourceSizeLimit', { size: MAX_SOURCE_FILE_BYTES / 1024 / 1024 }));
 	}
 }
 

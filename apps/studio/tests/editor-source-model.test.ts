@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
 	buildEditorLines,
+	editorOffsetAtPosition,
 	getEditorColumnAtX,
 	getEditorDiagnosticAtColumn,
 	getEditorPositionAtPoint,
@@ -35,6 +36,11 @@ function diagnostic(startColumn: number, endColumn: number): EditorDiagnostic {
 }
 
 describe('source editor presentation model', () => {
+	test('maps editor line and Unicode columns to JavaScript offsets', () => {
+		expect(editorOffsetAtPosition('😀x\nabc', { line: 1, column: 2 })).toBe(2);
+		expect(editorOffsetAtPosition('😀x\nabc', { line: 2, column: 2 })).toBe(5);
+	});
+
 	test('preserves source text while applying compiler token and diagnostic styles', () => {
 		const source = 'visual app';
 		const lines = buildEditorLines(source, [token('keyword', 1, 7), token('identifier', 8, 11)], [diagnostic(8, 11)], new Set());

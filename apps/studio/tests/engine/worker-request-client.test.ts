@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { studioMessage } from '../../src/lib/i18n/messages.js';
 import { createWorkerRequestClient } from '../../src/lib/engine/worker-request-client.js';
 import type {
 	WorkerRequestMessage,
@@ -32,6 +33,23 @@ class MockWorker {
 
 	fail(message = 'Worker crashed.') {
 		this.onerror?.({ message, preventDefault() {} } as ErrorEvent);
+	}
+
+	failUnreadable() {
+		this.onmessageerror?.();
+	}
+
+	failInitialization(index: number, error: string, name = 'WorkerInitializationError') {
+		const message = this.messages[index];
+		if (!message) throw new Error(`No worker request exists at index ${index}.`);
+		const reply: WorkerRequestReply<Value> = {
+			id: message.id,
+			ok: false,
+			stage: 'initialization',
+			name,
+			error
+		};
+		this.onmessage?.({ data: reply } as MessageEvent<WorkerRequestReply<Value>>);
 	}
 }
 
@@ -118,7 +136,10 @@ describe('worker request client', () => {
 		});
 		const overflow = client.run({ value: 99 }, {}, async () => ({ value: -1 }));
 
-		await expect(overflow).rejects.toMatchObject({ name: 'WorkerQueueFullError' });
+		await expect(overflow).rejects.toMatchObject({
+			name: 'WorkerQueueFullError',
+			message: studioMessage('worker.queueFull', { count: 8 })
+		});
 		for (const item of queued) item.controller.abort();
 		await Promise.all(queued.map(({ promise }) => expect(promise).rejects.toMatchObject({ name: 'AbortError' })));
 		activeController.abort();
@@ -136,5 +157,73 @@ describe('worker request client', () => {
 		await expect(client.run({ value: 5 }, { onTiming: (timing) => timings.push(timing) }, async () => ({ value: 15 })))
 			.resolves.toEqual({ value: 15 });
 		expect(timings.map(({ route }) => route)).toEqual(['main-thread-fallback']);
+	});
+
+	it('localizes the worker fallback wrapper while preserving dynamic failure details and type', async () => {
+		const worker = new MockWorker();
+		const client = createClient(worker);
+		const fallbackError = new TypeError('WASM memory could not be allocated.');
+		const pending = client.run({ value: 6 }, {}, async () => { throw fallbackError; });
+
+		worker.fail('Worker runtime failed: code 17.');
+
+		await expect(pending).rejects.toMatchObject({
+			name: 'TypeError',
+			message: studioMessage('worker.fallbackFailed', {
+				workerError: 'Worker runtime failed: code 17.',
+				fallbackError: fallbackError.message
+			})
+		});
+	});
+
+	it('localizes unreadable-response failures and retains the fallback error name', async () => {
+		const worker = new MockWorker();
+		const client = createClient(worker);
+		const fallbackError = Object.assign(new Error('invalid wasm module'), { name: 'CompileError' });
+		const pending = client.run({ value: 7 }, {}, async () => { throw fallbackError; });
+
+		worker.failUnreadable();
+
+		await expect(pending).rejects.toMatchObject({
+			name: 'CompileError',
+			message: studioMessage('worker.fallbackFailed', {
+				workerError: studioMessage('worker.unreadable'),
+				fallbackError: fallbackError.message
+			})
+		});
+	});
+
+	it('uses the localized stopped-worker message when the browser provides no details', async () => {
+		const worker = new MockWorker();
+		const client = createClient(worker);
+		const fallbackError = new Error('fallback failed');
+		const pending = client.run({ value: 9 }, {}, async () => { throw fallbackError; });
+
+		worker.fail('');
+
+		await expect(pending).rejects.toMatchObject({
+			message: studioMessage('worker.fallbackFailed', {
+				workerError: studioMessage('worker.stopped'),
+				fallbackError: fallbackError.message
+			})
+		});
+	});
+
+	it('localizes WASM initialization context and keeps initialization details', async () => {
+		const worker = new MockWorker();
+		const client = createClient(worker);
+		const fallbackError = new Error('fallback failed');
+		const details = 'failed to compile wasm function 42';
+		const pending = client.run({ value: 8 }, {}, async () => { throw fallbackError; });
+
+		worker.failInitialization(0, details);
+
+		await expect(pending).rejects.toMatchObject({
+			name: fallbackError.name,
+			message: studioMessage('worker.fallbackFailed', {
+				workerError: studioMessage('worker.initializeWasmFailed', { details }),
+				fallbackError: fallbackError.message
+			})
+		});
 	});
 });

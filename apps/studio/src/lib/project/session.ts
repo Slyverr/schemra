@@ -1,3 +1,5 @@
+import { studioMessage } from '../i18n/messages.js';
+
 export const PROJECT_BUNDLE_FORMAT = 'schemra-project';
 export const PROJECT_BUNDLE_VERSION = 2;
 const LEGACY_PROJECT_BUNDLE_VERSION = 1;
@@ -105,8 +107,8 @@ export function createStarterProject(name: string): StudioProject {
 
 export function normalizeResourceTitle(value: string) {
 	const title = value.trim().normalize('NFC').replace(/[\u0000-\u001f\u007f]/g, '');
-	if (!title) throw new TypeError('Enter a name between 1 and 80 characters.');
-	if (Array.from(title).length > 80) throw new TypeError('Names must be 80 characters or fewer.');
+	if (!title) throw new TypeError(studioMessage('resource.titleRequired'));
+	if (Array.from(title).length > 80) throw new TypeError(studioMessage('resource.titleTooLong'));
 	return title;
 }
 
@@ -207,35 +209,35 @@ export function serializeProjectBundle(project: StudioProject) {
 	validateProject(bundle);
 	const contents = JSON.stringify(bundle, null, 2);
 	if (byteLength(contents) > MAX_PROJECT_BUNDLE_BYTES) {
-		throw new TypeError(`This project bundle is too large to export (${MAX_PROJECT_BUNDLE_BYTES / 1024 / 1024} MiB maximum).`);
+		throw new TypeError(studioMessage('project.bundleTooLargeToExport', { size: MAX_PROJECT_BUNDLE_BYTES / 1024 / 1024 }));
 	}
 	return contents;
 }
 
 export function parseProjectBundle(contents: string): ProjectBundle {
 	if (byteLength(contents) > MAX_PROJECT_BUNDLE_BYTES) {
-		throw new TypeError(`This project bundle is too large to open (${MAX_PROJECT_BUNDLE_BYTES / 1024 / 1024} MiB maximum).`);
+		throw new TypeError(studioMessage('project.bundleTooLargeToOpen', { size: MAX_PROJECT_BUNDLE_BYTES / 1024 / 1024 }));
 	}
 
 	let value: unknown;
 	try {
 		value = JSON.parse(contents);
 	} catch {
-		throw new TypeError('The selected file is not valid project JSON.');
+		throw new TypeError(studioMessage('project.invalidBundleJson'));
 	}
 
-	if (!isRecord(value)) throw new TypeError('This is not a Schemra project bundle.');
+	if (!isRecord(value)) throw new TypeError(studioMessage('project.invalidBundle'));
 	if (
 		value.format !== PROJECT_BUNDLE_FORMAT ||
 		(value.version !== PROJECT_BUNDLE_VERSION && value.version !== LEGACY_PROJECT_BUNDLE_VERSION)
 	) {
-		throw new TypeError('This Schemra project bundle uses an unsupported format version.');
+		throw new TypeError(studioMessage('project.unsupportedBundleVersion'));
 	}
 	if (typeof value.name !== 'string' || !Array.isArray(value.files)) {
-		throw new TypeError('The project bundle is missing its name or source files.');
+		throw new TypeError(studioMessage('project.bundleMissingFields'));
 	}
 	if (value.files.length < 1 || value.files.length > MAX_PROJECT_FILES) {
-		throw new TypeError(`A project must contain between 1 and ${MAX_PROJECT_FILES} source files.`);
+		throw new TypeError(studioMessage('project.sourceFileCountLimit', { min: 1, max: MAX_PROJECT_FILES }));
 	}
 
 	const bundle: ProjectBundle = {
@@ -244,7 +246,7 @@ export function parseProjectBundle(contents: string): ProjectBundle {
 		name: value.name,
 		files: value.files.map((file, index) => {
 			if (!isRecord(file) || typeof file.path !== 'string' || typeof file.source !== 'string') {
-				throw new TypeError(`Project file ${index + 1} must have a path and source string.`);
+				throw new TypeError(studioMessage('project.bundleFileInvalid', { index: index + 1 }));
 			}
 			return { path: file.path, source: file.source };
 		}),
@@ -269,22 +271,22 @@ export function uniqueProjectPath(project: StudioProject, proposedPath: string) 
 
 export function assertCanAddDocument(project: StudioProject, source: string) {
 	if (project.files.length >= MAX_PROJECT_FILES) {
-		throw new TypeError(`A project can contain up to ${MAX_PROJECT_FILES} source files.`);
+		throw new TypeError(studioMessage('project.sourceFileCountMaximum', { max: MAX_PROJECT_FILES }));
 	}
 	const sourceBytes = byteLength(source);
 	if (sourceBytes > MAX_SOURCE_FILE_BYTES) {
-		throw new TypeError(`A source file must be no larger than ${MAX_SOURCE_FILE_BYTES / 1024 / 1024} MiB.`);
+		throw new TypeError(studioMessage('project.sourceFileSizeLimit', { size: MAX_SOURCE_FILE_BYTES / 1024 / 1024 }));
 	}
 	const projectBytes = project.files.reduce((sum, file) => sum + byteLength(file.source), 0);
 	if (projectBytes + sourceBytes > MAX_PROJECT_SOURCE_BYTES) {
-		throw new TypeError(`Project sources must be no larger than ${MAX_PROJECT_SOURCE_BYTES / 1024 / 1024} MiB in total.`);
+		throw new TypeError(studioMessage('project.totalSourceSizeLimit', { size: MAX_PROJECT_SOURCE_BYTES / 1024 / 1024 }));
 	}
 }
 
 export function normalizeProjectName(value: string) {
 	const name = value.trim().normalize('NFC').replace(/[\u0000-\u001f\u007f]/g, '');
-	if (!name) throw new TypeError('Enter a project name.');
-	if (Array.from(name).length > 80) throw new TypeError('Project names must be 80 characters or fewer.');
+	if (!name) throw new TypeError(studioMessage('project.nameRequired'));
+	if (Array.from(name).length > 80) throw new TypeError(studioMessage('project.nameTooLong'));
 	return name;
 }
 
@@ -305,7 +307,7 @@ export function uniqueProjectName(existingNames: Iterable<string>, proposedName:
 function validateProject(bundle: ProjectBundle) {
 	bundle.name = normalizeProjectName(bundle.name);
 	if (bundle.files.length < 1 || bundle.files.length > MAX_PROJECT_FILES) {
-		throw new TypeError(`A project must contain between 1 and ${MAX_PROJECT_FILES} source files.`);
+		throw new TypeError(studioMessage('project.sourceFileCountLimit', { min: 1, max: MAX_PROJECT_FILES }));
 	}
 
 	const paths = new Set<string>();
@@ -313,23 +315,23 @@ function validateProject(bundle: ProjectBundle) {
 	for (const file of bundle.files) {
 		file.path = normalizeProjectFilePath(file.path);
 		const key = file.path.toLowerCase();
-		if (paths.has(key)) throw new TypeError(`The project contains duplicate file path "${file.path}".`);
+		if (paths.has(key)) throw new TypeError(studioMessage('project.duplicateSourcePath', { path: file.path }));
 		paths.add(key);
 		const sourceBytes = byteLength(file.source);
 		if (sourceBytes > MAX_SOURCE_FILE_BYTES) {
-			throw new TypeError(`${file.path} exceeds the 2 MiB per-file limit.`);
+			throw new TypeError(studioMessage('project.namedSourceFileSizeLimit', { path: file.path, size: MAX_SOURCE_FILE_BYTES / 1024 / 1024 }));
 		}
 		totalBytes += sourceBytes;
 	}
 	if (totalBytes > MAX_PROJECT_SOURCE_BYTES) {
-		throw new TypeError('The project sources exceed the 12 MiB total limit.');
+		throw new TypeError(studioMessage('project.totalSourceSizeLimit', { size: MAX_PROJECT_SOURCE_BYTES / 1024 / 1024 }));
 	}
 }
 
 export function normalizeProjectFilePath(value: string) {
 	value = value.normalize('NFC');
 	if (!value || value.includes('\\') || value.startsWith('/') || /^[a-z]:/i.test(value)) {
-		throw new TypeError(`"${value}" is not a safe project-relative path.`);
+		throw new TypeError(studioMessage('project.unsafeSourcePath', { path: value }));
 	}
 	const segments = value.split('/');
 	if (
@@ -338,10 +340,10 @@ export function normalizeProjectFilePath(value: string) {
 				!segment || segment === '.' || segment === '..' || segment.trim() !== segment || /[<>:"|?*\u0000-\u001f\u007f]/.test(segment)
 		)
 	) {
-		throw new TypeError(`"${value}" is not a safe project-relative path.`);
+		throw new TypeError(studioMessage('project.unsafeSourcePath', { path: value }));
 	}
 	if (!value.toLowerCase().endsWith('.schemra')) {
-		throw new TypeError(`"${value}" must point to a .schemra source file.`);
+		throw new TypeError(studioMessage('project.schemraSourceRequired', { path: value }));
 	}
 	return value;
 }

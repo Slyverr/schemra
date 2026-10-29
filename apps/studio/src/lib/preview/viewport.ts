@@ -12,52 +12,85 @@ export interface PreviewNodeBounds {
 	height: number;
 }
 
-export interface PreviewScrollTarget {
-	left: number;
-	top: number;
+export interface PreviewPan {
+	x: number;
+	y: number;
 }
 
-/** Choose a zoom percentage that enlarges a node while keeping it inside the viewport. */
-export function calculateNodeFocusZoom(
-	scene: PreviewViewportSize,
-	node: PreviewNodeBounds,
-	viewport: PreviewViewportSize,
-	margin = 24,
-	minZoom = 50,
-	maxZoom = 500
-): number | null {
-	if (!validSize(scene) || !validSize(viewport) || !validBounds(node) || !Number.isFinite(margin) || margin < 0) {
-		return null;
+export interface PreviewTransform extends PreviewPan {
+	zoomPercent: number;
+}
+
+export const MIN_PREVIEW_ZOOM = 50;
+export const MAX_PREVIEW_ZOOM = 2000;
+
+const MAX_FOCUS_ZOOM = 300;
+const FOCUS_PADDING = 48;
+const VISIBLE_PAN_MARGIN = 64;
+
+export function clampPreviewZoom(value: number): number {
+	return clamp(value, MIN_PREVIEW_ZOOM, MAX_PREVIEW_ZOOM);
+}
+
+/** Keep the pointer's diagram position fixed while zoom changes around it. */
+export function zoomPanAtPoint(
+	pan: PreviewPan,
+	currentZoom: number,
+	nextZoom: number,
+	anchor: PreviewPan,
+	viewport: PreviewViewportSize
+): PreviewPan {
+	if (!validSize(viewport) || ![pan.x, pan.y, currentZoom, nextZoom, anchor.x, anchor.y].every(Number.isFinite) || currentZoom <= 0) {
+		return pan;
 	}
-	if (!Number.isFinite(minZoom) || !Number.isFinite(maxZoom) || minZoom <= 0 || maxZoom < minZoom) return null;
+	const scaleRatio = nextZoom / currentZoom;
+	return {
+		x: pan.x + (anchor.x - viewport.width / 2) * (1 - scaleRatio),
+		y: pan.y + (anchor.y - viewport.height / 2) * (1 - scaleRatio)
+	};
+}
+
+/** Fit and center a scene target, matching the preview's Find behavior. */
+export function calculateSceneFocusTransform(
+	viewport: PreviewViewportSize,
+	scene: PreviewViewportSize,
+	target: PreviewNodeBounds
+): PreviewTransform | null {
+	if (!validSize(viewport) || !validSize(scene) || !validBounds(target)) return null;
 
 	const fitScale = Math.min(viewport.width / scene.width, viewport.height / scene.height);
-	const focusWidth = Math.max(1, viewport.width - margin * 2);
-	const focusHeight = Math.max(1, viewport.height - margin * 2);
-	const focusScale = Math.min(focusWidth / node.width, focusHeight / node.height);
-	return Math.round(clamp((focusScale / fitScale) * 100, minZoom, maxZoom));
+	const availableWidth = Math.max(1, viewport.width - FOCUS_PADDING * 2);
+	const availableHeight = Math.max(1, viewport.height - FOCUS_PADDING * 2);
+	const targetZoom = Math.min(
+		availableWidth / (target.width * fitScale),
+		availableHeight / (target.height * fitScale)
+	) * 100;
+	const zoomPercent = clamp(Math.round(targetZoom), MIN_PREVIEW_ZOOM, MAX_FOCUS_ZOOM);
+	const scale = fitScale * (zoomPercent / 100);
+
+	return {
+		zoomPercent,
+		x: -((target.x + target.width / 2) - scene.width / 2) * scale,
+		y: -((target.y + target.height / 2) - scene.height / 2) * scale
+	};
 }
 
-/** Center a node in the scrollable canvas and clamp to its available scroll range. */
-export function calculateNodeScrollTarget(
-	scene: PreviewViewportSize,
-	node: PreviewNodeBounds,
-	sheet: PreviewViewportSize,
-	sheetOrigin: { x: number; y: number },
+/** Keep enough of an enlarged scene reachable while preventing it from drifting away. */
+export function clampScenePan(
+	pan: PreviewPan,
 	viewport: PreviewViewportSize,
-	maxScroll: { x: number; y: number }
-): PreviewScrollTarget | null {
-	if (
-		!validSize(scene) || !validSize(sheet) || !validSize(viewport) || !validBounds(node) ||
-		![sheetOrigin.x, sheetOrigin.y, maxScroll.x, maxScroll.y].every(Number.isFinite) ||
-		maxScroll.x < 0 || maxScroll.y < 0
-	) return null;
+	scene: PreviewViewportSize,
+	zoomPercent: number
+): PreviewPan {
+	if (!validSize(viewport) || !validSize(scene) || !Number.isFinite(zoomPercent) || zoomPercent <= 0) return { x: 0, y: 0 };
 
-	const centerX = sheetOrigin.x + ((node.x + node.width / 2) / scene.width) * sheet.width;
-	const centerY = sheetOrigin.y + ((node.y + node.height / 2) / scene.height) * sheet.height;
+	const fitScale = Math.min(viewport.width / scene.width, viewport.height / scene.height);
+	const scale = fitScale * (zoomPercent / 100);
+	const maxX = Math.max(0, (viewport.width + scene.width * scale) / 2 - VISIBLE_PAN_MARGIN);
+	const maxY = Math.max(0, (viewport.height + scene.height * scale) / 2 - VISIBLE_PAN_MARGIN);
 	return {
-		left: clamp(centerX - viewport.width / 2, 0, maxScroll.x),
-		top: clamp(centerY - viewport.height / 2, 0, maxScroll.y)
+		x: clamp(pan.x, -maxX, maxX),
+		y: clamp(pan.y, -maxY, maxY)
 	};
 }
 

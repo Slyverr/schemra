@@ -179,7 +179,7 @@ fn formatter_check_can_validate_stdin() {
 
 #[test]
 fn formatter_rejects_stdin_write_and_conflicting_modes() {
-    let stdin_write = run_with_stdin(&["fmt", "-", "--write"], unformatted_source().as_bytes());
+    let stdin_write = run(&["fmt", "-", "--write"]);
     let conflicting = run(&["fmt", "source.schemra", "--write", "--check"]);
 
     assert_eq!(stdin_write.status.code(), Some(2));

@@ -76,7 +76,7 @@ fn main() -> ExitCode {
         None => match Cli::command().print_help() {
             Ok(()) => {
                 println!();
-                ExitCode::SUCCESS
+                ExitCode::from(2)
             }
             Err(_) => ExitCode::FAILURE,
         },

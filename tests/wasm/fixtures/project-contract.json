@@ -1,0 +1,14 @@
+{
+  "sources": [
+    {
+      "id": "visual",
+      "path": "visuals/network.schemra",
+      "source": "visual network {\n  node client \"Client\" {}\n  node server \"Server\" {}\n  client -> server\n}"
+    },
+    {
+      "id": "scenario",
+      "path": "scenarios/request-response.schemra",
+      "source": "scenario request_response for visual network {\n  token request { icon: \"mail\" }\n  move request from client -> server { duration: 100ms }\n}"
+    }
+  ]
+}
