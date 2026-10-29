@@ -71,7 +71,37 @@ fn direct_route_is_one_cubic_with_endpoints_on_selected_node_faces() {
         assert_eq!(diagnostic.source_port, source_side);
         assert_eq!(diagnostic.target_port, target_side);
         assert_eq!(diagnostic.selected_routing, "straight");
+        let chord = (link.path[0].end.x - link.path[0].start.x)
+            .hypot(link.path[0].end.y - link.path[0].start.y);
+        assert!((diagnostic.route_length - chord).abs() < 0.01);
     }
+}
+
+#[test]
+fn direct_route_diagnostics_report_an_intermediate_node_obstruction() {
+    let mut model = visual(Direction::LeftToRight);
+    model.nodes = vec![
+        node("source", None),
+        node("other-source", None),
+        node("obstacle", None),
+        node("target", None),
+    ];
+    model.edges = vec![
+        edge("source", "target"),
+        edge("other-source", "obstacle"),
+        edge("obstacle", "target"),
+    ];
+
+    let scene = layout_visual(&model);
+    let route = scene
+        .edges
+        .iter()
+        .find(|edge| edge.from == "source" && edge.to == "target")
+        .unwrap();
+    let diagnostic = route.route_diagnostic.as_ref().unwrap();
+
+    assert_eq!(diagnostic.obstacle_intersections, 1);
+    assert!(!diagnostic.direct_candidate_clear);
 }
 
 #[test]

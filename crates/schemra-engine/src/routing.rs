@@ -9,9 +9,7 @@ use schemra_scene::{
 
 mod geometry;
 
-use geometry::{
-    Side, center, direct_connector, natural_sides, port_anchor, segment_intersects_rect,
-};
+use geometry::{Side, center, direct_connector, natural_sides, port_anchor};
 
 const PORT_MARGIN: f32 = 8.0;
 const PORT_SPACING: f32 = 12.0;
@@ -177,12 +175,13 @@ pub(super) fn route_edges(edges: &mut [SceneEdge], nodes: &[SceneNode], directio
             continue;
         };
         let path = vec![direct_connector(*start, *end)];
-        let obstruction_count = nodes
+        let obstacles = nodes
             .iter()
             .filter(|node| node.id != edge.from && node.id != edge.to)
-            .filter(|node| segment_intersects_rect(*start, *end, node.bounds))
-            .count();
-        let length = distance(*start, *end);
+            .map(|node| node.bounds)
+            .collect::<Vec<_>>();
+        let obstruction_count = geometry::path_obstacle_intersections(&path, &obstacles);
+        let length = geometry::path_length(&path);
         edges[*index].path = path;
         edges[*index].route_diagnostic = Some(SceneRouteDiagnostic {
             status: SceneRouteStatus::Routed,
@@ -540,8 +539,4 @@ fn reverse_path(path: &[CubicBezier]) -> Vec<CubicBezier> {
 fn reverse_diagnostic(mut diagnostic: SceneRouteDiagnostic) -> SceneRouteDiagnostic {
     std::mem::swap(&mut diagnostic.source_port, &mut diagnostic.target_port);
     diagnostic
-}
-
-fn distance(left: Point, right: Point) -> f32 {
-    (right.x - left.x).hypot(right.y - left.y)
 }

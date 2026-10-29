@@ -1,5 +1,40 @@
 use schemra_scene::{CubicBezier, FlowDirection, Point, Rect};
 
+const CURVE_FLATNESS: f64 = 0.35;
+const MAX_FLATTEN_DEPTH: u8 = 12;
+const PATH_JOIN_EPSILON: f64 = 0.5;
+
+#[derive(Clone, Copy)]
+struct DPoint {
+    x: f64,
+    y: f64,
+}
+
+impl From<Point> for DPoint {
+    fn from(point: Point) -> Self {
+        Self {
+            x: f64::from(point.x),
+            y: f64::from(point.y),
+        }
+    }
+}
+
+impl DPoint {
+    fn midpoint(self, other: Self) -> Self {
+        Self {
+            x: (self.x + other.x) * 0.5,
+            y: (self.y + other.y) * 0.5,
+        }
+    }
+
+    fn to_point(self) -> Point {
+        Point {
+            x: self.x as f32,
+            y: self.y as f32,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(super) enum Side {
     Left,
@@ -118,6 +153,44 @@ pub(super) fn direct_connector(start: Point, end: Point) -> CubicBezier {
     }
 }
 
+/// Measure a cubic path by adaptively flattening its segments. Invalid paths
+/// return a finite sentinel so diagnostics never contain NaN or infinity.
+pub(super) fn path_length(path: &[CubicBezier]) -> f32 {
+    let Some(points) = flatten_path(path) else {
+        return f32::MAX;
+    };
+    let total = points
+        .windows(2)
+        .map(|pair| point_distance64(pair[0], pair[1]))
+        .sum::<f64>();
+    if !total.is_finite() || total >= f64::from(f32::MAX) {
+        return f32::MAX;
+    }
+    total as f32
+}
+
+/// Count obstacle rectangles intersected by any flattened part of a cubic
+/// path. Invalid paths or obstacles conservatively count as an intersection.
+pub(super) fn path_obstacle_intersections(path: &[CubicBezier], obstacles: &[Rect]) -> usize {
+    if path.is_empty() {
+        return 0;
+    }
+    let Some(points) = flatten_path(path) else {
+        return obstacles.len().max(1);
+    };
+    obstacles
+        .iter()
+        .filter(|obstacle| {
+            let Some(rect) = checked_rect(**obstacle) else {
+                return true;
+            };
+            points
+                .windows(2)
+                .any(|pair| segment_intersects_rect(pair[0], pair[1], rect))
+        })
+        .count()
+}
+
 pub(super) fn segment_intersects_rect(start: Point, end: Point, rect: Rect) -> bool {
     let rect = normalized(rect);
     let dx = end.x - start.x;
@@ -188,6 +261,83 @@ fn normalized(rect: Rect) -> Rect {
         height: (y2 - y1).abs(),
     }
 }
+
+fn flatten_path(path: &[CubicBezier]) -> Option<Vec<Point>> {
+    let mut flattened = Vec::new();
+    for segment in path {
+        let points = flatten_cubic(*segment)?;
+        if flattened
+            .last()
+            .zip(points.first())
+            .is_some_and(|(previous, next)| point_distance64(*previous, *next) > PATH_JOIN_EPSILON)
+        {
+            return None;
+        }
+        let skip_first = flattened.last() == points.first();
+        flattened.extend(points.into_iter().skip(usize::from(skip_first)));
+    }
+    Some(flattened)
+}
+
+fn flatten_cubic(cubic: CubicBezier) -> Option<Vec<Point>> {
+    let points = [cubic.start, cubic.control1, cubic.control2, cubic.end];
+    if points
+        .iter()
+        .any(|point| !point.x.is_finite() || !point.y.is_finite())
+    {
+        return None;
+    }
+    let points = points.map(DPoint::from);
+    let mut flattened = vec![points[0].to_point()];
+    flatten_cubic_recursive(points, 0, &mut flattened);
+    Some(flattened)
+}
+
+fn flatten_cubic_recursive(points: [DPoint; 4], depth: u8, output: &mut Vec<Point>) {
+    if depth >= MAX_FLATTEN_DEPTH || cubic_flatness(points) <= CURVE_FLATNESS {
+        output.push(points[3].to_point());
+        return;
+    }
+
+    let p01 = points[0].midpoint(points[1]);
+    let p12 = points[1].midpoint(points[2]);
+    let p23 = points[2].midpoint(points[3]);
+    let p012 = p01.midpoint(p12);
+    let p123 = p12.midpoint(p23);
+    let midpoint = p012.midpoint(p123);
+    flatten_cubic_recursive([points[0], p01, p012, midpoint], depth + 1, output);
+    flatten_cubic_recursive([midpoint, p123, p23, points[3]], depth + 1, output);
+}
+
+fn cubic_flatness(points: [DPoint; 4]) -> f64 {
+    point_line_distance(points[1], points[0], points[3])
+        .max(point_line_distance(points[2], points[0], points[3]))
+}
+
+fn point_line_distance(point: DPoint, start: DPoint, end: DPoint) -> f64 {
+    let dx = end.x - start.x;
+    let dy = end.y - start.y;
+    let length = dx.hypot(dy);
+    if length <= f64::EPSILON {
+        (point.x - start.x).hypot(point.y - start.y)
+    } else {
+        ((point.x - start.x) * dy - (point.y - start.y) * dx).abs() / length
+    }
+}
+
+fn point_distance64(left: Point, right: Point) -> f64 {
+    (f64::from(right.x) - f64::from(left.x)).hypot(f64::from(right.y) - f64::from(left.y))
+}
+
+fn checked_rect(rect: Rect) -> Option<Rect> {
+    let right = rect.x + rect.width;
+    let bottom = rect.y + rect.height;
+    (rect.x.is_finite() && rect.y.is_finite() && right.is_finite() && bottom.is_finite())
+        .then(|| normalized(rect))
+}
+
+#[cfg(test)]
+mod tests;
 
 fn finite(value: f32) -> f32 {
     if value.is_finite() { value } else { 0.0 }
