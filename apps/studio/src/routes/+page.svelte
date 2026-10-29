@@ -7,30 +7,6 @@
 	<meta name="description" content="Schemra local authoring environment" />
 </svelte:head>
 
-<main>
-	<h1>{studioTitle}</h1>
+<main class="grid min-h-screen place-items-center bg-background text-foreground">
+	<h1 class="m-0 text-[clamp(2rem,8vw,4rem)] font-semibold tracking-[-0.045em]">{studioTitle}</h1>
 </main>
-
-<style>
-	:global(body) {
-		margin: 0;
-		min-width: 20rem;
-		min-height: 100vh;
-		font-family: system-ui, sans-serif;
-		color: #182235;
-		background: #f5f8fc;
-	}
-
-	main {
-		display: grid;
-		min-height: 100vh;
-		place-items: center;
-	}
-
-	h1 {
-		margin: 0;
-		font-size: clamp(2rem, 8vw, 4rem);
-		font-weight: 650;
-		letter-spacing: -0.045em;
-	}
-</style>

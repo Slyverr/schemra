@@ -1,0 +1,99 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn-svelte/tailwind.css';
+@import '@fontsource-variable/inter';
+
+@custom-variant dark (&:is(.schemra-dark *));
+
+:root {
+	color-scheme: light;
+	--background: #f7faff;
+	--foreground: #102442;
+	--card: #ffffff;
+	--card-foreground: #102442;
+	--popover: #ffffff;
+	--popover-foreground: #102442;
+	--primary: #0758c8;
+	--primary-foreground: #ffffff;
+	--secondary: #e9f1ff;
+	--secondary-foreground: #183d73;
+	--muted: #eef3fa;
+	--muted-foreground: #5c6f87;
+	--accent: #e1edff;
+	--accent-foreground: #123f83;
+	--destructive: #c93232;
+	--border: #d6e2f1;
+	--input: #cad9ec;
+	--ring: #2e9be8;
+	--radius: 0.625rem;
+}
+
+.schemra-light {
+	color-scheme: light;
+}
+
+.schemra-dark {
+	color-scheme: dark;
+	--background: #09172d;
+	--foreground: #eaf3ff;
+	--card: #0d2342;
+	--card-foreground: #eaf3ff;
+	--popover: #0d2342;
+	--popover-foreground: #eaf3ff;
+	--primary: #28aaff;
+	--primary-foreground: #07172d;
+	--secondary: #12345b;
+	--secondary-foreground: #d6eaff;
+	--muted: #112947;
+	--muted-foreground: #a9c1dd;
+	--accent: #174373;
+	--accent-foreground: #eaf3ff;
+	--destructive: #ff7f86;
+	--border: #23476e;
+	--input: #31577e;
+	--ring: #35c4ff;
+}
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+	* {
+		@apply border-border;
+	}
+
+	html,
+	body {
+		min-height: 100%;
+	}
+
+	body {
+		@apply bg-background text-foreground;
+		min-width: 20rem;
+		margin: 0;
+		font-family: var(--font-sans);
+	}
+}
