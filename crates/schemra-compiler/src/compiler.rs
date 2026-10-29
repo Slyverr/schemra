@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 
 use schemra_ir::{
-    EdgeDirectionality, EdgeIr, GroupId, GroupIr, ModuleIr, NodeId, NodeIr, VisualIr,
+    EdgeDirectionality, EdgeIr, GroupId, GroupIr, ModuleIr, NodeId, NodeIr, ScenarioIr, TokenIr,
+    VisualIr,
 };
 use schemra_syntax::{Diagnostic, Statement, StatementKind, Token, TokenKind, parse_syntax};
 
@@ -52,6 +53,8 @@ pub enum LoweredItem {
     Visual(VisualIr),
     Group(GroupIr, Vec<NodeIr>),
     Node(NodeIr),
+    Scenario(ScenarioIr),
+    Token(TokenIr),
     Ignored,
 }
 
@@ -286,7 +289,13 @@ pub fn compile_sources_with_registry(
         for statement in &syntax.statements {
             match context.lower_child(statement, Scope::File) {
                 Ok(LoweredItem::Visual(visual)) => module.visuals.push(visual),
-                Ok(LoweredItem::Group(_, _) | LoweredItem::Node(_) | LoweredItem::Ignored) => {}
+                Ok(LoweredItem::Scenario(scenario)) => module.scenarios.push(scenario),
+                Ok(
+                    LoweredItem::Group(_, _)
+                    | LoweredItem::Node(_)
+                    | LoweredItem::Token(_)
+                    | LoweredItem::Ignored,
+                ) => {}
                 Err(diagnostic) => diagnostics.push(diagnostic),
             }
         }
@@ -316,6 +325,7 @@ fn validate_module(module: &ModuleIr, diagnostics: &mut Vec<Diagnostic>) {
     validate_visuals(module, diagnostics);
     validate_declarations(module, diagnostics);
     validate_edge_references(module, diagnostics);
+    validate_scenario_visual_references(module, diagnostics);
 }
 
 fn validate_visuals(module: &ModuleIr, diagnostics: &mut Vec<Diagnostic>) {
@@ -386,6 +396,33 @@ fn validate_declarations(module: &ModuleIr, diagnostics: &mut Vec<Diagnostic>) {
             }
         }
     }
+
+    let mut scenario_ids = HashSet::new();
+    for scenario in &module.scenarios {
+        if !scenario_ids.insert(scenario.id.0.as_str()) {
+            diagnostics.push(Diagnostic::error(
+                "E_DUPLICATE_SCENARIO",
+                format!("Scenario `{}` is declared more than once.", scenario.id.0),
+                scenario.span,
+                None::<String>,
+            ));
+        }
+
+        let mut token_ids = HashSet::new();
+        for token in &scenario.tokens {
+            if !token_ids.insert(token.id.0.as_str()) {
+                diagnostics.push(Diagnostic::error(
+                    "E_DUPLICATE_TOKEN",
+                    format!(
+                        "Token `{}` is declared more than once in this scenario.",
+                        token.id.0
+                    ),
+                    token.span,
+                    None::<String>,
+                ));
+            }
+        }
+    }
 }
 
 fn validate_edge_references(module: &ModuleIr, diagnostics: &mut Vec<Diagnostic>) {
@@ -404,6 +441,30 @@ fn validate_edge_references(module: &ModuleIr, diagnostics: &mut Vec<Diagnostic>
                     None::<String>,
                 ));
             }
+        }
+    }
+}
+
+fn validate_scenario_visual_references(module: &ModuleIr, diagnostics: &mut Vec<Diagnostic>) {
+    if module.visuals.is_empty() {
+        return;
+    }
+
+    for scenario in &module.scenarios {
+        if !module
+            .visuals
+            .iter()
+            .any(|visual| visual.id == scenario.visual)
+        {
+            diagnostics.push(Diagnostic::error(
+                "E_SCENARIO_VISUAL_TARGET",
+                format!(
+                    "Scenario `{}` refers to missing visual `{}`.",
+                    scenario.id.0, scenario.visual.0
+                ),
+                scenario.span,
+                None::<String>,
+            ));
         }
     }
 }
