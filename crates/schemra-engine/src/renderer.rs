@@ -2,7 +2,32 @@
 
 use std::{error::Error, fmt, fmt::Write as _};
 
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use schemra_scene::{Rect, Scene, SceneFont, SceneNode, SceneNodeShape, ScenePalette};
+
+mod text;
+
+pub use text::{node_text_width, wrap_text_lines};
+
+struct BundledFont {
+    family: &'static str,
+    data: &'static [u8],
+}
+
+const BUNDLED_FONTS: [BundledFont; 3] = [
+    BundledFont {
+        family: "Inter Variable",
+        data: include_bytes!("assets/fonts/inter-v4.1-subset.woff2"),
+    },
+    BundledFont {
+        family: "Noto Serif",
+        data: include_bytes!("assets/fonts/noto-serif-v2.015-subset.woff2"),
+    },
+    BundledFont {
+        family: "Noto Sans Mono",
+        data: include_bytes!("assets/fonts/noto-sans-mono-v2.013-subset.woff2"),
+    },
+];
 
 /// Errors returned when scene geometry cannot be represented as SVG.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,7 +86,14 @@ pub fn render_svg(scene: &Scene) -> Result<String, SvgRenderError> {
     let border = safe_color(scene.theme.colors.border.as_deref(), default_border);
     let text = safe_color(scene.theme.colors.text.as_deref(), default_text);
     let muted = safe_color(scene.theme.colors.muted.as_deref(), default_muted);
-    let mut svg = String::with_capacity(1024 + scene.nodes.len() * 256);
+    let used_fonts = used_font_profiles(scene);
+    let embedded_font_capacity = BUNDLED_FONTS
+        .iter()
+        .zip(used_fonts)
+        .filter(|(_, used)| *used)
+        .map(|(font, _)| font.data.len() * 4 / 3)
+        .sum::<usize>();
+    let mut svg = String::with_capacity(1024 + scene.nodes.len() * 256 + embedded_font_capacity);
     write!(
         svg,
         "<svg xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-labelledby=\"schemra-title schemra-description\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\">",
@@ -74,6 +106,7 @@ pub fn render_svg(scene: &Scene) -> Result<String, SvgRenderError> {
     svg.push_str("<title id=\"schemra-title\">");
     write_xml(&mut svg, &scene.title);
     svg.push_str("</title><desc id=\"schemra-description\">Schemra architecture visual</desc>");
+    write_font_faces(&mut svg, &used_fonts);
     write!(
         svg,
         "<rect width=\"{}\" height=\"{}\" fill=\"{}\"/>",
@@ -124,53 +157,172 @@ fn write_node(
         safe_color(node.style.stroke.as_deref(), border),
     );
 
-    let text_x = bounds.x + if node.icon.is_some() { 56.0 } else { 16.0 };
-    let text_anchor = match node.text_align {
-        schemra_scene::SceneTextAlign::Left => "start",
-        schemra_scene::SceneTextAlign::Center => "middle",
-    };
-    let text_x = if text_anchor == "middle" {
-        bounds.x + bounds.width / 2.0
+    let font_profile = node.style.font.unwrap_or(theme_font);
+    let content_gap = node.style.spacing.unwrap_or(12.0);
+    let has_icon = node.icon.is_some();
+    let text_width = node_text_width(bounds.width, node.layout, has_icon, content_gap);
+    let title_lines = text::wrap_text_runs(
+        font_profile,
+        &node.label,
+        text_width,
+        17.0,
+        node.style.weight.unwrap_or(650),
+    );
+    let detail_lines = node
+        .detail
+        .as_deref()
+        .map(|detail| text::wrap_text_runs(font_profile, detail, text_width, 14.0, 450))
+        .unwrap_or_default();
+    let text_height = title_lines.len() as f32 * 22.0
+        + if detail_lines.is_empty() {
+            0.0
+        } else {
+            4.0 + detail_lines.len() as f32 * 18.0
+        };
+    let content_height = if has_icon && node.layout == schemra_scene::SceneNodeLayout::Vertical {
+        30.0 + content_gap + text_height
     } else {
-        text_x
+        text_height.max(if has_icon { 30.0 } else { 0.0 })
     };
-    let (label_y, detail_y) = if node.detail.is_some() {
-        (
-            bounds.y + bounds.height / 2.0 - 3.0,
-            bounds.y + bounds.height / 2.0 + 16.0,
-        )
-    } else {
-        (bounds.y + bounds.height / 2.0 + 5.0, 0.0)
-    };
-    write!(
+    let content_top = bounds.y + (bounds.height - content_height) / 2.0;
+    let (text_x, title_y, text_anchor) =
+        if node.layout == schemra_scene::SceneNodeLayout::Horizontal {
+            let text_start = bounds.x + if has_icon { 48.0 + content_gap } else { 18.0 };
+            let (x, anchor) = match node.text_align {
+                schemra_scene::SceneTextAlign::Left => (text_start, "start"),
+                schemra_scene::SceneTextAlign::Center => (text_start + text_width / 2.0, "middle"),
+            };
+            (x, content_top + 17.0, anchor)
+        } else {
+            let text_y = content_top + if has_icon { 30.0 + content_gap } else { 0.0 };
+            let (x, anchor) = match node.text_align {
+                schemra_scene::SceneTextAlign::Left => (bounds.x + 18.0, "start"),
+                schemra_scene::SceneTextAlign::Center => (bounds.x + bounds.width / 2.0, "middle"),
+            };
+            (x, text_y + 17.0, anchor)
+        };
+    write_text_lines(
         svg,
-        "<text x=\"{}\" y=\"{}\" text-anchor=\"{}\" font-family=\"{}\" font-size=\"16\" font-weight=\"{}\" fill=\"{}\">",
-        number(text_x),
-        number(label_y),
+        &title_lines,
+        text_x,
+        title_y,
         text_anchor,
-        font_family(node.style.font.unwrap_or(theme_font)),
-        node.style.weight.unwrap_or(600),
+        font_profile,
+        17.0,
+        node.style.weight.unwrap_or(650),
         safe_color(node.style.text_color.as_deref(), text),
-    )
-    .expect("writing to a String cannot fail");
-    write_xml(svg, &node.label);
-    svg.push_str("</text>");
-    if let Some(detail) = &node.detail {
-        write!(
+    );
+    if !detail_lines.is_empty() {
+        write_text_lines(
             svg,
-            "<text x=\"{}\" y=\"{}\" text-anchor=\"{}\" font-family=\"{}\" font-size=\"13\" font-weight=\"{}\" fill=\"{}\">",
-            number(text_x),
-            number(detail_y),
+            &detail_lines,
+            text_x,
+            title_y + title_lines.len() as f32 * 22.0 + 4.0,
             text_anchor,
-            font_family(node.style.font.unwrap_or(theme_font)),
-            node.style.weight.unwrap_or(400),
+            font_profile,
+            14.0,
+            450,
             safe_color(node.style.text_color.as_deref(), muted),
-        )
-        .expect("writing to a String cannot fail");
-        write_xml(svg, detail);
-        svg.push_str("</text>");
+        );
     }
     svg.push_str("</g>");
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_text_lines(
+    svg: &mut String,
+    lines: &[text::TextLine],
+    x: f32,
+    y: f32,
+    anchor: &str,
+    profile: SceneFont,
+    size: f32,
+    weight: u16,
+    color: &str,
+) {
+    for (index, line) in lines.iter().enumerate() {
+        write!(
+            svg,
+            "<text x=\"{}\" y=\"{}\" text-anchor=\"{}\" font-family=\"{}\" font-size=\"{}\" font-weight=\"{}\" fill=\"{}\">",
+            number(x),
+            number(y + index as f32 * if size > 15.0 { 22.0 } else { 18.0 }),
+            anchor,
+            font_family(profile),
+            number(size),
+            weight,
+            color,
+        )
+        .expect("writing to a String cannot fail");
+        if let Some(runs) = &line.runs {
+            for run in runs {
+                if run.profile == profile {
+                    write!(svg, "<tspan>").expect("writing to a String cannot fail");
+                } else {
+                    write!(svg, "<tspan font-family=\"{}\">", font_family(run.profile))
+                        .expect("writing to a String cannot fail");
+                }
+                write_xml(svg, &run.text);
+                svg.push_str("</tspan>");
+            }
+        } else {
+            write_xml(svg, &line.text);
+        }
+        svg.push_str("</text>");
+    }
+}
+
+fn used_font_profiles(scene: &Scene) -> [bool; 3] {
+    let mut used = [false; 3];
+    for node in &scene.nodes {
+        let font = node.style.font.unwrap_or(scene.theme.font);
+        for (text, weight) in
+            std::iter::once((node.label.as_str(), node.style.weight.unwrap_or(650))).chain(
+                node.detail
+                    .iter()
+                    .map(|detail| (detail.as_str(), node.style.weight.unwrap_or(450))),
+            )
+        {
+            if !text.is_empty() {
+                mark_font(&mut used, font);
+            }
+            for (index, selected) in text::font_profiles_for_text(font, text, weight)
+                .into_iter()
+                .enumerate()
+            {
+                used[index] |= selected;
+            }
+        }
+    }
+    used
+}
+
+fn write_font_faces(svg: &mut String, used: &[bool; 3]) {
+    if !used.iter().any(|used| *used) {
+        return;
+    }
+    let mut css = String::new();
+    for (index, font) in BUNDLED_FONTS.iter().enumerate() {
+        if used[index] {
+            let encoded = STANDARD.encode(font.data);
+            write!(
+                css,
+                "@font-face{{font-family:'{}';font-style:normal;font-weight:100 900;font-stretch:normal;src:url(data:font/woff2;base64,{encoded}) format('woff2')}}",
+                font.family,
+            )
+            .expect("writing to a String cannot fail");
+        }
+    }
+    svg.push_str("<defs><style>");
+    write_xml(svg, &css);
+    svg.push_str("</style></defs>");
+}
+
+fn mark_font(used: &mut [bool; 3], font: SceneFont) {
+    used[match font {
+        SceneFont::Sans => 0,
+        SceneFont::Serif => 1,
+        SceneFont::Mono => 2,
+    }] = true;
 }
 
 fn valid_bounds(bounds: Rect) -> bool {
@@ -270,9 +422,9 @@ fn safe_color<'a>(value: Option<&'a str>, fallback: &'a str) -> &'a str {
 
 fn font_family(font: SceneFont) -> &'static str {
     match font {
-        SceneFont::Sans => "sans-serif",
-        SceneFont::Serif => "serif",
-        SceneFont::Mono => "monospace",
+        SceneFont::Sans => "'Inter Variable', sans-serif",
+        SceneFont::Serif => "'Noto Serif', serif",
+        SceneFont::Mono => "'Noto Sans Mono', monospace",
     }
 }
 

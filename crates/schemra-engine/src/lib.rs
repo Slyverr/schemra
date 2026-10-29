@@ -6,5 +6,5 @@ mod routing;
 mod timeline;
 
 pub use layout::layout_visual;
-pub use renderer::{SvgRenderError, render_svg};
+pub use renderer::{SvgRenderError, node_text_width, render_svg, wrap_text_lines};
 pub use timeline::{TimelineSampling, compile_timeline};

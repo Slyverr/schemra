@@ -1,11 +1,8 @@
 //! Deterministic placement of visual IR nodes into renderer-neutral scenes.
 
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    sync::{Mutex, OnceLock},
-};
+use std::collections::{HashMap, HashSet, VecDeque};
 
-use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, Weight, Wrap};
+use crate::renderer::{node_text_width, wrap_text_lines};
 use schemra_ir::{Direction, EdgeDirectionality, GroupLayout, VisualIr};
 use schemra_scene::{
     FlowDirection, Rect, Scene, SceneEdge, SceneGroup, SceneNode, SceneNodeLayout, SceneNodeShape,
@@ -20,10 +17,6 @@ const CANVAS_PADDING: f32 = 48.0;
 const GROUP_PADDING_X: f32 = 26.0;
 const GROUP_PADDING_TOP: f32 = 42.0;
 const GROUP_PADDING_BOTTOM: f32 = 26.0;
-
-const INTER_FONT: &[u8] = include_bytes!("assets/fonts/inter-v4.1-subset.ttf");
-const SERIF_FONT: &[u8] = include_bytes!("assets/fonts/noto-serif-v2.015-subset.ttf");
-const MONO_FONT: &[u8] = include_bytes!("assets/fonts/noto-sans-mono-v2.013-subset.ttf");
 
 #[derive(Clone)]
 struct LayoutBlock {
@@ -549,10 +542,14 @@ fn secondary_gap(level: &[LayoutBlock], position: usize) -> f32 {
 }
 
 fn node_height(label: &str, detail: Option<&str>, has_icon: bool) -> f32 {
-    let text_width = (NODE_WIDTH - if has_icon { 78.0 } else { 36.0 }).max(1.0);
-    let title_lines = wrapped_line_count(label, text_width, 17.0, 650).max(1);
+    let text_width = node_text_width(NODE_WIDTH, SceneNodeLayout::Horizontal, has_icon, 12.0);
+    let title_lines = wrap_text_lines(schemra_scene::SceneFont::Sans, label, text_width, 17.0, 650)
+        .len()
+        .max(1);
     let detail_lines = detail
-        .map(|text| wrapped_line_count(text, text_width, 14.0, 450))
+        .map(|text| {
+            wrap_text_lines(schemra_scene::SceneFont::Sans, text, text_width, 14.0, 450).len()
+        })
         .unwrap_or(0);
     let text_height = title_lines as f32 * 22.0
         + if detail_lines > 0 {
@@ -561,43 +558,6 @@ fn node_height(label: &str, detail: Option<&str>, has_icon: bool) -> f32 {
             0.0
         };
     text_height.max(if has_icon { 30.0 } else { 0.0 }) + 32.0
-}
-
-fn wrapped_line_count(text: &str, max_width: f32, font_size: f32, weight: u16) -> usize {
-    if text.is_empty() {
-        return 1;
-    }
-    let mut system = font_system()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let mut buffer = Buffer::new(&mut system, Metrics::new(font_size, font_size));
-    buffer.set_wrap(&mut system, Wrap::WordOrGlyph);
-    buffer.set_size(&mut system, Some(max_width), None);
-    buffer.set_text(
-        &mut system,
-        text,
-        &Attrs::new()
-            .family(Family::Name("Inter Variable"))
-            .weight(Weight(weight)),
-        Shaping::Advanced,
-        None,
-    );
-    buffer.shape_until_scroll(&mut system, false);
-    buffer.layout_runs().count().max(1)
-}
-
-fn font_system() -> &'static Mutex<FontSystem> {
-    static FONT_SYSTEM: OnceLock<Mutex<FontSystem>> = OnceLock::new();
-    FONT_SYSTEM.get_or_init(|| {
-        let mut database = cosmic_text::fontdb::Database::new();
-        database.load_font_data(INTER_FONT.to_vec());
-        database.load_font_data(SERIF_FONT.to_vec());
-        database.load_font_data(MONO_FONT.to_vec());
-        Mutex::new(FontSystem::new_with_locale_and_db(
-            "en-US".to_owned(),
-            database,
-        ))
-    })
 }
 
 fn include_bounds(target: &mut Rect, bounds: Rect) {

@@ -9,7 +9,7 @@ fn make_scene(title: &str, node: SceneNode) -> Scene {
         title: title.into(),
         direction: FlowDirection::LeftToRight,
         theme: SceneTheme::default(),
-        width: 120.0,
+        width: 180.0,
         height: 72.0,
         groups: Vec::new(),
         nodes: vec![node],
@@ -33,7 +33,7 @@ fn node() -> SceneNode {
         bounds: Rect {
             x: 10.0,
             y: 11.0,
-            width: 100.0,
+            width: 160.0,
             height: 50.0,
         },
         group: None,
@@ -42,11 +42,11 @@ fn node() -> SceneNode {
 
 #[test]
 fn renders_a_static_node_as_the_expected_svg() {
-    let svg = render_svg(&make_scene("Gateway", node())).unwrap();
+    let svg = without_font_payloads(&render_svg(&make_scene("Gateway", node())).unwrap());
 
     assert_eq!(
         svg,
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-labelledby=\"schemra-title schemra-description\" width=\"120\" height=\"72\" viewBox=\"0 0 120 72\"><title id=\"schemra-title\">Gateway</title><desc id=\"schemra-description\">Schemra architecture visual</desc><rect width=\"120\" height=\"72\" fill=\"#ffffff\"/><g data-node-id=\"api\" data-node-label=\"Gateway\" data-node-shape=\"round\"><rect x=\"10\" y=\"11\" width=\"100\" height=\"50\" rx=\"12\" fill=\"#ffffff\" stroke=\"#e4e4e7\" stroke-width=\"1\"/><text x=\"26\" y=\"41\" text-anchor=\"start\" font-family=\"sans-serif\" font-size=\"16\" font-weight=\"600\" fill=\"#18181b\">Gateway</text></g></svg>"
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-labelledby=\"schemra-title schemra-description\" width=\"180\" height=\"72\" viewBox=\"0 0 180 72\"><title id=\"schemra-title\">Gateway</title><desc id=\"schemra-description\">Schemra architecture visual</desc><defs><style>@font-face{font-family:&apos;Inter Variable&apos;;font-style:normal;font-weight:100 900;font-stretch:normal;src:url(data:font/woff2;base64,<font-data>) format(&apos;woff2&apos;)}</style></defs><rect width=\"180\" height=\"72\" fill=\"#ffffff\"/><g data-node-id=\"api\" data-node-label=\"Gateway\" data-node-shape=\"round\"><rect x=\"10\" y=\"11\" width=\"160\" height=\"50\" rx=\"12\" fill=\"#ffffff\" stroke=\"#e4e4e7\" stroke-width=\"1\"/><text x=\"28\" y=\"42\" text-anchor=\"start\" font-family=\"'Inter Variable', sans-serif\" font-size=\"17\" font-weight=\"650\" fill=\"#18181b\"><tspan>Gateway</tspan></text></g></svg>"
     );
 }
 
@@ -57,7 +57,10 @@ fn escapes_scene_text_and_node_attributes() {
     node.label = "A & <gateway> \"service\"".into();
     node.detail = Some("routes & validates".into());
 
-    let svg = render_svg(&make_scene("Flow <one> & two\0", node)).unwrap();
+    let mut scene = make_scene("Flow <one> & two\0", node);
+    scene.width = 300.0;
+    scene.nodes[0].bounds.width = 280.0;
+    let svg = render_svg(&scene).unwrap();
 
     assert!(svg.contains("<title id=\"schemra-title\">Flow &lt;one&gt; &amp; two�</title>"));
     assert!(svg.contains("data-node-id=\"api&quot;&gt;&lt;script&gt;\""));
@@ -78,7 +81,7 @@ fn uses_scene_palette_and_font_enums_without_interpolating_arbitrary_paint() {
 
     assert!(svg.contains("fill=\"#0f172a\""));
     assert!(svg.contains("fill=\"#1e293b\" stroke=\"rebeccapurple\""));
-    assert!(svg.contains("font-family=\"monospace\""));
+    assert!(svg.contains("font-family=\"'Noto Sans Mono', monospace\""));
     assert!(!svg.contains("untrusted.test"));
 }
 
@@ -87,13 +90,34 @@ fn serializes_rectangular_and_cylindrical_node_shapes() {
     let mut scene = make_scene("Shapes", node());
     scene.nodes[0].shape = SceneNodeShape::Rectangle;
     let rectangle = render_svg(&scene).unwrap();
-    assert!(rectangle.contains("width=\"100\" height=\"50\" rx=\"0\""));
+    assert!(rectangle.contains("width=\"160\" height=\"50\" rx=\"0\""));
 
     scene.nodes[0].shape = SceneNodeShape::Cylinder;
     let cylinder = render_svg(&scene).unwrap();
     assert!(
-        cylinder.contains("<path d=\"M 10 17 C 10 11 110 11 110 17 V 55 C 110 61 10 61 10 55 Z\"")
+        cylinder.contains("<path d=\"M 10 17 C 10 11 170 11 170 17 V 55 C 170 61 10 61 10 55 Z\"")
     );
+}
+
+fn without_font_payloads(svg: &str) -> String {
+    const PREFIX: &str = "data:font/woff2;base64,";
+    const SUFFIX: &str = ") format(&apos;woff2&apos;)";
+
+    let mut output = String::with_capacity(svg.len());
+    let mut remaining = svg;
+    while let Some(start) = remaining.find(PREFIX) {
+        let payload_start = start + PREFIX.len();
+        let Some(payload_length) = remaining[payload_start..].find(SUFFIX) else {
+            return svg.to_owned();
+        };
+        let payload_end = payload_start + payload_length;
+        output.push_str(&remaining[..payload_start]);
+        output.push_str("<font-data>");
+        output.push_str(&remaining[payload_end..payload_end + SUFFIX.len()]);
+        remaining = &remaining[payload_end + SUFFIX.len()..];
+    }
+    output.push_str(remaining);
+    output
 }
 
 #[test]
