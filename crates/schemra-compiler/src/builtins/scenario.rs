@@ -27,6 +27,7 @@ fn lower(
         visual: VisualId(arguments[3].text.clone()),
         visual_span: arguments[3].span,
         tokens: Vec::new(),
+        actions: Vec::new(),
         span: construct.statement.span,
     };
 
