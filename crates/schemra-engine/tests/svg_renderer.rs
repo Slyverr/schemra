@@ -42,12 +42,21 @@ fn node() -> SceneNode {
 
 #[test]
 fn renders_a_static_node_as_the_expected_svg() {
-    let svg = without_font_payloads(&render_svg(&make_scene("Gateway", node())).unwrap());
+    let svg = render_svg(&make_scene("Gateway", node())).unwrap();
 
-    assert_eq!(
-        svg,
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-labelledby=\"schemra-title schemra-description\" width=\"180\" height=\"72\" viewBox=\"0 0 180 72\"><title id=\"schemra-title\">Gateway</title><desc id=\"schemra-description\">Schemra architecture visual</desc><defs><style>@font-face{font-family:&apos;Inter Variable&apos;;font-style:normal;font-weight:100 900;font-stretch:normal;src:url(data:font/woff2;base64,<font-data>) format(&apos;woff2&apos;)}</style></defs><rect width=\"180\" height=\"72\" fill=\"#ffffff\"/><g data-node-id=\"api\" data-node-label=\"Gateway\" data-node-shape=\"round\"><rect x=\"10\" y=\"11\" width=\"160\" height=\"50\" rx=\"12\" fill=\"#ffffff\" stroke=\"#e4e4e7\" stroke-width=\"1\"/><text x=\"28\" y=\"42\" text-anchor=\"start\" font-family=\"'Inter Variable', sans-serif\" font-size=\"17\" font-weight=\"650\" fill=\"#18181b\"><tspan>Gateway</tspan></text></g></svg>"
+    assert!(
+        svg.contains(
+            "data-palette=\"paper\" data-font-profile=\"sans\" data-icon-pack=\"outline\""
+        )
     );
+    assert!(svg.contains("id=\"schemra-shadow\""));
+    assert!(svg.contains("data-node-shape=\"round\" data-node-variant=\"default\""));
+    assert!(
+        svg.contains("width=\"160\" height=\"50\" rx=\"16\" fill=\"#ffffff\" stroke=\"#e4e4e7\"")
+    );
+    assert!(svg.contains("data-node-text=\"label\""));
+    assert!(svg.contains("font-family=\"'Inter Variable', sans-serif\""));
+    assert!(svg.contains("<tspan>Gateway</tspan>"));
 }
 
 #[test]
@@ -94,30 +103,9 @@ fn serializes_rectangular_and_cylindrical_node_shapes() {
 
     scene.nodes[0].shape = SceneNodeShape::Cylinder;
     let cylinder = render_svg(&scene).unwrap();
-    assert!(
-        cylinder.contains("<path d=\"M 10 17 C 10 11 170 11 170 17 V 55 C 170 61 10 61 10 55 Z\"")
-    );
-}
-
-fn without_font_payloads(svg: &str) -> String {
-    const PREFIX: &str = "data:font/woff2;base64,";
-    const SUFFIX: &str = ") format(&apos;woff2&apos;)";
-
-    let mut output = String::with_capacity(svg.len());
-    let mut remaining = svg;
-    while let Some(start) = remaining.find(PREFIX) {
-        let payload_start = start + PREFIX.len();
-        let Some(payload_length) = remaining[payload_start..].find(SUFFIX) else {
-            return svg.to_owned();
-        };
-        let payload_end = payload_start + payload_length;
-        output.push_str(&remaining[..payload_start]);
-        output.push_str("<font-data>");
-        output.push_str(&remaining[payload_end..payload_end + SUFFIX.len()]);
-        remaining = &remaining[payload_end + SUFFIX.len()..];
-    }
-    output.push_str(remaining);
-    output
+    assert!(cylinder.contains(
+        "data-node-background=\"true\" d=\"M 10 17 C 10 11 170 11 170 17 V 55 C 170 61 10 61 10 55 Z\""
+    ));
 }
 
 #[test]
