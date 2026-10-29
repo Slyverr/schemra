@@ -1,0 +1,29 @@
+scenario service_flow for visual traffic_overview {
+  token request {
+    icon: "mail"
+  }
+
+  parallel {
+    move request from user_1 -> reverse_proxy {
+      duration: 700ms
+    }
+    move request from user_2 -> reverse_proxy {
+      duration: 900ms
+    }
+  }
+  move request from reverse_proxy -> backend {
+    duration: 650ms
+  }
+  move request from backend -> database {
+    duration: 800ms
+  }
+  move request from database -> backend {
+    duration: 800ms
+  }
+  move request from backend -> reverse_proxy {
+    duration: 650ms
+  }
+  move request from reverse_proxy -> user_1 {
+    duration: 700ms
+  }
+}

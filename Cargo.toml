@@ -6,6 +6,7 @@ members = [
   "crates/schemra-ir",
   "crates/schemra-scene",
   "crates/schemra-syntax",
+  "crates/schemra-wasm",
 ]
 resolver = "2"
 
@@ -26,3 +27,6 @@ unicode-segmentation = "1.13.3"
 schemra-syntax = { path = "crates/schemra-syntax" }
 schemra-ir = { path = "crates/schemra-ir" }
 schemra-scene = { path = "crates/schemra-scene" }
+schemra-compiler = { path = "crates/schemra-compiler" }
+schemra-engine = { path = "crates/schemra-engine" }
+wasm-bindgen = "=0.2.129"

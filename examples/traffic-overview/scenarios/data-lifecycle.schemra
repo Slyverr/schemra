@@ -1,0 +1,26 @@
+scenario data_lifecycle for visual traffic_overview {
+  token data {
+    icon: "package"
+  }
+
+  move data from user_3 -> reverse_proxy {
+    duration: 700ms
+  }
+  move data from reverse_proxy -> backend {
+    duration: 600ms
+  }
+  move data from backend -> database {
+    duration: 800ms
+  }
+  wait 300ms
+  highlight database 500ms trace
+  move data from database -> backend {
+    duration: 800ms
+  }
+  move data from backend -> reverse_proxy {
+    duration: 600ms
+  }
+  move data from reverse_proxy -> user_3 {
+    duration: 700ms
+  }
+}

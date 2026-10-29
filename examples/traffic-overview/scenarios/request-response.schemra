@@ -1,0 +1,29 @@
+scenario request_response for visual traffic_overview {
+  token request {
+    icon: "mail"
+  }
+  token response {
+    icon: "package"
+  }
+
+  move request from user_1 -> reverse_proxy {
+    duration: 700ms
+  }
+  move request from reverse_proxy -> backend {
+    duration: 600ms
+  }
+  move request from backend -> database {
+    duration: 800ms
+  }
+  wait 250ms
+  move response from database -> backend {
+    duration: 800ms
+  }
+  move response from backend -> reverse_proxy {
+    duration: 600ms
+  }
+  move response from reverse_proxy -> user_1 {
+    duration: 700ms
+  }
+  highlight backend 350ms trace
+}

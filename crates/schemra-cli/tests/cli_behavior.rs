@@ -23,6 +23,10 @@ fn help_option_describes_the_cli() {
     assert!(output.status.success());
     assert!(help.contains("Local authoring environment"));
     assert!(help.contains("--version"));
+    assert!(help.contains("check"));
+    assert!(help.contains("fmt"));
+    assert!(help.contains("scenario-check"));
+    assert!(help.contains("render"));
 }
 
 #[test]

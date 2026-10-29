@@ -1,0 +1,22 @@
+[package]
+name = "schemra-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+schemra-compiler.workspace = true
+schemra-engine.workspace = true
+schemra-ir.workspace = true
+schemra-scene.workspace = true
+schemra-syntax.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen.workspace = true

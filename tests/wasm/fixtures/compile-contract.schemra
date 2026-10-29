@@ -1,0 +1,12 @@
+visual network "Network" {
+  node client "Client" {}
+  node server "Server" {}
+  client -> server
+}
+
+scenario request for visual network {
+  token packet { icon: "mail" }
+  move packet from client -> server { duration: 100ms }
+  wait 25ms
+  highlight server 50ms trace
+}

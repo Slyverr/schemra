@@ -54,7 +54,7 @@ needs them; do not create empty test scaffolding.
 | Studio TypeScript logic | `apps/studio/tests/` | Existing Bun test runner |
 | Studio components | `apps/studio/component-tests/` | Vitest and Svelte Testing Library when component behavior needs it |
 | Studio browser workflows | `apps/studio/e2e/` | Playwright in a real browser |
-| Shared system behavior | root `tests/{integration,parity,rendering}/` | Cross-crate, native/WASM, rendering, and regression coverage |
+| Shared system behavior | root `tests/{integration,parity,rendering,wasm}/` | Cross-crate, native/WASM, rendering, and regression coverage |
 
 Do not put test implementations under `apps/studio/src/`, and do not embed
 large `#[cfg(test)] mod tests { ... }` blocks in Rust implementation files. If
@@ -71,7 +71,7 @@ large snapshots; avoid excess mocking and tests coupled to private structure.
 
 Keep fixtures near the suite that owns them: crate-specific fixtures under
 `crates/<crate>/tests/fixtures/`, Studio fixtures under the corresponding
-`apps/studio` test directory, and shared fixtures under `tests/fixtures/`.
+`apps/studio` test directory, and shared fixtures under `tests/<suite>/fixtures/`.
 Golden fixtures are part of the behavioral contract. Preserve them; do not
 regenerate them silently, and inspect expected-output changes. Verify behavior
 against the checked-in fixtures and cross-target comparisons; claim parity only
@@ -90,6 +90,7 @@ The focused commands are:
 ```sh
 cargo test --workspace
 cargo fmt --all -- --check
+bash tests/wasm/differential.sh
 cd apps/studio
 bun run check
 bun run test

@@ -1,0 +1,60 @@
+scenario everything for visual traffic_overview {
+  highlight: 200ms trace
+
+  token request {
+    icon: "lucide/mail"
+  }
+  token response {
+    icon: "lucide/package"
+  }
+
+  parallel {
+    move request from user_1 -> reverse_proxy {
+      duration: 500ms
+      highlight: 300ms pulse
+    }
+    move response from user_2 -> reverse_proxy {
+      duration: 600ms
+      highlight: off
+    }
+  }
+
+  move request from reverse_proxy -> backend {
+    duration: 400ms
+  }
+  wait 150ms
+
+  repeat 2 {
+    move request from backend -> database {
+      duration: 450ms
+    }
+    move request from database -> backend {
+      duration: 450ms
+      highlight: off
+    }
+  }
+
+  move request from backend -> reverse_proxy {
+    duration: 400ms
+  }
+  move request from reverse_proxy -> user_1 {
+    duration: 500ms
+  }
+  move response from reverse_proxy -> backend {
+    duration: 400ms
+  }
+  move response from backend -> database {
+    duration: 450ms
+  }
+  move response from database -> backend {
+    duration: 450ms
+  }
+  move response from backend -> reverse_proxy {
+    duration: 400ms
+  }
+  move response from reverse_proxy -> user_2 {
+    duration: 500ms
+  }
+
+  highlight database 300ms pulse
+}

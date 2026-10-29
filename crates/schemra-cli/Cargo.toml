@@ -8,6 +8,12 @@ publish = false
 
 [dependencies]
 clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+schemra-compiler.workspace = true
+schemra-engine.workspace = true
+schemra-ir.workspace = true
+schemra-syntax.workspace = true
 
 [[bin]]
 name = "schemra"

@@ -6,10 +6,11 @@
   "type": "module",
   "packageManager": "bun@1.4.2",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "vite build",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "test": "bun test ./tests"
+    "build:wasm": "test \"$(wasm-bindgen --version)\" = \"wasm-bindgen 0.2.129\" && cargo build --locked --release --target wasm32-unknown-unknown -p schemra-wasm && wasm-bindgen --target web --out-dir src/lib/generated ../../target/wasm32-unknown-unknown/release/schemra_wasm.wasm && sed -i '1i// @ts-nocheck' src/lib/generated/schemra_wasm.js",
+    "dev": "bun run build:wasm && vite --host 127.0.0.1",
+    "build": "bun run build:wasm && vite build",
+    "check": "bun run build:wasm && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test": "bun run build:wasm && bun test ./tests"
   },
   "devDependencies": {
     "@fontsource-variable/inter": "^5.3.0",

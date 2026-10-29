@@ -1,4 +1,6 @@
-use schemra_engine::{SceneTimelineSampler, TimelineSampling, compile_timeline};
+use schemra_engine::{
+    SceneGeometrySampler, SceneTimelineSampler, TimelineSampling, compile_timeline,
+};
 use schemra_ir::{
     ActionIr, HighlightEffect, HighlightOrigin, HighlightSide, NodeId, ScenarioId, ScenarioIr,
     SourceLocation, SourceSpan, TokenId, VisualId,
@@ -146,6 +148,23 @@ fn forward_marker_samples_the_resolved_link_and_is_consumed_at_arrival() {
     assert!((frame.tokens[0].x - 40.0).abs() < 0.1);
     assert_eq!(frame.active_edges[0].traversal_direction, 1);
     assert!(sampler.sample(1_000).tokens.is_empty());
+}
+
+#[test]
+fn cached_scene_geometry_can_sample_multiple_timelines() {
+    let scene = scene(line());
+    let forward = compile_timeline(&scenario(vec![movement("a", "b", Some(1_000))])).unwrap();
+    let reverse = compile_timeline(&scenario(vec![movement("b", "a", Some(1_000))])).unwrap();
+    let geometry = SceneGeometrySampler::new(&scene);
+
+    assert_eq!(
+        geometry.sample(&forward, 250),
+        SceneTimelineSampler::new(&scene, &forward).sample(250)
+    );
+    assert_eq!(
+        geometry.sample(&reverse, 250),
+        SceneTimelineSampler::new(&scene, &reverse).sample(250)
+    );
 }
 
 #[test]

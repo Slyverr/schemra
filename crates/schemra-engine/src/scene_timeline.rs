@@ -8,16 +8,15 @@ use schemra_scene::{Rect, Scene};
 
 use crate::{routing::RouteGeometry, timeline::TimelineSampling};
 
-/// Reusable sampler that caches route lengths and scene lookups for playback.
-pub struct SceneTimelineSampler<'timeline> {
-    timeline: &'timeline Timeline,
+/// Reusable scene geometry cache for sampling multiple timelines against one scene.
+pub struct SceneGeometrySampler {
     route_geometry: Vec<RouteGeometry>,
     scene_index: SceneSamplingIndex,
 }
 
-impl<'timeline> SceneTimelineSampler<'timeline> {
-    /// Builds a sampler for a fixed scene and timeline.
-    pub fn new(scene: &Scene, timeline: &'timeline Timeline) -> Self {
+impl SceneGeometrySampler {
+    /// Builds a sampler for fixed scene geometry.
+    pub fn new(scene: &Scene) -> Self {
         let route_geometry = scene
             .edges
             .iter()
@@ -25,28 +24,45 @@ impl<'timeline> SceneTimelineSampler<'timeline> {
             .collect();
         let scene_index = SceneSamplingIndex::new(scene);
         Self {
-            timeline,
             route_geometry,
             scene_index,
         }
     }
 
+    /// Samples a timeline using the cached geometry.
+    pub fn sample(&self, timeline: &Timeline, time_ms: u64) -> SceneTimelineFrame {
+        self.resolve_frame(timeline.sample(time_ms))
+    }
+
+    fn resolve_frame(&self, frame: TimelineFrame) -> SceneTimelineFrame {
+        sample_scene_with_geometry(frame, &self.route_geometry, &self.scene_index)
+    }
+}
+
+/// Reusable sampler that caches route lengths and scene lookups for playback.
+pub struct SceneTimelineSampler<'timeline> {
+    timeline: &'timeline Timeline,
+    geometry: SceneGeometrySampler,
+}
+
+impl<'timeline> SceneTimelineSampler<'timeline> {
+    /// Builds a sampler for a fixed scene and timeline.
+    pub fn new(scene: &Scene, timeline: &'timeline Timeline) -> Self {
+        Self {
+            timeline,
+            geometry: SceneGeometrySampler::new(scene),
+        }
+    }
+
     /// Returns the active marker positions, link progress, and highlight effects.
     pub fn sample(&self, time_ms: u64) -> SceneTimelineFrame {
-        let frame = self.timeline.sample(time_ms);
-        sample_scene_with_geometry(frame, &self.route_geometry, &self.scene_index)
+        self.geometry.sample(self.timeline, time_ms)
     }
 }
 
 /// Resolves a sampled timeline frame against one scene without caching geometry.
 pub(super) fn sample_scene(frame: TimelineFrame, scene: &Scene) -> SceneTimelineFrame {
-    let route_geometry = scene
-        .edges
-        .iter()
-        .map(|edge| RouteGeometry::new(&edge.path))
-        .collect::<Vec<_>>();
-    let scene_index = SceneSamplingIndex::new(scene);
-    sample_scene_with_geometry(frame, &route_geometry, &scene_index)
+    SceneGeometrySampler::new(scene).resolve_frame(frame)
 }
 
 #[derive(Default)]

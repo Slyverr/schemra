@@ -1,0 +1,27 @@
+scenario marker_styles for visual traffic_overview {
+  highlight: 200ms trace
+  token request {
+    icon: "mail"
+  }
+  token package {
+    icon: "package"
+  }
+
+  parallel {
+    move request from user_1 -> reverse_proxy {
+      duration: 650ms
+    }
+    move request from user_2 -> reverse_proxy {
+      duration: 800ms
+      highlight: off
+    }
+    move package from user_3 -> reverse_proxy {
+      duration: 950ms
+    }
+    move package from user_4 -> reverse_proxy {
+      duration: 1100ms
+    }
+  }
+
+  highlight reverse_proxy 1000ms trace from left
+}
