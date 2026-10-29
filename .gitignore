@@ -4,6 +4,9 @@
 /apps/studio/build/
 /apps/studio/dist/
 /apps/studio/src/lib/generated/
+/apps/studio/playwright-report/
+/apps/studio/test-results/
+/apps/studio/playwright/.cache/
 .tmp/
 .cache/
 *.log

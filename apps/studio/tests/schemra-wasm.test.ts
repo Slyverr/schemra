@@ -41,6 +41,25 @@ describe('Studio compiler bridge', () => {
 		expect(project.visuals[0]?.output.scenarios).toHaveLength(1);
 	});
 
+	test('exposes linked editor symbols at UTF-16 source offsets', async () => {
+		const visual = `// 😀\nvisual network {\n  node client {}\n  node server {}\n  client -> server\n}`;
+		const scenario = `// café\nscenario requests for visual network {\n  token packet {}\n  move packet from client -> server {}\n}`;
+		const project = await compileProject([
+			{ id: 'visual', path: 'visuals/network.schemra', source: visual },
+			{ id: 'scenario', path: 'scenarios/requests.schemra', source: scenario }
+		]);
+		const visualFile = project.files.find(({ id }) => id === 'visual');
+		const scenarioFile = project.files.find(({ id }) => id === 'scenario');
+		const definition = visualFile?.editor_symbols.find(({ name, role }) => name === 'client' && role === 'definition');
+		const reference = scenarioFile?.editor_symbols.find(({ name, role }) => name === 'client' && role === 'reference');
+
+		expect(definition).toBeDefined();
+		expect(reference).toBeDefined();
+		expect(visual.slice(definition!.span.start.offset, definition!.span.end.offset)).toBe('client');
+		expect(scenario.slice(reference!.span.start.offset, reference!.span.end.offset)).toBe('client');
+		expect(reference?.target_key).toBe(definition?.target_key);
+	});
+
 	test('formats source with the shared formatter', async () => {
 		const formatted = await formatSource('visual app {\nnode api {}\n}');
 		expect(formatted).toBe('visual app {\n  node api {}\n}\n');

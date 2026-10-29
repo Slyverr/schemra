@@ -7,6 +7,12 @@ import initializeWasm, {
 	format_schemra,
 	rename_project_schemra
 } from './generated/schemra_wasm.js';
+import { runCompileWorker } from './engine/compile-worker-client.js';
+import { runLanguageWorker } from './engine/language-worker-client.js';
+import type { WorkerRequestOptions, WorkerRequestTiming } from './engine/worker-request-protocol.js';
+
+export type CompileOptions = WorkerRequestOptions;
+export type CompileTiming = WorkerRequestTiming;
 
 export interface ProjectSource {
 	id: string;
@@ -23,6 +29,17 @@ export interface SourceLocation {
 export interface SourceSpan {
 	start: SourceLocation;
 	end: SourceLocation;
+}
+
+export type EditorSymbolKind = 'visual' | 'node' | 'scenario';
+export type EditorSymbolRole = 'definition' | 'reference';
+
+export interface EditorSymbol {
+	name: string;
+	kind: EditorSymbolKind;
+	role: EditorSymbolRole;
+	target_key: string;
+	span: SourceSpan;
 }
 
 export interface CompletionItem {
@@ -52,8 +69,20 @@ export interface CompileResult {
 
 export interface ProjectCompileResult {
 	error: string | null;
-	files: unknown[];
+	files: ProjectCompileFile[];
 	visuals: { id: string; path: string; title: string; output: CompileResult }[];
+}
+
+export interface ProjectCompileFile {
+	id: string;
+	path: string;
+	kind: string;
+	visual_id: string | null;
+	declarations: unknown[];
+	editor_symbols: EditorSymbol[];
+	tokens: unknown[];
+	diagnostics: unknown[];
+	output: CompileResult | null;
 }
 
 export interface RenameSelection {
@@ -94,14 +123,45 @@ export function initializeSchemra(): Promise<void> {
 	return wasmReady;
 }
 
-export async function compileSource(source: string): Promise<CompileResult> {
-	await initializeSchemra();
-	return parseJson<CompileResult>(compile_schemra(source));
+export async function compileSource(source: string, options: CompileOptions = {}): Promise<CompileResult> {
+	return runCompileWorker(
+		{ kind: 'source', source },
+		{ ...options, queueKey: options.queueKey ?? 'source-compile' },
+		async () => {
+			await initializeSchemra();
+			return parseJson<CompileResult>(compile_schemra(source));
+		}
+	);
 }
 
-export async function compileProject(sources: ProjectSource[]): Promise<ProjectCompileResult> {
-	await initializeSchemra();
-	return parseJson<ProjectCompileResult>(compile_project_schemra(JSON.stringify({ sources })));
+
+export async function compileProject(
+	sources: ProjectSource[],
+	options: CompileOptions = {}
+): Promise<ProjectCompileResult> {
+	const workerSources = sources.map(({ id, path, source }) => ({ id, path, source }));
+	const result = await runCompileWorker(
+		{ kind: 'project', sources: workerSources },
+		options,
+		async () => {
+			await initializeSchemra();
+			return parseJson<ProjectCompileResult>(compile_project_schemra(JSON.stringify({ sources: workerSources })));
+		}
+	);
+	return {
+		...result,
+		files: result.files.map((file) => {
+			const source = sources.find((candidate) => candidate.id === file.id)?.source;
+			if (source === undefined || file.editor_symbols.length === 0) return file;
+			return {
+				...file,
+				editor_symbols: file.editor_symbols.map((symbol) => ({
+					...symbol,
+					span: spanToUtf16(source, symbol.span)
+				}))
+			};
+		})
+	};
 }
 
 export async function formatSource(source: string): Promise<string> {
@@ -113,11 +173,24 @@ export async function formatSource(source: string): Promise<string> {
 export async function completeAt(
 	source: string,
 	cursorOffset: number,
-	explicit = false
+	explicit = false,
+	options: CompileOptions = {}
 ): Promise<CompletionList | null> {
-	await initializeSchemra();
-	const result = parseJson<CompletionList | null>(
-		complete_schemra(source, toUtf8Offset(source, cursorOffset), explicit)
+	const utf8Offset = toUtf8Offset(source, cursorOffset);
+	const result = await runLanguageWorker(
+		{
+			kind: 'complete',
+			source,
+			cursor_offset: utf8Offset,
+			explicit,
+			node_ids: [],
+			include_nodes: false
+		},
+		{ ...options, queueKey: options.queueKey ?? 'completion' },
+		async () => {
+			await initializeSchemra();
+			return parseJson<CompletionList | null>(complete_schemra(source, utf8Offset, explicit));
+		}
 	);
 	return result ? completionToUtf16(source, result) : null;
 }
@@ -127,16 +200,27 @@ export async function completeAtWithNodes(
 	source: string,
 	cursorOffset: number,
 	nodeIds: string[],
-	explicit = false
+	explicit = false,
+	options: CompileOptions = {}
 ): Promise<CompletionList | null> {
-	await initializeSchemra();
-	const result = parseJson<CompletionList | null>(
-		complete_schemra_with_nodes(
+	const utf8Offset = toUtf8Offset(source, cursorOffset);
+	const context = { node_ids: [...nodeIds] };
+	const result = await runLanguageWorker(
+		{
+			kind: 'complete',
 			source,
-			toUtf8Offset(source, cursorOffset),
+			cursor_offset: utf8Offset,
 			explicit,
-			JSON.stringify({ node_ids: nodeIds })
-		)
+			node_ids: context.node_ids,
+			include_nodes: true
+		},
+		{ ...options, queueKey: options.queueKey ?? 'completion' },
+		async () => {
+			await initializeSchemra();
+			return parseJson<CompletionList | null>(
+				complete_schemra_with_nodes(source, utf8Offset, explicit, JSON.stringify(context))
+			);
+		}
 	);
 	return result ? completionToUtf16(source, result) : null;
 }

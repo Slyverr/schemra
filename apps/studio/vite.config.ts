@@ -5,15 +5,18 @@ import adapter from '@sveltejs/adapter-auto';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig, searchForWorkspaceRoot } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
+import { wasmRefreshPlugin } from './vite-plugins/wasm-refresh.ts';
 
 const studioRoot = fileURLToPath(new URL('.', import.meta.url));
+const workspaceRoot = resolve(studioRoot, '../..');
 const interFontPath = realpathSync(resolve(studioRoot, 'node_modules/@fontsource-variable/inter'));
+const examplesPath = realpathSync(resolve(studioRoot, '../../examples'));
 
 export default defineConfig({
 	server: {
 		fs: {
-			allow: [searchForWorkspaceRoot(studioRoot), interFontPath]
+			allow: [searchForWorkspaceRoot(studioRoot), interFontPath, examplesPath]
 		}
 	},
-	plugins: [tailwindcss(), sveltekit({ adapter: adapter() })]
+	plugins: [tailwindcss(), wasmRefreshPlugin(studioRoot, workspaceRoot), sveltekit({ adapter: adapter() })]
 });

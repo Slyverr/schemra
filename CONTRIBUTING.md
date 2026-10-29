@@ -95,12 +95,23 @@ cd apps/studio
 bun run check
 bun run test
 bun run build
+bun run test:e2e
 ```
 
-When component or browser suites are introduced, add their runner dependencies
-and package scripts in the same change, then run `bun run test:components` or
-`bun run test:e2e` as applicable. Playwright coverage must exercise the real
-browser workflow; a successful type check or build is not a substitute.
+Install Playwright's Chromium browser once before running the browser suite:
+
+```sh
+cd apps/studio
+bunx --bun playwright install chromium
+bun run test:e2e
+```
+
+The Playwright configuration launches its own Studio server on `127.0.0.1:5174`
+and does not reuse or stop a developer's preview server. Chromium's required
+shared libraries must be available on the host. When component suites are
+introduced, add their runner dependencies and package scripts in the same
+change, then run `bun run test:components`. Browser coverage must exercise real
+workflows; a successful type check or build is not a substitute.
 
 ### Clean-tree commit verification
 
