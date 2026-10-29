@@ -4,6 +4,7 @@ members = [
   "crates/schemra-compiler",
   "crates/schemra-engine",
   "crates/schemra-ir",
+  "crates/schemra-scene",
   "crates/schemra-syntax",
 ]
 resolver = "2"

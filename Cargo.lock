@@ -178,6 +178,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "schemra-scene"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "schemra-syntax"
 version = "0.1.0"
 dependencies = [
