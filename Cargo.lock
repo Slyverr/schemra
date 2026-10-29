@@ -157,6 +157,7 @@ dependencies = [
 name = "schemra-compiler"
 version = "0.1.0"
 dependencies = [
+ "schemra-ir",
  "schemra-syntax",
 ]
 
