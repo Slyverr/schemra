@@ -154,6 +154,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "schemra-compiler"
+version = "0.1.0"
+dependencies = [
+ "schemra-syntax",
+]
+
+[[package]]
 name = "schemra-ir"
 version = "0.1.0"
 dependencies = [

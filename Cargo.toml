@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "crates/schemra-cli",
+  "crates/schemra-compiler",
   "crates/schemra-ir",
   "crates/schemra-syntax",
 ]
