@@ -154,6 +154,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "schemra-ir"
+version = "0.1.0"
+dependencies = [
+ "schemra-syntax",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "schemra-syntax"
 version = "0.1.0"
 dependencies = [
