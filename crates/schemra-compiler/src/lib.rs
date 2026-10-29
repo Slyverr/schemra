@@ -4,6 +4,7 @@ mod compiler;
 mod completion;
 mod editor;
 mod editor_metadata;
+mod project;
 mod registry;
 mod schema;
 
@@ -18,6 +19,9 @@ pub use editor::{SyntaxToken, SyntaxTokenKind, highlight_tokens};
 pub use editor_metadata::{
     DeclarationInfo, DeclarationKind, EditorSymbol, EditorSymbolKind, EditorSymbolRole,
     editor_metadata,
+};
+pub use project::{
+    ProjectAnalysis, ProjectFileAnalysis, ProjectSource, ProjectVisualAnalysis, analyze_project,
 };
 pub use registry::{Registry, RegistryBuilder, RegistryError};
 pub use schema::{
