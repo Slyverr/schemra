@@ -1,4 +1,4 @@
-use schemra_compiler::compile;
+use schemra_compiler::{compile, compile_sources};
 use schemra_ir::{Direction, EdgeDirectionality, GroupId, GroupLayout, NodeId, VisualId};
 
 fn diagnostic_codes(source: &str) -> Vec<String> {
@@ -129,4 +129,44 @@ fn group_layout_defaults_to_auto_and_columns_require_grid_layout() {
         diagnostic_codes("visual network { group clients { columns: 2 node user_1 {} } }")
             .contains(&"E_COLUMNS_WITHOUT_GRID".into())
     );
+}
+
+#[test]
+fn rejects_duplicate_visual_and_element_ids() {
+    assert!(
+        diagnostic_codes("visual network { node api {} }\nvisual network { node database {} }")
+            .contains(&"E_DUPLICATE_VISUAL".into())
+    );
+    assert!(
+        diagnostic_codes("visual network {\n group clients {}\n node clients {}\n}")
+            .contains(&"E_DUPLICATE_VISUAL_ELEMENT".into())
+    );
+}
+
+#[test]
+fn rejects_links_with_unresolved_node_endpoints() {
+    let diagnostics = compile("visual network {\n node proxy {}\n proxy -> missing\n}")
+        .expect_err("unknown link endpoint should fail compilation");
+
+    let diagnostic = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == "E_UNKNOWN_EDGE_NODE")
+        .expect("edge endpoint diagnostic");
+    assert_eq!(
+        diagnostic.message,
+        "An edge references a node that is not declared in its visual."
+    );
+}
+
+#[test]
+fn compiles_multiple_visual_sources_into_one_module() {
+    let module = compile_sources(&[
+        "visual network { node proxy {} }",
+        "visual database { node store {} }",
+    ])
+    .expect("each source contributes visuals to the module");
+
+    assert_eq!(module.visuals.len(), 2);
+    assert_eq!(module.visuals[0].id, VisualId("network".into()));
+    assert_eq!(module.visuals[1].id, VisualId("database".into()));
 }

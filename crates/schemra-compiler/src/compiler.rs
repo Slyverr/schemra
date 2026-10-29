@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use schemra_ir::{
     EdgeDirectionality, EdgeIr, GroupId, GroupIr, ModuleIr, NodeId, NodeIr, VisualIr,
 };
@@ -289,7 +291,7 @@ pub fn compile_sources_with_registry(
             }
         }
     }
-    validate_visuals(&module, &mut diagnostics);
+    validate_module(&module, &mut diagnostics);
     if diagnostics.is_empty() {
         Ok(module)
     } else {
@@ -308,6 +310,12 @@ fn registry_diagnostic(error: RegistryError) -> Vec<Diagnostic> {
         }),
         None::<String>,
     )]
+}
+
+fn validate_module(module: &ModuleIr, diagnostics: &mut Vec<Diagnostic>) {
+    validate_visuals(module, diagnostics);
+    validate_declarations(module, diagnostics);
+    validate_edge_references(module, diagnostics);
 }
 
 fn validate_visuals(module: &ModuleIr, diagnostics: &mut Vec<Diagnostic>) {
@@ -334,6 +342,65 @@ fn validate_visuals(module: &ModuleIr, diagnostics: &mut Vec<Diagnostic>) {
                     "E_EMPTY_NODE_LABEL",
                     format!("Node `{}` needs a visible label.", node.id.0),
                     node.span,
+                    None::<String>,
+                ));
+            }
+        }
+    }
+}
+
+fn validate_declarations(module: &ModuleIr, diagnostics: &mut Vec<Diagnostic>) {
+    let mut visual_ids = HashSet::new();
+    for visual in &module.visuals {
+        if !visual_ids.insert(visual.id.0.as_str()) {
+            diagnostics.push(Diagnostic::error(
+                "E_DUPLICATE_VISUAL",
+                format!("Visual `{}` is declared more than once.", visual.id.0),
+                visual.span,
+                None::<String>,
+            ));
+        }
+
+        let mut element_ids = HashSet::new();
+        for group in &visual.groups {
+            if !element_ids.insert(group.id.0.as_str()) {
+                diagnostics.push(Diagnostic::error(
+                    "E_DUPLICATE_VISUAL_ELEMENT",
+                    format!(
+                        "Visual element `{}` is declared more than once.",
+                        group.id.0
+                    ),
+                    group.span,
+                    None::<String>,
+                ));
+            }
+        }
+        for node in &visual.nodes {
+            if !element_ids.insert(node.id.0.as_str()) {
+                diagnostics.push(Diagnostic::error(
+                    "E_DUPLICATE_VISUAL_ELEMENT",
+                    format!("Visual element `{}` is declared more than once.", node.id.0),
+                    node.span,
+                    None::<String>,
+                ));
+            }
+        }
+    }
+}
+
+fn validate_edge_references(module: &ModuleIr, diagnostics: &mut Vec<Diagnostic>) {
+    for visual in &module.visuals {
+        let node_ids = visual
+            .nodes
+            .iter()
+            .map(|node| node.id.0.as_str())
+            .collect::<HashSet<_>>();
+        for edge in &visual.edges {
+            if !node_ids.contains(edge.from.0.as_str()) || !node_ids.contains(edge.to.0.as_str()) {
+                diagnostics.push(Diagnostic::error(
+                    "E_UNKNOWN_EDGE_NODE",
+                    "An edge references a node that is not declared in its visual.",
+                    edge.span,
                     None::<String>,
                 ));
             }
