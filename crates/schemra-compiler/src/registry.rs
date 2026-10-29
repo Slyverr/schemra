@@ -75,6 +75,32 @@ impl Registry {
         self.properties_for_scope(scope)
             .find(|property| property.name == name)
     }
+
+    pub(crate) fn is_highlighted_word(&self, text: &str) -> bool {
+        self.constructs.values().any(|spec| {
+            spec.name == text
+                || spec.header.iter().any(
+                    |parameter| matches!(parameter.kind, HeaderKind::Literal(literal) if literal == text),
+                )
+                || spec.properties.iter().any(|property| property.name == text)
+        })
+    }
+
+    pub(crate) fn is_registered_property_value(&self, name: &str, value: &str) -> bool {
+        self.constructs.values().any(|spec| {
+            spec.properties.iter().any(|property| {
+                property.name == name
+                    && match property.kind {
+                        PropertyKind::Value(values) => values.contains(&value),
+                        PropertyKind::Highlight => matches!(
+                            value,
+                            "off" | "trace" | "pulse" | "left" | "right" | "top" | "bottom"
+                        ),
+                        _ => false,
+                    }
+            })
+        })
+    }
 }
 
 #[derive(Default)]
