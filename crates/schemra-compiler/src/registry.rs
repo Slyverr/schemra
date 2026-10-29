@@ -22,6 +22,11 @@ impl Registry {
         RegistryBuilder::default()
     }
 
+    /// Creates a builder preloaded with the builtin constructs and handlers.
+    pub fn builder_with_builtins() -> Result<RegistryBuilder, RegistryError> {
+        crate::compiler::builtin_builder()
+    }
+
     pub fn builtin() -> Result<Self, RegistryError> {
         builtin_registry()
     }

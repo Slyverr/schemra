@@ -10,6 +10,7 @@ import {
 	MAX_ANIMATION_EXPORT_PIXELS,
 	MAX_BUFFERED_ANIMATION_OUTPUT_BYTES,
 	safeAnimationFileName,
+	supportsAnimationFormat,
 	supportsAnimationMp4
 } from '../../src/lib/preview/animation-export.js';
 
@@ -67,13 +68,17 @@ describe('animation export output limits', () => {
 		});
 	});
 
-	test('normalizes unsafe scenario titles to simple MP4 filenames', () => {
+	test('normalizes unsafe scenario titles for each supported video format', () => {
 		expect(safeAnimationFileName(' Service / request: v1?.mp4 ')).toBe('Service---request--v1-.mp4');
 		expect(safeAnimationFileName('   ')).toBe('schemra-animation.mp4');
+		expect(safeAnimationFileName('service-flow.mp4', 'webm')).toBe('service-flow.webm');
+		expect(safeAnimationFileName('service-flow', 'webm')).toBe('service-flow.webm');
 	});
 
 	test('returns unsupported for invalid encoder requests without probing codecs', async () => {
 		expect(await supportsAnimationMp4({ width: 100, height: 100, fps: 30, videoBitsPerSecond: 8_000_000 })).toBe(false);
 		expect(await supportsAnimationMp4({ width: 1280, height: 720, fps: 25 as unknown as 24, videoBitsPerSecond: 8_000_000 })).toBe(false);
+		expect(await supportsAnimationFormat({ format: 'webm', width: 100, height: 100, fps: 30, videoBitsPerSecond: 8_000_000 })).toBe(false);
+		expect(await supportsAnimationFormat({ format: 'webm', width: 1280, height: 720, fps: 25 as unknown as 24, videoBitsPerSecond: 8_000_000 })).toBe(false);
 	});
 });

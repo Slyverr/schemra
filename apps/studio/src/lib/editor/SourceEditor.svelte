@@ -8,6 +8,7 @@
 		type EditorSymbol
 	} from '../schemra.js';
 	import { createBracketMatcher } from './bracket-matching.js';
+	import { getCaretScrollAdjustment } from './caret-visibility.js';
 	import EditorCompletions from './EditorCompletions.svelte';
 	import { getDelimiterEdit } from './delimiters.js';
 	import { formatSourceForSave } from './format-on-save.js';
@@ -118,6 +119,7 @@
 	let completionRequestId = 0;
 	let lastNavigationRequestId = 0;
 	let measureFrame = 0;
+	let caretVisibilityFrame = 0;
 	let sourceMeasureCanvas: HTMLCanvasElement | undefined;
 
 	const preferences = $derived(normalizeEditorPreferences(props.preferences));
@@ -320,6 +322,7 @@
 		clearTimeout(completionTimer);
 		clearTimeout(tooltipTimer);
 		if (measureFrame) cancelAnimationFrame(measureFrame);
+		if (caretVisibilityFrame) cancelAnimationFrame(caretVisibilityFrame);
 		compileRequestId += 1;
 		completionRequestId += 1;
 	});
@@ -340,6 +343,88 @@
 			end: input.selectionEnd,
 			direction: input.selectionDirection
 		};
+		scheduleCaretVisibility();
+	}
+
+	function scheduleCaretVisibility() {
+		if (!input || !viewport || !highlightedLines) return;
+		if (caretVisibilityFrame) cancelAnimationFrame(caretVisibilityFrame);
+		caretVisibilityFrame = requestAnimationFrame(() => {
+			caretVisibilityFrame = 0;
+			if (!input || !viewport || !highlightedLines) return;
+
+			const offset = caretOffset({
+				start: input.selectionStart,
+				end: input.selectionEnd,
+				direction: input.selectionDirection
+			});
+			const beforeCaret = input.value.slice(0, offset);
+			const lineIndex = beforeCaret.split('\n').length - 1;
+			const column = beforeCaret.length - beforeCaret.lastIndexOf('\n') - 1;
+			const line = highlightedLines.querySelector<HTMLElement>(`[data-line-index="${lineIndex}"]`);
+			if (!line) return;
+
+			const caretX = measureCaretX(line, column);
+			const lineRect = line.getBoundingClientRect();
+			const viewportRect = viewport.getBoundingClientRect();
+			const viewportLeft = viewportRect.left + viewport.clientLeft;
+			const viewportTop = viewportRect.top + viewport.clientTop;
+			const adjustment = getCaretScrollAdjustment({
+				caretLeft: caretX === null ? viewportLeft : lineRect.left + caretX,
+				lineTop: lineRect.top,
+				lineBottom: lineRect.bottom,
+				viewportLeft,
+				viewportTop,
+				viewportRight: viewportLeft + viewport.clientWidth,
+				viewportBottom: viewportTop + viewport.clientHeight
+			}, lineHeight);
+			if (adjustment.left !== 0) viewport.scrollLeft += adjustment.left;
+			if (adjustment.top !== 0) viewport.scrollTop = Math.max(0, viewport.scrollTop + adjustment.top);
+		});
+	}
+
+	function measureCaretX(line: HTMLElement, sourceColumn: number): number | null {
+		const walker = line.ownerDocument.createTreeWalker(line, NodeFilter.SHOW_TEXT, {
+			acceptNode(node) {
+				return node.parentElement?.closest('.inline-diagnostic')
+					? NodeFilter.FILTER_REJECT
+					: NodeFilter.FILTER_ACCEPT;
+			}
+		});
+		const lineLeft = line.getBoundingClientRect().left;
+		let remaining = Math.max(0, sourceColumn);
+		let textNode: Text | null;
+		while ((textNode = walker.nextNode() as Text | null)) {
+			if (remaining <= textNode.length) {
+				if (remaining === 0) {
+					if (textNode.length === 0) return 0;
+					return measureTextRangeX(line, textNode, 0, 1, false, lineLeft);
+				}
+				let start = remaining - 1;
+				const current = textNode.data.charCodeAt(start);
+				const previous = start > 0 ? textNode.data.charCodeAt(start - 1) : 0;
+				if (current >= 0xdc00 && current <= 0xdfff && previous >= 0xd800 && previous <= 0xdbff) start -= 1;
+				return measureTextRangeX(line, textNode, start, remaining, true, lineLeft);
+			}
+			remaining -= textNode.length;
+		}
+		return null;
+	}
+
+	function measureTextRangeX(
+		line: HTMLElement,
+		textNode: Text,
+		start: number,
+		end: number,
+		after: boolean,
+		lineLeft: number
+	): number | null {
+		const range = line.ownerDocument.createRange();
+		range.setStart(textNode, start);
+		range.setEnd(textNode, end);
+		const rect = range.getBoundingClientRect();
+		if (!Number.isFinite(rect.left) || !Number.isFinite(rect.right)) return null;
+		return (after ? rect.right : rect.left) - lineLeft;
 	}
 
 	function handleScroll() {

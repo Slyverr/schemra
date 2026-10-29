@@ -735,10 +735,14 @@ fn validate_actions(
 #[path = "builtins/mod.rs"]
 mod builtins;
 
-pub(crate) fn builtin_registry() -> Result<Registry, RegistryError> {
+pub(crate) fn builtin_builder() -> Result<crate::RegistryBuilder, RegistryError> {
     let mut builder = Registry::builder();
     for handler in builtins::handlers() {
         builder.register_handler(handler)?;
     }
-    Ok(builder.build())
+    Ok(builder)
+}
+
+pub(crate) fn builtin_registry() -> Result<Registry, RegistryError> {
+    Ok(builtin_builder()?.build())
 }

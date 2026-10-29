@@ -14,12 +14,15 @@ import { studioMessage } from '../i18n/messages.js';
 
 export type AnimationFrameRenderer = (timeMs: number, background: string) => string;
 
+export type AnimationFormat = 'mp4' | 'webm';
+
 export type AnimationExportCapabilitySettings = Pick<
 	AnimationExportOptions,
-	'width' | 'height' | 'fps' | 'videoBitsPerSecond'
+	'format' | 'width' | 'height' | 'fps' | 'videoBitsPerSecond'
 >;
 
 export interface AnimationExportOptions {
+	format: AnimationFormat;
 	durationMs: number;
 	width: number;
 	height: number;
@@ -59,7 +62,7 @@ const FRAME_LOAD_TIMEOUT_MS = 10_000;
 export const MAX_BUFFERED_ANIMATION_OUTPUT_BYTES = 32 * 1024 * 1024;
 const BUFFER_ESTIMATE_HEADROOM = 1.5;
 const activeExportControllers = new Set<AbortController>();
-const mp4CodecCache = new Map<string, Promise<VideoCodec | null>>();
+const codecCache = new Map<string, Promise<VideoCodec | null>>();
 let mediaBunnyPromise: Promise<typeof import('mediabunny')> | null = null;
 
 type FileWritableLike = {
@@ -90,18 +93,28 @@ function loadMediabunny() {
 }
 
 function capabilityKey(settings: AnimationExportCapabilitySettings) {
-	return [settings.width, settings.height, settings.fps, settings.videoBitsPerSecond].join(':');
+	return [settings.format, settings.width, settings.height, settings.fps, settings.videoBitsPerSecond].join(':');
 }
 
-function mp4CodecCandidates(): VideoCodec[] {
-	return ['avc'];
+function codecCandidates(format: AnimationFormat): VideoCodec[] {
+	return format === 'mp4' ? ['avc'] : ['vp9', 'vp8', 'av1'];
 }
 
-async function findMp4Codec(
+function createOutputFormat(mediabunny: typeof import('mediabunny'), format: AnimationFormat) {
+	return format === 'mp4'
+		? new mediabunny.Mp4OutputFormat({ fastStart: false })
+		: new mediabunny.WebMOutputFormat();
+}
+
+function formatMimeType(format: AnimationFormat): string {
+	return format === 'mp4' ? 'video/mp4' : 'video/webm';
+}
+
+async function findVideoCodec(
 	settings: AnimationExportCapabilitySettings
 ): Promise<VideoCodec | null> {
 	const key = capabilityKey(settings);
-	let result = mp4CodecCache.get(key);
+	let result = codecCache.get(key);
 	if (!result) {
 		result = (async () => {
 			if (typeof VideoEncoder === 'undefined' ||
@@ -111,10 +124,10 @@ async function findMp4Codec(
 
 			try {
 				const mediabunny = await loadMediabunny();
-				const outputFormat = new mediabunny.Mp4OutputFormat({ fastStart: false });
+				const outputFormat = createOutputFormat(mediabunny, settings.format);
 				const containerCodecs = outputFormat.getSupportedVideoCodecs();
 
-				for (const codec of mp4CodecCandidates()) {
+				for (const codec of codecCandidates(settings.format)) {
 					if (!containerCodecs.includes(codec)) continue;
 					try {
 						const supported = await mediabunny.canEncodeVideo(codec, {
@@ -130,21 +143,21 @@ async function findMp4Codec(
 					}
 				}
 			} catch {
-				// Some browsers cannot encode MP4 at the requested dimensions or bitrate.
+				// Some browsers cannot encode the selected format at these settings.
 			}
 			return null;
 		})();
-		mp4CodecCache.set(key, result);
-		if (mp4CodecCache.size > 32) {
-			const oldestKey = mp4CodecCache.keys().next().value;
-			if (oldestKey) mp4CodecCache.delete(oldestKey);
+		codecCache.set(key, result);
+		if (codecCache.size > 32) {
+			const oldestKey = codecCache.keys().next().value;
+			if (oldestKey) codecCache.delete(oldestKey);
 		}
 	}
 	return result;
 }
 
-/** Returns whether MP4 can be encoded with the exact requested settings. */
-export async function supportsAnimationMp4(
+/** Returns whether the selected container can be encoded with the exact settings. */
+export async function supportsAnimationFormat(
 	settings: AnimationExportCapabilitySettings
 ): Promise<boolean> {
 	if (!isValidAnimationExportDimensions(settings.width, settings.height) ||
@@ -152,7 +165,14 @@ export async function supportsAnimationMp4(
 		!isValidAnimationExportBitrate(settings.videoBitsPerSecond)) {
 		return false;
 	}
-	return (await findMp4Codec(settings)) !== null;
+	return (await findVideoCodec(settings)) !== null;
+}
+
+/** Returns whether MP4 can be encoded with the exact requested settings. */
+export async function supportsAnimationMp4(
+	settings: Omit<AnimationExportCapabilitySettings, 'format'>
+): Promise<boolean> {
+	return supportsAnimationFormat({ ...settings, format: 'mp4' });
 }
 
 export interface AnimationExportStoragePlan {
@@ -161,7 +181,7 @@ export interface AnimationExportStoragePlan {
 	canExport: boolean;
 }
 
-/** Applies a hard in-memory cap to buffered MP4 exports. */
+/** Applies a hard in-memory cap to buffered video exports. */
 export function isBufferedAnimationOutputWithinLimit(byteLength: number): boolean {
 	return Number.isSafeInteger(byteLength) &&
 		byteLength >= 0 &&
@@ -321,14 +341,15 @@ async function createTransferableSvgImage(
 	}
 }
 
-export function safeAnimationFileName(fileName: string) {
+export function safeAnimationFileName(fileName: string, format: AnimationFormat = 'mp4') {
+	const extension = format === 'mp4' ? '.mp4' : '.webm';
 	const stem = fileName
 		.trim()
-		.replace(/\.mp4$/i, '')
+		.replace(/\.(?:mp4|webm)$/i, '')
 		.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
 		.replace(/\s+/g, '-')
 		.slice(0, 100);
-	return `${stem || 'schemra-animation'}.mp4`;
+	return `${stem || 'schemra-animation'}${extension}`;
 }
 
 function estimatedOutputBytes(durationMs: number, videoBitsPerSecond: number): number {
@@ -342,9 +363,11 @@ function outputTooLargeError(): Error {
 }
 
 function savePickerOptions(options: AnimationExportOptions): SavePickerOptionsLike {
+	const extension = options.format === 'mp4' ? '.mp4' : '.webm';
+	const mimeType = formatMimeType(options.format);
 	return {
-		suggestedName: safeAnimationFileName(options.fileName),
-		types: [{ description: studioMessage('export.fileType'), accept: { 'video/mp4': ['.mp4'] } }]
+		suggestedName: safeAnimationFileName(options.fileName, options.format),
+		types: [{ description: studioMessage(options.format === 'mp4' ? 'export.format.mp4' : 'export.format.webm'), accept: { [mimeType]: [extension] } }]
 	};
 }
 
@@ -498,7 +521,7 @@ async function encodeAnimationInWorker(
 	}
 }
 
-/** Encodes deterministic frame samples into MP4 through WebCodecs. */
+/** Encodes deterministic frame samples into the selected video format through WebCodecs. */
 export async function exportAnimation(options: AnimationExportOptions): Promise<void> {
 	if (typeof HTMLCanvasElement === 'undefined') {
 		throw new Error(studioMessage('export.unsupported'));
@@ -560,9 +583,9 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 			fps: options.fps,
 			videoBitsPerSecond: options.videoBitsPerSecond
 		};
-		const codec = await findMp4Codec(settings);
+		const codec = await findVideoCodec({ ...settings, format: options.format });
 		if (!codec) {
-			const unavailable = new Error(studioMessage('export.encoderUnavailable'));
+			const unavailable = new Error(studioMessage('export.encoderUnavailable', { format: studioMessage(options.format === 'mp4' ? 'export.format.mp4' : 'export.format.webm') }));
 			unavailable.name = 'AnimationFormatUnavailableError';
 			throw unavailable;
 		}
@@ -578,6 +601,7 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 			const buffer = await encodeAnimationInWorker(
 				options,
 				{
+					format: options.format,
 					width: pixelWidth,
 					height: pixelHeight,
 					fps: options.fps,
@@ -610,7 +634,7 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 			if (fileWritable) fileWritableOpen = false;
 			else {
 				if (!buffer?.byteLength) throw new Error(studioMessage('export.emptyAnimation'));
-				downloadBlob(new Blob([buffer], { type: 'video/mp4' }), safeAnimationFileName(options.fileName));
+				downloadBlob(new Blob([buffer], { type: formatMimeType(options.format) }), safeAnimationFileName(options.fileName, options.format));
 			}
 			options.onProgress?.(1);
 			return;
@@ -642,7 +666,7 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 			}
 		};
 		const mediabunny = await loadMediabunny();
-		const format = new mediabunny.Mp4OutputFormat({ fastStart: false });
+		const format = createOutputFormat(mediabunny, options.format);
 		const target = fileWritable
 			? new mediabunny.StreamTarget(new WritableStream<import('mediabunny').StreamTargetChunk>({
 				write: async (chunk) => {
@@ -724,7 +748,7 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 					throw outputTooLargeError();
 				}
 				if (!buffer?.byteLength) throw new Error(studioMessage('export.emptyAnimation'));
-				downloadBlob(new Blob([buffer], { type: format.mimeType }), safeAnimationFileName(options.fileName));
+				downloadBlob(new Blob([buffer], { type: format.mimeType }), safeAnimationFileName(options.fileName, options.format));
 			}
 			options.onProgress?.(1);
 		} finally {

@@ -1,7 +1,10 @@
 use schemra_compiler::{
-    BodySpec, ConstructSpec, HeaderKind, HeaderParam, PropertyKind, PropertySpec, Registry, Scope,
+    BodySpec, ConstructHandler, ConstructSpec, HeaderKind, HeaderParam, LoweredItem,
+    LoweringContext, PropertyKind, PropertySpec, Registry, Scope, ValidatedConstruct,
+    compile_sources_with_registry,
 };
-use schemra_syntax::{StatementKind, parse_syntax};
+use schemra_ir::VisualId;
+use schemra_syntax::{Diagnostic, StatementKind, parse_syntax};
 
 static FILE_SCOPE: &[Scope] = &[Scope::File];
 static VISUAL_SCOPE: &[Scope] = &[Scope::Visual];
@@ -52,6 +55,32 @@ static INVALID_ENUM_SCHEMA: ConstructSpec = ConstructSpec {
     body: BodySpec::Properties(Scope::Node),
     properties: INVALID_ENUM,
 };
+
+static CUSTOM_EXTENSION: ConstructSpec = ConstructSpec {
+    name: "custom_extension",
+    contexts: FILE_SCOPE,
+    header: &[],
+    body: BodySpec::None,
+    properties: &[],
+};
+
+struct CustomExtension;
+
+static CUSTOM_EXTENSION_HANDLER: CustomExtension = CustomExtension;
+
+impl ConstructHandler for CustomExtension {
+    fn spec(&self) -> &'static ConstructSpec {
+        &CUSTOM_EXTENSION
+    }
+
+    fn lower(
+        &self,
+        _construct: &ValidatedConstruct<'_>,
+        _context: &mut LoweringContext<'_>,
+    ) -> Result<LoweredItem, Diagnostic> {
+        Ok(LoweredItem::Ignored)
+    }
+}
 
 #[test]
 fn custom_constructs_register_without_changing_generic_parser_behavior() {
@@ -107,4 +136,23 @@ fn registered_schema_queries_are_scope_specific() {
         Some(PropertyKind::String)
     );
     assert_eq!(registry.property_spec(Scope::Group, "icon"), None);
+}
+
+#[test]
+fn builtin_builder_accepts_extensions_and_compiles_them_with_builtin_constructs() {
+    let mut builder = Registry::builder_with_builtins().expect("builtin handlers register");
+    builder
+        .register_handler(&CUSTOM_EXTENSION_HANDLER)
+        .expect("custom handler registers alongside builtins");
+    let registry = builder.build();
+
+    let module = compile_sources_with_registry(
+        &["visual network { node client {} }\ncustom_extension"],
+        &registry,
+    )
+    .expect("builtin visual and custom extension compile together");
+
+    assert_eq!(module.visuals.len(), 1);
+    assert_eq!(module.visuals[0].id, VisualId("network".into()));
+    assert!(registry.handler("custom_extension").is_some());
 }

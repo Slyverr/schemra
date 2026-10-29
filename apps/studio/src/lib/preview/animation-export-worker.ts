@@ -2,6 +2,7 @@ import type { BufferTarget, Output, StreamTarget, StreamTargetChunk, VideoCodec 
 import { studioMessage } from '../i18n/messages.js';
 
 export interface ExportSettings {
+	format: 'mp4' | 'webm';
 	width: number;
 	height: number;
 	fps: number;
@@ -117,7 +118,9 @@ async function startExport(settings: ExportSettings) {
 			}), { chunked: false })
 		: new mediabunny.BufferTarget();
 	const output = new mediabunny.Output({
-		format: new mediabunny.Mp4OutputFormat({ fastStart: false }),
+		format: settings.format === 'mp4'
+			? new mediabunny.Mp4OutputFormat({ fastStart: false })
+			: new mediabunny.WebMOutputFormat(),
 		target
 	});
 	const source = new mediabunny.CanvasSource(canvas, {

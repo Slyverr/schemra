@@ -348,6 +348,7 @@
 		animationExportBusy = true;
 		animationExportProgress = 0;
 		const job = exportAnimation({
+			format: settings.format,
 			durationMs: settings.durationMs,
 			width: settings.width,
 			height: settings.height,
