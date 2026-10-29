@@ -92,7 +92,7 @@ pub fn editor_metadata(module: &ModuleIr) -> (Vec<DeclarationInfo>, Vec<EditorSy
             name: scenario.id.0.clone(),
             kind: EditorSymbolKind::Scenario,
             role: EditorSymbolRole::Definition,
-            target_key: format!("scenario:{}", scenario.id.0),
+            target_key: format!("scenario:{}:{}", scenario.visual.0, scenario.id.0),
             span: scenario.id_span,
         });
         symbols.push(EditorSymbol {

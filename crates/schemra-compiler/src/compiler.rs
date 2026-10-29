@@ -655,6 +655,17 @@ pub fn validate_scenario_for_visual(scenario: &ScenarioIr, visual: &VisualIr) ->
     diagnostics
 }
 
+/// Validates every scenario resolved to a visual by the project host.
+pub fn validate_scenarios_for_visual(
+    scenarios: &[ScenarioIr],
+    visual: &VisualIr,
+) -> Vec<Diagnostic> {
+    scenarios
+        .iter()
+        .flat_map(|scenario| validate_scenario_for_visual(scenario, visual))
+        .collect()
+}
+
 fn validate_actions(
     actions: &[ActionIr],
     tokens: &HashSet<&str>,

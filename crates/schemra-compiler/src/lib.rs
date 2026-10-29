@@ -6,11 +6,12 @@ mod editor;
 mod editor_metadata;
 mod project;
 mod registry;
+mod rename;
 mod schema;
 
 pub use compiler::{
     ConstructHandler, LoweredItem, LoweringContext, ValidatedConstruct, compile, compile_sources,
-    compile_sources_with_registry, validate_scenario_for_visual,
+    compile_sources_with_registry, validate_scenario_for_visual, validate_scenarios_for_visual,
 };
 pub use completion::{
     CompletionItem, CompletionKind, CompletionList, complete_at, complete_at_with_nodes,
@@ -24,6 +25,9 @@ pub use project::{
     ProjectAnalysis, ProjectFileAnalysis, ProjectSource, ProjectVisualAnalysis, analyze_project,
 };
 pub use registry::{Registry, RegistryBuilder, RegistryError};
+pub use rename::{
+    RenameEdit, RenameResult, RenameSelection, prepare_project_rename, rename_project,
+};
 pub use schema::{
     BodySpec, ConstructSpec, HeaderKind, HeaderParam, PropertyKind, PropertySpec, Scope,
 };
