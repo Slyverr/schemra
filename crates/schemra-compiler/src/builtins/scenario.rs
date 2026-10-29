@@ -31,9 +31,11 @@ fn lower(
         span: construct.statement.span,
     };
 
-    for child in context.lower_children(construct, None)? {
-        if let LoweredItem::Token(token) = child {
-            scenario.tokens.push(token);
+    for child in context.lower_scenario_children(construct)? {
+        match child {
+            LoweredItem::Token(token) => scenario.tokens.push(token),
+            LoweredItem::Action(action) => scenario.actions.push(action),
+            _ => {}
         }
     }
 
