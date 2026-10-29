@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+subject="$(head -n 1 "$1")"
+
+if [[ "$subject" == "Initial commit" ]] && ! git -C "$repo_root" rev-parse --verify HEAD >/dev/null 2>&1; then
+	exit 0
+fi
+
+pattern='^(feat|fix|refactor|perf|test|docs|build|ci|chore)(\([a-zA-Z0-9][a-zA-Z0-9._-]*(/[a-zA-Z0-9][a-zA-Z0-9._-]*)?\))?: [a-zA-Z0-9][a-zA-Z0-9 ._-]*$'
+repo_target='^(feat|fix|refactor|perf|test|docs|build|ci|chore)\(repo(/[^)]*)?\):'
+
+if [[ ! "$subject" =~ $pattern ]] || [[ "$subject" =~ $repo_target ]]; then
+	printf 'Invalid commit subject: %s\n' "$subject" >&2
+	printf 'Use type(target/scope): concise imperative message, or type: message for repository-wide changes.\n' >&2
+	exit 1
+fi

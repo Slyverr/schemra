@@ -1,0 +1,12 @@
+/target/
+/apps/studio/node_modules/
+/apps/studio/.svelte-kit/
+/apps/studio/build/
+/apps/studio/dist/
+.tmp/
+.cache/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
