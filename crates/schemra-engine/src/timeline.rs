@@ -1,6 +1,6 @@
 use schemra_ir::{
-    ActionIr, ScenarioIr, SourceSpan, Timeline, TimelineError, TimelineEvent, TimelineEventKind,
-    TimelineFrame, TokenFrame, TokenPosition,
+    ActionIr, HighlightFrame, ScenarioIr, SourceSpan, Timeline, TimelineError, TimelineEvent,
+    TimelineEventKind, TimelineFrame, TokenFrame, TokenPosition,
 };
 
 const DEFAULT_MOVE_DURATION_MS: u64 = 1_000;
@@ -18,6 +18,7 @@ impl TimelineSampling for Timeline {
     fn sample(&self, time_ms: u64) -> TimelineFrame {
         let mut tokens = Vec::new();
         let mut highlighted_nodes = Vec::new();
+        let mut highlights = Vec::new();
 
         for (instance_id, event) in self.events.iter().enumerate() {
             if !(event.start_ms <= time_ms && time_ms < event.end_ms) {
@@ -36,8 +37,27 @@ impl TimelineSampling for Timeline {
                         ),
                     },
                 }),
-                TimelineEventKind::Highlight { node, .. } => {
+                TimelineEventKind::Highlight {
+                    node,
+                    effect,
+                    origin,
+                } => {
                     highlighted_nodes.push(node.clone());
+                    let presentation = super::effects::sample(
+                        *effect,
+                        normalized_progress_micros(
+                            time_ms - event.start_ms,
+                            event.end_ms - event.start_ms,
+                        ),
+                    );
+                    highlights.push(HighlightFrame {
+                        instance_id,
+                        node: node.clone(),
+                        effect: *effect,
+                        progress_micros: presentation.progress_micros,
+                        pulse_opacity: presentation.pulse_opacity,
+                        origin: origin.clone(),
+                    });
                 }
                 TimelineEventKind::Wait => {}
             }
@@ -47,6 +67,10 @@ impl TimelineSampling for Timeline {
             let event = &self.events[token.instance_id];
             (event.start_ms, token.instance_id)
         });
+        highlights.sort_by_key(|highlight| {
+            let event = &self.events[highlight.instance_id];
+            (event.start_ms, highlight.instance_id)
+        });
         highlighted_nodes.sort_by(|left, right| left.0.cmp(&right.0));
         highlighted_nodes.dedup();
 
@@ -54,6 +78,7 @@ impl TimelineSampling for Timeline {
             time_ms,
             tokens,
             highlighted_nodes,
+            highlights,
         }
     }
 }

@@ -10,11 +10,27 @@ pub struct Timeline {
 }
 
 /// Deterministic marker movement instances and highlights at a timestamp.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TimelineFrame {
     pub time_ms: u64,
     pub tokens: Vec<TokenFrame>,
     pub highlighted_nodes: Vec<NodeId>,
+    pub highlights: Vec<HighlightFrame>,
+}
+
+/// One active highlight effect sampled at a timestamp.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct HighlightFrame {
+    /// Stable identity of this highlight event within the timeline.
+    pub instance_id: usize,
+    pub node: NodeId,
+    pub effect: HighlightEffect,
+    /// Effect progress in millionths, after applying the effect's timing curve.
+    pub progress_micros: u32,
+    /// Current effect opacity in the inclusive range from zero to one.
+    pub pulse_opacity: f32,
+    /// The declared origin used to anchor a scene-level highlight.
+    pub origin: HighlightOrigin,
 }
 
 /// Scene coordinates and active links sampled from a timeline at one timestamp.

@@ -13,8 +13,9 @@ pub use scenario::{
 };
 pub use schemra_syntax::{SourceLocation, SourceSpan};
 pub use timeline::{
-    SceneEdgeProgress, SceneHighlight, SceneTimelineFrame, SceneTokenPosition, Timeline,
-    TimelineError, TimelineEvent, TimelineEventKind, TimelineFrame, TokenFrame, TokenPosition,
+    HighlightFrame, SceneEdgeProgress, SceneHighlight, SceneTimelineFrame, SceneTokenPosition,
+    Timeline, TimelineError, TimelineEvent, TimelineEventKind, TimelineFrame, TokenFrame,
+    TokenPosition,
 };
 pub use visual::{
     Direction, EdgeDirectionality, EdgeIr, GroupIr, GroupLayout, LinkBend, LinkRouting, NodeIr,

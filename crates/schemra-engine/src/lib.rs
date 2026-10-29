@@ -1,5 +1,6 @@
 //! Deterministic execution and sampling for compiled Schemra scenarios.
 
+mod effects;
 mod input;
 mod layout;
 mod renderer;
