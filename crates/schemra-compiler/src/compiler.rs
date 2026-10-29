@@ -1,4 +1,6 @@
-use schemra_ir::{EdgeDirectionality, EdgeIr, GroupId, ModuleIr, NodeId, NodeIr, VisualIr};
+use schemra_ir::{
+    EdgeDirectionality, EdgeIr, GroupId, GroupIr, ModuleIr, NodeId, NodeIr, VisualIr,
+};
 use schemra_syntax::{Diagnostic, Statement, StatementKind, Token, TokenKind, parse_syntax};
 
 use crate::registry::Registry;
@@ -12,6 +14,14 @@ pub struct ValidatedConstruct<'a> {
 }
 
 impl<'a> ValidatedConstruct<'a> {
+    pub(crate) fn new(statement: &'a Statement, scope: Scope) -> Self {
+        Self {
+            statement,
+            scope,
+            parent_group: None,
+        }
+    }
+
     pub fn name(&self) -> Option<&str> {
         match &self.statement.kind {
             StatementKind::Invocation { name, .. } => Some(&name.text),
@@ -38,6 +48,7 @@ impl<'a> ValidatedConstruct<'a> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum LoweredItem {
     Visual(VisualIr),
+    Group(GroupIr, Vec<NodeIr>),
     Node(NodeIr),
     Ignored,
 }
@@ -143,6 +154,8 @@ impl LoweringContext<'_> {
 pub trait ConstructHandler: Send + Sync {
     fn spec(&self) -> &'static ConstructSpec;
 
+    fn validate(&self, _construct: &ValidatedConstruct<'_>, _diagnostics: &mut Vec<Diagnostic>) {}
+
     fn lower(
         &self,
         construct: &ValidatedConstruct<'_>,
@@ -154,15 +167,23 @@ pub(super) type LowerFn = for<'a, 'r> fn(
     &ValidatedConstruct<'a>,
     &mut LoweringContext<'r>,
 ) -> Result<LoweredItem, Diagnostic>;
+pub(super) type ValidateFn = fn(&ValidatedConstruct<'_>, &mut Vec<Diagnostic>);
 
 pub(super) struct BuiltinHandler {
     spec: &'static ConstructSpec,
     lower: LowerFn,
+    validate: Option<ValidateFn>,
 }
 
 impl ConstructHandler for BuiltinHandler {
     fn spec(&self) -> &'static ConstructSpec {
         self.spec
+    }
+
+    fn validate(&self, construct: &ValidatedConstruct<'_>, diagnostics: &mut Vec<Diagnostic>) {
+        if let Some(validate) = self.validate {
+            validate(construct, diagnostics);
+        }
     }
 
     fn lower(
@@ -174,13 +195,67 @@ impl ConstructHandler for BuiltinHandler {
     }
 }
 
-pub(super) const fn handler(spec: &'static ConstructSpec, lower: LowerFn) -> BuiltinHandler {
-    BuiltinHandler { spec, lower }
+pub(super) const fn handler(
+    spec: &'static ConstructSpec,
+    lower: LowerFn,
+    validate: Option<ValidateFn>,
+) -> BuiltinHandler {
+    BuiltinHandler {
+        spec,
+        lower,
+        validate,
+    }
 }
 
 /// Parse, validate, and lower a source file into typed visual IR.
 pub fn compile(source: &str) -> Result<ModuleIr, Vec<Diagnostic>> {
     compile_sources(&[source])
+}
+
+pub(super) fn string_property(statements: &[Statement], name: &str) -> Option<String> {
+    statements
+        .iter()
+        .find_map(|statement| match &statement.kind {
+            StatementKind::Property {
+                name: property,
+                value,
+                additional_values,
+            } if property.text == name && additional_values.is_empty() => match &value.kind {
+                TokenKind::String(value) => Some(value.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
+}
+
+pub(super) fn scalar_property(statements: &[Statement], name: &str) -> Option<String> {
+    statements
+        .iter()
+        .find_map(|statement| match &statement.kind {
+            StatementKind::Property {
+                name: property,
+                value,
+                additional_values,
+            } if property.text == name && additional_values.is_empty() => match &value.kind {
+                TokenKind::String(value) => Some(value.clone()),
+                TokenKind::Identifier | TokenKind::BareValue(_) => Some(value.text.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
+}
+
+pub(super) fn integer_property(statements: &[Statement], name: &str) -> Option<u32> {
+    statements
+        .iter()
+        .find_map(|statement| match &statement.kind {
+            StatementKind::Property {
+                name: property,
+                value,
+                additional_values,
+            } if property.text == name && additional_values.is_empty() => value.text.parse().ok(),
+            _ => None,
+        })
 }
 
 pub fn compile_sources(sources: &[&str]) -> Result<ModuleIr, Vec<Diagnostic>> {
@@ -209,7 +284,7 @@ pub fn compile_sources_with_registry(
         for statement in &syntax.statements {
             match context.lower_child(statement, Scope::File) {
                 Ok(LoweredItem::Visual(visual)) => module.visuals.push(visual),
-                Ok(LoweredItem::Node(_) | LoweredItem::Ignored) => {}
+                Ok(LoweredItem::Group(_, _) | LoweredItem::Node(_) | LoweredItem::Ignored) => {}
                 Err(diagnostic) => diagnostics.push(diagnostic),
             }
         }

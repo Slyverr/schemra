@@ -1,5 +1,5 @@
 use schemra_ir::{NodeId, NodeIr};
-use schemra_syntax::{Diagnostic, Statement, StatementKind, TokenKind};
+use schemra_syntax::{Diagnostic, TokenKind};
 
 use crate::compiler::{LoweredItem, LoweringContext, ValidatedConstruct};
 use crate::{BodySpec, ConstructSpec, Scope};
@@ -14,7 +14,7 @@ static SPEC: ConstructSpec = ConstructSpec {
     properties: NODE_PROPERTIES,
 };
 
-pub(super) static HANDLER: super::super::BuiltinHandler = handler(&SPEC, lower);
+pub(super) static HANDLER: super::super::BuiltinHandler = handler(&SPEC, lower, None);
 
 fn lower(
     construct: &ValidatedConstruct<'_>,
@@ -42,29 +42,9 @@ fn lower(
             })
             .unwrap_or(&id_text)
             .to_owned(),
-        icon: string_property(body, "icon"),
-        detail: string_property(body, "detail"),
+        icon: crate::compiler::string_property(body, "icon"),
+        detail: crate::compiler::string_property(body, "detail"),
         group: construct.parent_group.clone(),
         span: construct.statement.span,
     }))
-}
-
-fn string_property(statements: &[Statement], name: &str) -> Option<String> {
-    statements.iter().find_map(|statement| {
-        let StatementKind::Property {
-            name: property_name,
-            value,
-            ..
-        } = &statement.kind
-        else {
-            return None;
-        };
-        if property_name.text != name {
-            return None;
-        }
-        match &value.kind {
-            TokenKind::String(value) => Some(value.clone()),
-            _ => None,
-        }
-    })
 }

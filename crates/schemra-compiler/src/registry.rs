@@ -7,7 +7,7 @@ use schemra_syntax::{
     Diagnostic, SourceLocation, SourceSpan, Statement, StatementKind, SyntaxFile, Token, TokenKind,
 };
 
-use crate::compiler::{ConstructHandler, builtin_registry};
+use crate::compiler::{ConstructHandler, ValidatedConstruct, builtin_registry};
 use crate::{BodySpec, ConstructSpec, HeaderKind, PropertyKind, PropertySpec, Scope};
 
 /// Immutable set of construct schemas available to compiler stages.
@@ -376,6 +376,9 @@ fn validate_scope(
                         validate_scope(children, child_scope, registry, diagnostics);
                     }
                     (BodySpec::None, None) => {}
+                }
+                if let Some(handler) = registry.handler(&name.text) {
+                    handler.validate(&ValidatedConstruct::new(statement, scope), diagnostics);
                 }
             }
         }

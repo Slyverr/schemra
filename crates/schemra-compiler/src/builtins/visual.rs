@@ -14,7 +14,7 @@ static SPEC: ConstructSpec = ConstructSpec {
     properties: VISUAL_PROPERTIES,
 };
 
-pub(super) static HANDLER: super::super::BuiltinHandler = handler(&SPEC, lower);
+pub(super) static HANDLER: super::super::BuiltinHandler = handler(&SPEC, lower, None);
 
 fn lower(
     construct: &ValidatedConstruct<'_>,
@@ -66,8 +66,13 @@ fn lower(
     }
 
     for child in context.lower_children(construct, None)? {
-        if let LoweredItem::Node(node) = child {
-            visual.nodes.push(node);
+        match child {
+            LoweredItem::Group(group, nodes) => {
+                visual.groups.push(group);
+                visual.nodes.extend(nodes);
+            }
+            LoweredItem::Node(node) => visual.nodes.push(node),
+            _ => {}
         }
     }
     Ok(LoweredItem::Visual(visual))

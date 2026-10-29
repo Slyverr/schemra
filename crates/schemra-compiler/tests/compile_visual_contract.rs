@@ -1,5 +1,5 @@
 use schemra_compiler::compile;
-use schemra_ir::{Direction, EdgeDirectionality, NodeId, VisualId};
+use schemra_ir::{Direction, EdgeDirectionality, GroupId, GroupLayout, NodeId, VisualId};
 
 fn diagnostic_codes(source: &str) -> Vec<String> {
     compile(source)
@@ -84,5 +84,49 @@ fn validates_visual_and_node_properties_before_lowering() {
     assert!(
         diagnostic_codes("visual network { node proxy { icon: 2 } }")
             .contains(&"E_PROPERTY_TYPE".into())
+    );
+}
+
+#[test]
+fn lowers_group_layout_and_assigns_group_membership_to_its_nodes() {
+    let source = r#"
+visual network {
+  group clients "Clients" {
+    layout: grid
+    columns: 2
+    node user_1 "User 1" {}
+    node user_2 "User 2" {}
+  }
+}
+"#;
+
+    let module = compile(source).expect("valid group compiles");
+    let visual = &module.visuals[0];
+
+    assert_eq!(visual.groups.len(), 1);
+    assert_eq!(visual.groups[0].id, GroupId("clients".into()));
+    assert_eq!(visual.groups[0].title, "Clients");
+    assert_eq!(
+        visual.groups[0].layout,
+        GroupLayout::Grid { columns: Some(2) }
+    );
+    assert_eq!(visual.nodes.len(), 2);
+    assert!(
+        visual
+            .nodes
+            .iter()
+            .all(|node| node.group == Some(GroupId("clients".into())))
+    );
+}
+
+#[test]
+fn group_layout_defaults_to_auto_and_columns_require_grid_layout() {
+    let module = compile("visual network { group clients { node user_1 {} } }")
+        .expect("group with default layout compiles");
+    assert_eq!(module.visuals[0].groups[0].layout, GroupLayout::Auto);
+
+    assert!(
+        diagnostic_codes("visual network { group clients { columns: 2 node user_1 {} } }")
+            .contains(&"E_COLUMNS_WITHOUT_GRID".into())
     );
 }
