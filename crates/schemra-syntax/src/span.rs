@@ -1,7 +1,7 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// A position in source text.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SourceLocation {
     /// UTF-8 byte offset from the start of the source.
     pub offset: usize,
@@ -12,7 +12,7 @@ pub struct SourceLocation {
 }
 
 /// A half-open range in source text.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SourceSpan {
     /// First source position in the range.
     pub start: SourceLocation,

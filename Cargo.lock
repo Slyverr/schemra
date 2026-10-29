@@ -162,6 +162,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "schemra-engine"
+version = "0.1.0"
+dependencies = [
+ "schemra-ir",
+]
+
+[[package]]
 name = "schemra-ir"
 version = "0.1.0"
 dependencies = [

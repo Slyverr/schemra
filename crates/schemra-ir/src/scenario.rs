@@ -1,13 +1,14 @@
 use crate::{ScenarioId, SourceSpan, TokenId, VisualId};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub enum HighlightEffect {
     #[default]
     Trace,
     Pulse,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum HighlightSide {
     Left,
     Right,
@@ -15,7 +16,7 @@ pub enum HighlightSide {
     Bottom,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum HighlightOrigin {
     Default,
     Arrival {

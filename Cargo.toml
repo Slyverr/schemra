@@ -2,6 +2,7 @@
 members = [
   "crates/schemra-cli",
   "crates/schemra-compiler",
+  "crates/schemra-engine",
   "crates/schemra-ir",
   "crates/schemra-syntax",
 ]
