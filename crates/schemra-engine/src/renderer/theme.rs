@@ -3,6 +3,8 @@ use schemra_scene::{SceneFont, SceneIconPack, ScenePalette, SceneTheme, SceneVar
 pub(super) struct PaletteColors<'theme> {
     pub(super) canvas: &'theme str,
     pub(super) card: &'theme str,
+    pub(super) group_fill: &'theme str,
+    pub(super) group_border: &'theme str,
     pub(super) edge: &'theme str,
     pub(super) text: &'theme str,
     pub(super) muted: &'theme str,
@@ -25,6 +27,8 @@ fn palette_defaults(palette: ScenePalette) -> PaletteColors<'static> {
         ScenePalette::Paper => PaletteColors {
             canvas: "#ffffff",
             card: "#ffffff",
+            group_fill: "#fafafa",
+            group_border: "#d4d4d8",
             edge: "#71717a",
             text: "#18181b",
             muted: "#52525b",
@@ -38,6 +42,8 @@ fn palette_defaults(palette: ScenePalette) -> PaletteColors<'static> {
         ScenePalette::Midnight => PaletteColors {
             canvas: "#0f172a",
             card: "#1e293b",
+            group_fill: "#111c2e",
+            group_border: "#334155",
             edge: "#94a3b8",
             text: "#f8fafc",
             muted: "#cbd5e1",
@@ -51,6 +57,8 @@ fn palette_defaults(palette: ScenePalette) -> PaletteColors<'static> {
         ScenePalette::Lagoon => PaletteColors {
             canvas: "#f0fdfa",
             card: "#ffffff",
+            group_fill: "#ccfbf1",
+            group_border: "#99f6e4",
             edge: "#0f766e",
             text: "#134e4a",
             muted: "#0f766e",
@@ -64,6 +72,8 @@ fn palette_defaults(palette: ScenePalette) -> PaletteColors<'static> {
         ScenePalette::Sand => PaletteColors {
             canvas: "#fffcf5",
             card: "#ffffff",
+            group_fill: "#fef3c7",
+            group_border: "#fcd34d",
             edge: "#a16207",
             text: "#422006",
             muted: "#854d0e",
@@ -83,6 +93,8 @@ pub(super) fn palette_colors(theme: &SceneTheme) -> PaletteColors<'_> {
     PaletteColors {
         canvas: safe_color(colors.canvas.as_deref(), defaults.canvas),
         card: safe_color(colors.card.as_deref(), defaults.card),
+        group_fill: safe_color(colors.group_fill.as_deref(), defaults.group_fill),
+        group_border: safe_color(colors.group_border.as_deref(), defaults.group_border),
         edge: safe_color(colors.edge.as_deref(), defaults.edge),
         text: safe_color(colors.text.as_deref(), defaults.text),
         muted: safe_color(colors.muted.as_deref(), defaults.muted),

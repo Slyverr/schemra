@@ -5,6 +5,8 @@ use std::{error::Error, fmt, fmt::Write as _};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use schemra_scene::{Rect, Scene, SceneFont};
 
+mod annotations;
+mod groups;
 mod icons;
 mod links;
 mod nodes;
@@ -37,6 +39,10 @@ const BUNDLED_FONTS: [BundledFont; 3] = [
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SvgRenderError {
     InvalidCanvasBounds,
+    InvalidGroupBounds,
+    InvalidGroupStyle,
+    InvalidAnnotationBounds,
+    InvalidAnnotationStyle,
     InvalidNodeBounds,
     InvalidNodeStyle,
     InvalidEdgeGeometry,
@@ -48,6 +54,18 @@ impl fmt::Display for SvgRenderError {
         match self {
             Self::InvalidCanvasBounds => {
                 formatter.write_str("scene canvas bounds must be finite and positive")
+            }
+            Self::InvalidGroupBounds => {
+                formatter.write_str("group bounds must be finite and positive")
+            }
+            Self::InvalidGroupStyle => formatter.write_str(
+                "group opacity and radius must be finite, with opacity between zero and one",
+            ),
+            Self::InvalidAnnotationBounds => {
+                formatter.write_str("annotation bounds must be finite and positive")
+            }
+            Self::InvalidAnnotationStyle => {
+                formatter.write_str("annotation opacity must be finite and between zero and one")
             }
             Self::InvalidNodeBounds => {
                 formatter.write_str("node bounds must be finite and positive")
@@ -67,10 +85,10 @@ impl fmt::Display for SvgRenderError {
 
 impl Error for SvgRenderError {}
 
-/// Serializes the canvas and static node layer of a scene to an SVG document.
+/// Serializes the canvas and static visual layers of a scene to an SVG document.
 ///
 /// Scene text and attributes are XML-escaped. Edges and other scene layers are
-/// added by their corresponding renderer slices.
+/// added by their corresponding renderer modules.
 pub fn render_svg(scene: &Scene) -> Result<String, SvgRenderError> {
     if !scene.width.is_finite()
         || !scene.height.is_finite()
@@ -78,6 +96,38 @@ pub fn render_svg(scene: &Scene) -> Result<String, SvgRenderError> {
         || scene.height <= 0.0
     {
         return Err(SvgRenderError::InvalidCanvasBounds);
+    }
+    if scene.groups.iter().any(|group| !valid_bounds(group.bounds)) {
+        return Err(SvgRenderError::InvalidGroupBounds);
+    }
+    if scene.groups.iter().any(|group| {
+        group
+            .style
+            .opacity
+            .is_some_and(|opacity| !opacity.is_finite() || !(0.0..=1.0).contains(&opacity))
+            || group.style.radius.is_some_and(|radius| !radius.is_finite())
+    }) {
+        return Err(SvgRenderError::InvalidGroupStyle);
+    }
+    if scene
+        .texts
+        .iter()
+        .any(|annotation| !valid_bounds(annotation.bounds))
+        || scene.images.iter().any(|image| !valid_bounds(image.bounds))
+        || scene.icons.iter().any(|icon| !valid_bounds(icon.bounds))
+    {
+        return Err(SvgRenderError::InvalidAnnotationBounds);
+    }
+    if scene
+        .texts
+        .iter()
+        .any(|annotation| invalid_opacity(annotation.style.opacity))
+        || scene
+            .images
+            .iter()
+            .any(|image| invalid_opacity(image.style.opacity))
+    {
+        return Err(SvgRenderError::InvalidAnnotationStyle);
     }
     if scene.nodes.iter().any(|node| !valid_bounds(node.bounds)) {
         return Err(SvgRenderError::InvalidNodeBounds);
@@ -162,8 +212,14 @@ pub fn render_svg(scene: &Scene) -> Result<String, SvgRenderError> {
     )
     .expect("writing to a String cannot fail");
 
+    groups::write_backgrounds(&mut svg, scene, &colors);
     links::write_paths(&mut svg, scene, colors.edge);
     links::write_labels(&mut svg, scene, colors.canvas, colors.muted);
+    groups::write_labels(&mut svg, scene, &colors);
+
+    annotations::write_texts(&mut svg, scene, &colors);
+    annotations::write_images(&mut svg, scene);
+    annotations::write_icons(&mut svg, scene, &colors);
 
     for node in &scene.nodes {
         nodes::write_node(
@@ -181,6 +237,32 @@ pub fn render_svg(scene: &Scene) -> Result<String, SvgRenderError> {
 
 fn used_font_profiles(scene: &Scene) -> [bool; 3] {
     let mut used = [false; 3];
+    for group in &scene.groups {
+        let font = group.style.font.unwrap_or(scene.theme.font);
+        if !group.title.is_empty() {
+            mark_font(&mut used, font);
+        }
+        for (index, selected) in
+            text::font_profiles_for_text(font, &group.title, group.style.weight.unwrap_or(650))
+                .into_iter()
+                .enumerate()
+        {
+            used[index] |= selected;
+        }
+    }
+    for annotation in &scene.texts {
+        let font = annotation.style.font.unwrap_or(scene.theme.font);
+        let weight = annotation.style.weight.unwrap_or(450);
+        if !annotation.text.is_empty() {
+            mark_font(&mut used, font);
+        }
+        for (index, selected) in text::font_profiles_for_text(font, &annotation.text, weight)
+            .into_iter()
+            .enumerate()
+        {
+            used[index] |= selected;
+        }
+    }
     for node in &scene.nodes {
         let font = node.style.font.unwrap_or(scene.theme.font);
         for (text, weight) in
@@ -258,6 +340,10 @@ fn valid_bounds(bounds: Rect) -> bool {
         && bounds.height > 0.0
         && (bounds.x + bounds.width).is_finite()
         && (bounds.y + bounds.height).is_finite()
+}
+
+fn invalid_opacity(opacity: Option<f32>) -> bool {
+    opacity.is_some_and(|value| !value.is_finite() || !(0.0..=1.0).contains(&value))
 }
 
 pub(super) fn font_family(font: SceneFont) -> &'static str {

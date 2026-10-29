@@ -1,7 +1,7 @@
 use schemra_engine::{SvgRenderError, render_svg};
 use schemra_scene::{
-    FlowDirection, Rect, Scene, SceneFont, SceneNode, SceneNodeLayout, SceneNodeShape,
-    ScenePalette, SceneStyle, SceneTextAlign, SceneTheme,
+    FlowDirection, Rect, Scene, SceneFont, SceneGroup, SceneNode, SceneNodeLayout, SceneNodeShape,
+    ScenePalette, SceneStyle, SceneTextAlign, SceneTheme, SceneVariant,
 };
 
 fn make_scene(title: &str, node: SceneNode) -> Scene {
@@ -37,6 +37,20 @@ fn node() -> SceneNode {
             height: 50.0,
         },
         group: None,
+    }
+}
+
+fn group() -> SceneGroup {
+    SceneGroup {
+        name: "application".into(),
+        title: "Application".into(),
+        bounds: Rect {
+            x: 4.0,
+            y: 5.0,
+            width: 172.0,
+            height: 62.0,
+        },
+        style: SceneStyle::default(),
     }
 }
 
@@ -106,6 +120,69 @@ fn serializes_rectangular_and_cylindrical_node_shapes() {
     assert!(cylinder.contains(
         "data-node-background=\"true\" d=\"M 10 17 C 10 11 170 11 170 17 V 55 C 170 61 10 61 10 55 Z\""
     ));
+}
+
+#[test]
+fn renders_group_backgrounds_and_titles_around_the_node_layer() {
+    let mut scene = make_scene("Application", node());
+    scene.groups.push(group());
+
+    let svg = render_svg(&scene).unwrap();
+    let background = svg.find("<rect data-group-id=\"application\"").unwrap();
+    let label = svg.find("<text data-group-id=\"application\"").unwrap();
+    let node = svg.find("<g data-node-id=\"api\"").unwrap();
+
+    assert!(background < label && label < node);
+    assert!(svg.contains(
+		"x=\"4\" y=\"5\" width=\"172\" height=\"62\" rx=\"18\" fill=\"#fafafa\" stroke=\"#d4d4d8\" stroke-width=\"1.5\" stroke-dasharray=\"5 5\""
+	));
+    assert!(svg.contains("x=\"20\" y=\"29\" font-family=\"'Inter Variable', sans-serif\""));
+    assert!(svg.contains("Application</tspan>"));
+}
+
+#[test]
+fn applies_group_variant_colors_and_opacity() {
+    let mut scene = make_scene("Application", node());
+    let mut group = group();
+    group.style.variant = SceneVariant::Accent;
+    group.style.radius = Some(12.0);
+    group.style.opacity = Some(0.5);
+    scene.groups.push(group);
+
+    let svg = render_svg(&scene).unwrap();
+
+    assert!(svg.contains("rx=\"12\" fill=\"#eff6ff\" stroke=\"#2563eb\""));
+    assert!(svg.contains("stroke-dasharray=\"5 5\" opacity=\"0.5\""));
+    assert!(svg.contains("fill=\"#1d4ed8\" stroke=\"#ffffff\""));
+}
+
+#[test]
+fn escapes_group_identifiers_and_titles() {
+    let mut scene = make_scene("Application", node());
+    let mut group = group();
+    group.name = "app&<one>".into();
+    group.title = "API & <services>".into();
+    scene.groups.push(group);
+
+    let svg = render_svg(&scene).unwrap();
+
+    assert!(svg.contains("data-group-id=\"app&amp;&lt;one&gt;\""));
+    assert!(svg.contains("API &amp; &lt;services&gt;"));
+}
+
+#[test]
+fn rejects_invalid_group_geometry_and_style() {
+    let mut scene = make_scene("Application", node());
+    let mut invalid_bounds = group();
+    invalid_bounds.bounds.width = f32::INFINITY;
+    scene.groups.push(invalid_bounds);
+    assert_eq!(render_svg(&scene), Err(SvgRenderError::InvalidGroupBounds));
+
+    let mut scene = make_scene("Application", node());
+    let mut invalid_style = group();
+    invalid_style.style.opacity = Some(f32::NAN);
+    scene.groups.push(invalid_style);
+    assert_eq!(render_svg(&scene), Err(SvgRenderError::InvalidGroupStyle));
 }
 
 #[test]

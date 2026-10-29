@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 
-use schemra_scene::SceneIconPack;
+use schemra_scene::{Rect, SceneIconPack, is_safe_image_source};
 
 use super::theme::PaletteColors;
 use crate::renderer::{number, write_xml};
@@ -36,6 +36,52 @@ pub(super) fn write_node_icon(
     } else {
         write_outline_icon(svg, name, x + 3.0, y + 3.0, foreground, background);
     }
+    svg.push_str("</g>");
+}
+
+pub(super) fn write_annotation_icon(
+    svg: &mut String,
+    id: &str,
+    name: &str,
+    bounds: Rect,
+    colors: &PaletteColors<'_>,
+    icon_pack: SceneIconPack,
+) {
+    let (background, foreground) = match icon_pack {
+        SceneIconPack::Outline => (colors.icon_background, colors.icon_foreground),
+        SceneIconPack::Solid => (colors.solid_icon_background, colors.solid_icon_foreground),
+    };
+    let name = canonical_name(name);
+    svg.push_str("<g data-icon-id=\"");
+    write_xml(svg, id);
+    svg.push_str("\" role=\"img\" aria-label=\"");
+    write_xml(svg, id);
+    write!(
+        svg,
+        "\" transform=\"translate({} {}) scale({} {})\">",
+        number(bounds.x),
+        number(bounds.y),
+        number(bounds.width / 30.0),
+        number(bounds.height / 30.0),
+    )
+    .expect("writing to a String cannot fail");
+    write!(
+        svg,
+        "<rect width=\"30\" height=\"30\" rx=\"9\" fill=\"{}\"/>",
+        background
+    )
+    .expect("writing to a String cannot fail");
+
+    if name.starts_with("data:image/") && is_safe_image_source(name) {
+        svg.push_str("<image x=\"3\" y=\"3\" width=\"24\" height=\"24\" preserveAspectRatio=\"xMidYMid meet\" href=\"");
+        write_xml(svg, name);
+        svg.push_str("\"/>");
+    } else if icon_pack == SceneIconPack::Solid {
+        write_solid_icon(svg, name, 3.0, 3.0, foreground, background);
+    } else {
+        write_outline_icon(svg, name, 3.0, 3.0, foreground, background);
+    }
+
     svg.push_str("</g>");
 }
 

@@ -10,6 +10,8 @@
 - For Studio work, keep layouts and interactions consistent with the product.
   Use short, cohesive modules with focused components and shallow control flow;
   split by responsibility, not just to reduce line counts.
+- Follow the shared Studio UI component rule in `CONTRIBUTING.md` for controls,
+  menus, and dialogs.
 - Describe Schemra as a standalone product. Keep project files free of
   provenance and comparison notes.
 - Preserve unrelated staged and unstaged work. Do not change the Git index or

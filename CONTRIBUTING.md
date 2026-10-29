@@ -40,6 +40,21 @@ Install the repository's local commit-message hook with:
 git config core.hooksPath .githooks
 ```
 
+## Studio UI components
+
+Use the existing shadcn-svelte components in `apps/studio/src/lib/components/ui`
+for standard controls, inputs, menus, popovers, and dialogs. Before building a
+control, check the shared components and their supported variants. When a
+wrapper is not available, compose the installed Bits UI primitives with the
+shared components and Tailwind utilities. Do not recreate a standard control
+or add custom CSS. Extend the shared component layer only when the product
+needs a reusable pattern that the existing components cannot express.
+
+For popup placement and alignment, prefer logical `start` and `end` values over
+physical left and right values so layouts mirror correctly for right-to-left
+text. Use `start` as the default leading-edge alignment unless the layout calls
+for a different edge.
+
 ## Verification
 
 ### Test layout
