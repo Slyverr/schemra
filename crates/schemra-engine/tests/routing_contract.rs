@@ -50,6 +50,17 @@ fn edge(from: &str, to: &str) -> EdgeIr {
     }
 }
 
+fn undirected_edge(from: &str, to: &str) -> EdgeIr {
+    EdgeIr {
+        from: NodeId(from.into()),
+        from_span: span(),
+        to: NodeId(to.into()),
+        to_span: span(),
+        directionality: EdgeDirectionality::Undirected,
+        span: span(),
+    }
+}
+
 #[test]
 fn direct_route_is_one_cubic_with_endpoints_on_selected_node_faces() {
     for (direction, source_side, target_side) in [
@@ -253,6 +264,148 @@ fn fan_routes_are_independent_of_edge_declaration_order() {
             link.from
         );
     }
+}
+
+#[test]
+fn six_client_service_diagram_keeps_shared_ports_and_reciprocal_routes_stable() {
+    let mut model = visual(Direction::LeftToRight);
+    model.groups = vec![
+        GroupIr {
+            id: GroupId("clients".into()),
+            id_span: span(),
+            title: "Clients".into(),
+            layout: GroupLayout::Grid { columns: Some(3) },
+            span: span(),
+        },
+        GroupIr {
+            id: GroupId("application".into()),
+            id_span: span(),
+            title: "Application".into(),
+            layout: GroupLayout::Auto,
+            span: span(),
+        },
+        GroupIr {
+            id: GroupId("data".into()),
+            id_span: span(),
+            title: "Data".into(),
+            layout: GroupLayout::Auto,
+            span: span(),
+        },
+    ];
+    model.nodes = (1..=6)
+        .map(|index| node(&format!("bot_{index}"), Some("clients")))
+        .chain([
+            node("reverse_proxy", Some("application")),
+            node("backend", Some("application")),
+            node("database", Some("data")),
+        ])
+        .collect();
+    model.edges = (1..=6)
+        .map(|index| undirected_edge(&format!("bot_{index}"), "reverse_proxy"))
+        .chain([
+            edge("reverse_proxy", "backend"),
+            edge("backend", "reverse_proxy"),
+            edge("backend", "database"),
+            edge("database", "backend"),
+        ])
+        .collect();
+
+    let first = layout_visual(&model);
+    let repeated = layout_visual(&model);
+    assert_eq!(first, repeated);
+
+    let bot_routes = first
+        .edges
+        .iter()
+        .filter(|edge| edge.from.starts_with("bot_") && edge.to == "reverse_proxy")
+        .collect::<Vec<_>>();
+    assert_eq!(first.edges.len(), 10);
+    assert_eq!(bot_routes.len(), 6);
+    assert!(bot_routes.iter().all(|route| {
+        let diagnostic = route.route_diagnostic.as_ref().unwrap();
+        diagnostic.status == SceneRouteStatus::Routed
+            && diagnostic.source_port == "right"
+            && diagnostic.target_port == "left"
+            && diagnostic.route_conflicts == 0
+            && route.path.len() == 1
+            && is_straight(&route.path[0])
+    }));
+    for (upper, lower) in [("bot_1", "bot_4"), ("bot_2", "bot_5"), ("bot_3", "bot_6")] {
+        let route_length = |source: &str| {
+            bot_routes
+                .iter()
+                .find(|route| route.from == source)
+                .unwrap()
+                .route_diagnostic
+                .as_ref()
+                .unwrap()
+                .route_length
+        };
+        assert!(
+            (route_length(upper) - route_length(lower)).abs() < 36.0,
+            "mirrored clients should have comparable route lengths: {upper} / {lower}"
+        );
+    }
+    for (from, to) in [
+        ("reverse_proxy", "backend"),
+        ("backend", "reverse_proxy"),
+        ("backend", "database"),
+        ("database", "backend"),
+    ] {
+        let route = first
+            .edges
+            .iter()
+            .find(|route| route.from == from && route.to == to)
+            .unwrap();
+        let reverse = &first.edges[route.reciprocal_edge_index.unwrap()];
+        assert_eq!(reverse.from, to);
+        assert_eq!(reverse.to, from);
+        assert_eq!(route.path[0].start, reverse.path[0].end);
+        assert_eq!(route.path[0].control1, reverse.path[0].control2);
+        assert_eq!(route.path[0].control2, reverse.path[0].control1);
+        assert_eq!(route.path[0].end, reverse.path[0].start);
+    }
+}
+
+#[test]
+fn one_hundred_node_fan_in_is_deterministic_and_keeps_one_target_port() {
+    const SOURCE_COUNT: usize = 100;
+    let mut model = visual(Direction::LeftToRight);
+    model.groups.push(GroupIr {
+        id: GroupId("clients".into()),
+        id_span: span(),
+        title: "Clients".into(),
+        layout: GroupLayout::Grid { columns: Some(10) },
+        span: span(),
+    });
+    model.nodes = (0..SOURCE_COUNT)
+        .map(|index| node(&format!("client_{index}"), Some("clients")))
+        .chain(std::iter::once(node("collector", None)))
+        .collect();
+    model.edges = (0..SOURCE_COUNT)
+        .map(|index| edge(&format!("client_{index}"), "collector"))
+        .collect();
+
+    let first = layout_visual(&model);
+    let second = layout_visual(&model);
+
+    assert_eq!(first.edges.len(), SOURCE_COUNT);
+    assert_eq!(first.edges, second.edges);
+    assert!(first.edges.iter().all(|edge| {
+        edge.path.len() == 1
+            && is_straight(&edge.path[0])
+            && edge.route_diagnostic.as_ref().is_some_and(|diagnostic| {
+                diagnostic.status == SceneRouteStatus::Routed
+                    && diagnostic.target_port == "left"
+                    && diagnostic.route_conflicts == 0
+            })
+    }));
+    let target_points = first
+        .edges
+        .iter()
+        .map(|edge| (edge.path[0].end.x, edge.path[0].end.y))
+        .collect::<Vec<_>>();
+    assert!(target_points.iter().all(|point| *point == target_points[0]));
 }
 
 #[test]
