@@ -65,7 +65,7 @@ fn graph_ranks_follow_direction_and_edges_remain_in_scene() {
         (scene.edges[0].from.as_str(), scene.edges[0].to.as_str()),
         ("client", "proxy")
     );
-    assert!(scene.edges[0].path.is_empty());
+    assert_eq!(scene.edges[0].path.len(), 1);
 
     model.direction = Direction::RightToLeft;
     let reversed = layout_visual(&model);

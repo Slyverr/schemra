@@ -208,7 +208,7 @@ pub fn layout_visual(visual: &VisualIr) -> Scene {
             })
         })
         .collect::<Vec<_>>();
-    let edges = visual
+    let mut edges = visual
         .edges
         .iter()
         .map(|edge| SceneEdge {
@@ -226,6 +226,7 @@ pub fn layout_visual(visual: &VisualIr) -> Scene {
             route_diagnostic: None,
         })
         .collect::<Vec<_>>();
+    crate::routing::route_edges(&mut edges, &nodes, flow_direction(visual.direction));
 
     let max_x = nodes
         .iter()
