@@ -1,7 +1,8 @@
 use schemra_ir::{
-    ActionIr, HighlightFrame, ScenarioIr, SourceSpan, Timeline, TimelineError, TimelineEvent,
-    TimelineEventKind, TimelineFrame, TokenFrame, TokenPosition,
+    ActionIr, HighlightFrame, ScenarioIr, SceneTimelineFrame, SourceSpan, Timeline, TimelineError,
+    TimelineEvent, TimelineEventKind, TimelineFrame, TokenFrame, TokenPosition,
 };
+use schemra_scene::Scene;
 
 const DEFAULT_MOVE_DURATION_MS: u64 = 1_000;
 const DEFAULT_HIGHLIGHT_DURATION_MS: u64 = 1_000;
@@ -12,6 +13,11 @@ const MAX_EVENTS: usize = 500;
 pub trait TimelineSampling {
     /// Returns the active movements and node highlights at `time_ms`.
     fn sample(&self, time_ms: u64) -> TimelineFrame;
+
+    /// Resolves active markers and highlights against immutable scene geometry.
+    fn sample_scene(&self, scene: &Scene, time_ms: u64) -> SceneTimelineFrame {
+        super::scene_timeline::sample_scene(self.sample(time_ms), scene)
+    }
 }
 
 impl TimelineSampling for Timeline {

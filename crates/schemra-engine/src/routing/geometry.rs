@@ -4,7 +4,7 @@ const CURVE_FLATNESS: f64 = 0.35;
 const MAX_FLATTEN_DEPTH: u8 = 12;
 const PATH_JOIN_EPSILON: f64 = 0.5;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct DPoint {
     x: f64,
     y: f64,
@@ -32,6 +32,134 @@ impl DPoint {
             x: self.x as f32,
             y: self.y as f32,
         }
+    }
+
+    fn distance(self, other: Self) -> f64 {
+        (other.x - self.x).hypot(other.y - self.y)
+    }
+}
+
+/// Cached arc-length samples for repeatedly positioning markers on a route.
+#[derive(Clone, Debug)]
+pub(crate) struct RouteGeometry {
+    segments: Vec<CubicBezier>,
+    samples: Vec<RouteSample>,
+    length: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct RouteSample {
+    segment: usize,
+    parameter: f64,
+    point: DPoint,
+    distance: f64,
+}
+
+impl RouteGeometry {
+    pub(crate) fn new(path: &[CubicBezier]) -> Self {
+        let mut segments = Vec::with_capacity(path.len());
+        let mut samples = Vec::new();
+
+        for (segment_index, segment) in path.iter().copied().enumerate() {
+            let Some(curve_samples) = flatten_cubic_samples(segment) else {
+                return Self::default();
+            };
+            if samples.last().zip(curve_samples.first()).is_some_and(
+                |(previous, next): (&RouteSample, &CurveSample)| {
+                    previous.point.distance(next.point) > PATH_JOIN_EPSILON
+                },
+            ) {
+                return Self::default();
+            }
+
+            for sample in curve_samples {
+                let distance = samples.last().map_or(0.0, |previous: &RouteSample| {
+                    previous.distance + previous.point.distance(sample.point)
+                });
+                samples.push(RouteSample {
+                    segment: segment_index,
+                    parameter: sample.parameter,
+                    point: sample.point,
+                    distance,
+                });
+            }
+            segments.push(segment);
+        }
+        let length = samples.last().map_or(0.0, |sample| sample.distance);
+        Self {
+            segments,
+            samples,
+            length,
+        }
+    }
+
+    pub(crate) fn point_at_progress(&self, progress: f32) -> Option<Point> {
+        let first = self.samples.first()?;
+        if self.samples.len() == 1 || self.length <= f64::EPSILON {
+            return Some(first.point.to_point());
+        }
+
+        let target = self.length * f64::from(progress.clamp(0.0, 1.0));
+        let after_index = self
+            .samples
+            .partition_point(|sample| sample.distance < target);
+        if after_index == 0 {
+            return Some(first.point.to_point());
+        }
+        let Some(after) = self.samples.get(after_index) else {
+            return self.samples.last().map(|sample| sample.point.to_point());
+        };
+        let before = &self.samples[after_index - 1];
+        let interval_length = after.distance - before.distance;
+        let amount = if interval_length <= f64::EPSILON {
+            0.0
+        } else {
+            (target - before.distance) / interval_length
+        };
+        let parameter = before.parameter + (after.parameter - before.parameter) * amount;
+        self.segments
+            .get(after.segment)
+            .map(|segment| evaluate_cubic(*segment, parameter).to_point())
+    }
+}
+
+impl Default for RouteGeometry {
+    fn default() -> Self {
+        Self {
+            segments: Vec::new(),
+            samples: Vec::new(),
+            length: 0.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct CurveSample {
+    parameter: f64,
+    point: DPoint,
+}
+
+fn evaluate_cubic(cubic: CubicBezier, parameter: f64) -> DPoint {
+    let [start, control1, control2, end]: [DPoint; 4] = [
+        cubic.start.into(),
+        cubic.control1.into(),
+        cubic.control2.into(),
+        cubic.end.into(),
+    ];
+    let inverse = 1.0 - parameter;
+    let start_weight = inverse * inverse * inverse;
+    let control1_weight = 3.0 * inverse * inverse * parameter;
+    let control2_weight = 3.0 * inverse * parameter * parameter;
+    let end_weight = parameter * parameter * parameter;
+    DPoint {
+        x: start.x * start_weight
+            + control1.x * control1_weight
+            + control2.x * control2_weight
+            + end.x * end_weight,
+        y: start.y * start_weight
+            + control1.y * control1_weight
+            + control2.y * control2_weight
+            + end.y * end_weight,
     }
 }
 
@@ -287,6 +415,15 @@ fn flatten_path(path: &[CubicBezier]) -> Option<Vec<Point>> {
 }
 
 fn flatten_cubic(cubic: CubicBezier) -> Option<Vec<Point>> {
+    flatten_cubic_samples(cubic).map(|samples| {
+        samples
+            .into_iter()
+            .map(|sample| sample.point.to_point())
+            .collect()
+    })
+}
+
+fn flatten_cubic_samples(cubic: CubicBezier) -> Option<Vec<CurveSample>> {
     let points = [cubic.start, cubic.control1, cubic.control2, cubic.end];
     if points
         .iter()
@@ -295,14 +432,26 @@ fn flatten_cubic(cubic: CubicBezier) -> Option<Vec<Point>> {
         return None;
     }
     let points = points.map(DPoint::from);
-    let mut flattened = vec![points[0].to_point()];
-    flatten_cubic_recursive(points, 0, &mut flattened);
+    let mut flattened = vec![CurveSample {
+        parameter: 0.0,
+        point: points[0],
+    }];
+    flatten_cubic_recursive(points, 0.0, 1.0, 0, &mut flattened);
     Some(flattened)
 }
 
-fn flatten_cubic_recursive(points: [DPoint; 4], depth: u8, output: &mut Vec<Point>) {
+fn flatten_cubic_recursive(
+    points: [DPoint; 4],
+    start_parameter: f64,
+    end_parameter: f64,
+    depth: u8,
+    output: &mut Vec<CurveSample>,
+) {
     if depth >= MAX_FLATTEN_DEPTH || cubic_flatness(points) <= CURVE_FLATNESS {
-        output.push(points[3].to_point());
+        output.push(CurveSample {
+            parameter: end_parameter,
+            point: points[3],
+        });
         return;
     }
 
@@ -312,8 +461,21 @@ fn flatten_cubic_recursive(points: [DPoint; 4], depth: u8, output: &mut Vec<Poin
     let p012 = p01.midpoint(p12);
     let p123 = p12.midpoint(p23);
     let midpoint = p012.midpoint(p123);
-    flatten_cubic_recursive([points[0], p01, p012, midpoint], depth + 1, output);
-    flatten_cubic_recursive([midpoint, p123, p23, points[3]], depth + 1, output);
+    let middle_parameter = (start_parameter + end_parameter) * 0.5;
+    flatten_cubic_recursive(
+        [points[0], p01, p012, midpoint],
+        start_parameter,
+        middle_parameter,
+        depth + 1,
+        output,
+    );
+    flatten_cubic_recursive(
+        [midpoint, p123, p23, points[3]],
+        middle_parameter,
+        end_parameter,
+        depth + 1,
+        output,
+    );
 }
 
 fn cubic_flatness(points: [DPoint; 4]) -> f64 {

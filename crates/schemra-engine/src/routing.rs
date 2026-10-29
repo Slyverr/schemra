@@ -10,6 +10,8 @@ use schemra_scene::{
 mod geometry;
 mod search;
 
+pub(crate) use geometry::RouteGeometry;
+
 use geometry::{Side, center, direct_connector, natural_sides, port_anchor};
 
 #[cfg(test)]
