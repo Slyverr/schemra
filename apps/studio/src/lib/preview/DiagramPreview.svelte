@@ -2,6 +2,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { studioMessage } from '../i18n/messages.js';
+	import { cn } from '../utils.js';
 	import { createScenarioPlayback, type ProjectSource, type ScenarioPlayback } from '../schemra';
 	import {
 		createDiagramPngBlob,
@@ -71,6 +72,11 @@
 	const contentViewport = $derived(insetPreviewViewport(viewport, controlInsets));
 	const displaySize = $derived(svgDisplaySize(contentViewport, scene));
 	const gridTransform = $derived(previewGridTransform(viewport, pan, zoomPercent));
+	const errorOverlayClasses = cn(
+		'absolute left-3 top-[3.75rem] z-20 m-0 max-w-[calc(100%_-_1.5rem)]',
+		'rounded-[.4rem] border border-destructive bg-background px-3 py-2 text-xs text-destructive',
+		'[overflow-wrap:anywhere]'
+	);
 	const canExportAnimation = $derived(Boolean(!(props.stale ?? false) && safeSvg && playback && durationMs > 0 && !animationExportBusy));
 	let dragStart = $state<{ pointerId: number; x: number; y: number; panX: number; panY: number } | null>(null);
 
@@ -447,7 +453,11 @@
 
 </script>
 
-<section class="preview !min-h-0" bind:this={previewRoot} class:preview-presentation-mode={presentationMode} aria-label={studioMessage('pane.previewPanel')}>
+<section
+	class="relative flex h-full min-h-0 min-w-0 flex-[1_1_auto] overflow-hidden bg-muted text-foreground fullscreen:h-screen fullscreen:w-screen fullscreen:min-h-0 fullscreen:bg-muted"
+	bind:this={previewRoot}
+	aria-label={studioMessage('pane.previewPanel')}
+>
 	{#if safeSvg}
 		<PreviewToolbar
 			scene={scene}
@@ -473,7 +483,11 @@
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 	<div
 		id={previewCanvasId}
-		class={['canvas select-none focus-visible:outline-none', zoomPercent > 100 && !dragStart ? 'cursor-grab' : '', dragStart ? 'cursor-grabbing' : ''].filter(Boolean).join(' ')}
+		class={cn(
+			'absolute inset-0 overflow-hidden outline-none select-none',
+			zoomPercent > 100 && !dragStart ? 'cursor-grab' : '',
+			dragStart ? 'cursor-grabbing' : ''
+		)}
 		bind:this={canvas}
 		tabindex="0"
 		role="application"
@@ -502,7 +516,7 @@
 		</svg>
 		{#if safeSvg}
 			<div
-				class="svg-sheet"
+				class="absolute left-1/2 top-1/2 origin-center [&_svg.schemra-preview-svg]:block [&_svg.schemra-preview-svg]:size-full"
 				bind:this={svgHost}
 				style:width={displaySize.width}
 				style:height={displaySize.height}
@@ -511,7 +525,9 @@
 				{@html safeSvg}
 			</div>
 		{:else}
-			<p class="empty">{props.svg ? studioMessage('preview.unsafeDiagram') : studioMessage('preview.noVisualAvailable')}</p>
+			<p class="absolute inset-0 m-0 grid place-items-center p-4 text-center text-sm text-muted-foreground">
+				{props.svg ? studioMessage('preview.unsafeDiagram') : studioMessage('preview.noVisualAvailable')}
+			</p>
 		{/if}
 	</div>
 
@@ -529,12 +545,18 @@
 		/>
 	{/if}
 	{#if playbackError}
-		<p class="error" role="alert">{studioMessage('preview.playbackUnavailable', { message: playbackError })}</p>
+		<p class={errorOverlayClasses} role="alert">
+			{studioMessage('preview.playbackUnavailable', { message: playbackError })}
+		</p>
 	{/if}
 	{#if exportError}
-		<p class="error" role="alert">{studioMessage('preview.exportFailed', { message: exportError })}</p>
+		<p class={errorOverlayClasses} role="alert">
+			{studioMessage('preview.exportFailed', { message: exportError })}
+		</p>
 	{/if}
-	{#if presentationError}<p class="error" role="alert">{presentationError}</p>{/if}
+	{#if presentationError}
+		<p class={errorOverlayClasses} role="alert">{presentationError}</p>
+	{/if}
 	{#if scenario}
 		<AnimationExportDialog
 			open={animationExportOpen}
@@ -549,13 +571,3 @@
 		/>
 	{/if}
 </section>
-
-<style>
-	.preview { position: relative; display: flex; min-width: 0; min-height: 15rem; height: 100%; flex: 1 1 auto; overflow: hidden; color: var(--foreground); background-color: var(--muted); }
-	.preview:fullscreen { width: 100vw; height: 100vh; min-height: 0; background-color: var(--muted); }
-	.canvas { position: absolute; inset: 0; overflow: hidden; outline: none; }
-	.svg-sheet { position: absolute; top: 50%; left: 50%; transform-origin: center; }
-	.svg-sheet :global(svg.schemra-preview-svg) { display: block; width: 100%; height: 100%; }
-	.empty { position: absolute; inset: 0; display: grid; margin: 0; padding: 1rem; place-items: center; color: var(--muted-foreground); font-size: .875rem; text-align: center; }
-	.error { position: absolute; z-index: 20; top: 3.75rem; left: .75rem; max-width: calc(100% - 1.5rem); margin: 0; padding: .5rem .75rem; border: 1px solid var(--destructive); border-radius: .4rem; color: var(--destructive); background: var(--background); font-size: .75rem; overflow-wrap: anywhere; }
-</style>

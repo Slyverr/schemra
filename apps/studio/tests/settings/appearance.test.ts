@@ -12,6 +12,7 @@ import {
 	studioThemeOptions,
 	writeThemePreferences
 } from '../../src/lib/settings/appearance';
+import { studioThemePreviewPalettes } from '../../src/lib/settings/theme-preview';
 import { installMemoryStorage } from './storage-test-helper';
 
 const previousStorageKey = 'schemra.studio.theme-preferences.v2';
@@ -31,7 +32,11 @@ describe('appearance preferences', () => {
 			'system', 'schemra-light', 'schemra-dark', 'monochrome-light', 'monochrome-dark',
 			'catppuccin-latte', 'catppuccin-mocha', 'nord', 'dracula'
 		]);
-		expect(studioThemeOptions.every(({ labelKey, previewClass }) => labelKey && previewClass)).toBe(true);
+		expect(
+			studioThemeOptions.every(
+				({ labelKey, value }) => labelKey && studioThemePreviewPalettes[value].primary
+			)
+		).toBe(true);
 	});
 
 	test('resolves system appearance to Schemra light or dark', () => {

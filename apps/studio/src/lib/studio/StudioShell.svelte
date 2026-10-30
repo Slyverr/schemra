@@ -331,7 +331,7 @@ import LanguageReferenceDialog from './LanguageReferenceDialog.svelte';
 		errorCount,
 		onNavigate: navigateToDiagnostic
 	});
-	const showLastValidPreview = $derived(Boolean(lastGoodVisual && !currentVisual?.output.svg && !compilePending));
+	const showLastValidPreview = $derived(Boolean(lastGoodVisual && previewVisual !== currentVisual && !compilePending));
 	const workspacePreview = $derived(
 		previewVisual?.output.svg && previewVisual.output.scene ? {
 			svg: previewVisual.output.svg,

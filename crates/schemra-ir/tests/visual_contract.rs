@@ -1,6 +1,6 @@
 use schemra_ir::{
-    Direction, EdgeDirectionality, EdgeIr, GroupId, GroupIr, GroupLayout, LinkBend, LinkRouting,
-    NodeId, NodeIr, SourceLocation, SourceSpan, VisualId, VisualIr,
+    Direction, EdgeDirectionality, EdgeIr, GroupId, GroupIr, GroupLayout, NodeId, NodeIr,
+    SourceLocation, SourceSpan, VisualId, VisualIr,
 };
 
 fn span(start: usize, end: usize) -> SourceSpan {
@@ -28,8 +28,6 @@ fn visual_ir_models_typed_groups_nodes_and_link_endpoints() {
         title: "Service map".into(),
         direction: Direction::TopToBottom,
         direction_explicit: true,
-        routing: Some(LinkRouting::Auto),
-        bend: Some(LinkBend::Right),
         groups: vec![GroupIr {
             id: GroupId("application".into()),
             id_span: span(20, 31),
@@ -52,8 +50,6 @@ fn visual_ir_models_typed_groups_nodes_and_link_endpoints() {
             to: NodeId("backend".into()),
             to_span: span(40, 47),
             directionality: EdgeDirectionality::Directed,
-            routing: Some(LinkRouting::Smooth),
-            bend: Some(LinkBend::Left),
             span: span(31, 47),
         }],
         span: visual_span,
@@ -62,10 +58,6 @@ fn visual_ir_models_typed_groups_nodes_and_link_endpoints() {
     assert_eq!(visual.nodes[0].group, Some(GroupId("application".into())));
     assert_eq!(visual.edges[0].from, visual.nodes[0].id);
     assert_eq!(visual.edges[0].directionality, EdgeDirectionality::Directed);
-    assert_eq!(visual.routing, Some(LinkRouting::Auto));
-    assert_eq!(visual.bend, Some(LinkBend::Right));
-    assert_eq!(visual.edges[0].routing, Some(LinkRouting::Smooth));
-    assert_eq!(visual.edges[0].bend, Some(LinkBend::Left));
     assert_eq!(visual.edges[0].from_span, span(31, 36));
     assert_eq!(visual.span, visual_span);
 }
@@ -74,8 +66,6 @@ fn visual_ir_models_typed_groups_nodes_and_link_endpoints() {
 fn visual_layout_and_direction_defaults_are_explicit_and_stable() {
     assert_eq!(Direction::default(), Direction::LeftToRight);
     assert_eq!(GroupLayout::default(), GroupLayout::Auto);
-    assert_eq!(LinkRouting::default(), LinkRouting::Straight);
-    assert_eq!(LinkBend::default(), LinkBend::Auto);
 }
 
 #[test]

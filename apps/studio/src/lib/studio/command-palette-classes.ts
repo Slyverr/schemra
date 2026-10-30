@@ -31,7 +31,7 @@ export const commandPaletteClasses = {
 	resourceKind: 'border border-border text-muted-foreground',
 	current: 'bg-secondary text-secondary-foreground normal-case',
 	unsaved:
-		'bg-[color-mix(in_srgb,var(--warning)_14%,var(--background))] text-[var(--warning)] normal-case',
+		'bg-[color-mix(in_srgb,var(--warning)_14%,var(--background))] text-warning normal-case',
 	shortcut: 'rounded-[.3rem] border border-border bg-muted px-1.5 py-0.5 font-mono text-[.65rem] font-medium leading-[1.35] text-muted-foreground',
 	footer:
 		'flex min-h-10 items-center justify-between gap-4 border-t border-border px-3.5 py-1.5 text-[.68rem] text-muted-foreground',

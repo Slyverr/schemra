@@ -189,8 +189,6 @@ impl LoweringContext<'_> {
                     } else {
                         EdgeDirectionality::Directed
                     },
-                    routing: None,
-                    bend: None,
                     span: statement.span,
                 })
             })

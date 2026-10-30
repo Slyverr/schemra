@@ -72,10 +72,55 @@ fn rejects_constructs_outside_the_supported_v0_surface() {
         "input count: number = 3",
         "import Service from \"service.schemra\"",
         "use Service()",
+        "visual network { node api {}; box card {} }",
+        "visual network { node api {}; text caption \"hello\" }",
     ] {
         assert!(
             compile(source).is_err(),
             "unsupported syntax compiled:\n{source}"
+        );
+    }
+}
+
+#[test]
+fn rejects_deferred_scenario_actions() {
+    let visual = "visual net { node a {}; node b {}; a -> b }";
+    for action in [
+        "emit request from a to b",
+        "send request from a to b",
+        "set a opacity 0.5",
+        "if ready { wait 1s }",
+        "if ready { wait 1s } else { wait 1s }",
+        "when ready { wait 1s }",
+        "at 1s { wait 1s }",
+        "bind online = true",
+    ] {
+        let source =
+            format!("{visual}\nscenario flow for visual net {{ token request {{}} {action} }}");
+        assert!(
+            compile(&source).is_err(),
+            "unsupported scenario action compiled:\n{action}"
+        );
+    }
+}
+
+#[test]
+fn rejects_deferred_visual_and_node_properties() {
+    for property in [
+        "theme", "camera", "width", "shape", "style", "variant", "font",
+    ] {
+        let source = format!("visual net {{ node api {{}}; {property}: unsupported }}");
+        assert!(
+            compile(&source).is_err(),
+            "unsupported visual property compiled: {property}"
+        );
+    }
+
+    for property in ["processing: sequential", "service: 850"] {
+        let source = format!("visual net {{ node queue {{ {property} }} }}");
+        assert!(
+            compile(&source).is_err(),
+            "unsupported node property compiled: {property}"
         );
     }
 }

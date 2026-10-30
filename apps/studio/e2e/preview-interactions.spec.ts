@@ -4,8 +4,8 @@ import { studioMessage } from '../src/lib/i18n/messages.js';
 test('keeps preview controls over the canvas and supports zoom, pan, and fit', async ({ page }) => {
 	await page.goto('/');
 
-	const preview = page.locator('.preview');
-	const canvas = preview.locator('.canvas');
+	const preview = page.getByRole('region', { name: studioMessage('pane.previewPanel') }).last();
+	const canvas = preview.getByRole('application', { name: studioMessage('preview.canvas') });
 	const toolbar = preview.locator('.preview-toolbar');
 	const timeline = preview.locator('.timeline');
 	await expect(toolbar).toBeVisible();
@@ -21,7 +21,7 @@ test('keeps preview controls over the canvas and supports zoom, pan, and fit', a
 	await expect(canvas).toHaveCSS('user-select', 'none');
 	await canvas.focus();
 	await expect(canvas).toHaveCSS('outline-style', 'none');
-	await expect.poll(() => preview.locator('.svg-sheet svg.schemra-preview-svg > rect').evaluateAll((rects) =>
+	await expect.poll(() => preview.locator('svg.schemra-preview-svg > rect').evaluateAll((rects) =>
 		rects.filter((rect) => {
 			const { width, height } = rect.ownerSVGElement?.viewBox.baseVal ?? { width: 0, height: 0 };
 			return Number(rect.getAttribute('width')) === width && Number(rect.getAttribute('height')) === height;
@@ -38,7 +38,7 @@ test('keeps preview controls over the canvas and supports zoom, pan, and fit', a
 	await expect(zoom).not.toHaveText('100%');
 
 	await canvas.focus();
-	const svg = preview.locator('.svg-sheet');
+	const svg = canvas.locator('svg.schemra-preview-svg');
 	const beforeKeyboardPan = await svg.boundingBox();
 	expect(beforeKeyboardPan).not.toBeNull();
 	await page.keyboard.press('ArrowRight');
@@ -64,7 +64,7 @@ test('stacks preview controls on narrow screens and identifies the static visual
 	const selector = page.getByRole('combobox', { name: studioMessage('preview.scenarioLabel') });
 	await selector.click();
 	await page.getByRole('option').first().click();
-	await expect(page.locator('.preview-toolbar svg.lucide-eye')).toBeVisible();
+	await expect(selector).toContainText(studioMessage('preview.staticVisual'));
 
 	const controls = page.getByRole('group', { name: studioMessage('preview.controls') });
 	const zoomControls = page.getByRole('group', { name: studioMessage('preview.zoomControls') });
@@ -87,7 +87,7 @@ test('switches between a scenario and the static visual preview', async ({ page 
 	await selector.click();
 	await page.getByRole('option').first().click();
 	await expect(page.getByRole('slider', { name: studioMessage('preview.scenarioTimeline') })).toBeHidden();
-	await expect(page.locator('.preview svg.schemra-preview-svg')).toBeVisible();
+	await expect(page.getByRole('application', { name: studioMessage('preview.canvas') }).locator('svg.schemra-preview-svg')).toBeVisible();
 });
 
 test('searches diagram targets from the preview finder', async ({ page }) => {
@@ -117,7 +117,9 @@ test('organizes export options into tabs and keeps select values readable', asyn
 	await expect(dialog.getByRole('tab', { name: studioMessage('export.tab.video') })).toBeVisible();
 	await expect(dialog.getByRole('tab', { name: studioMessage('export.tab.background') })).toBeVisible();
 	await expect(dialog.locator('small')).toHaveCount(0);
-	await expect(dialog.locator('p.sr-only[role="status"]')).toBeHidden();
+	const encoderStatus = dialog.locator('p[role="status"].sr-only');
+	await expect(encoderStatus).toHaveCount(1);
+	await expect(encoderStatus).toHaveClass(/\bsr-only\b/);
 
 	const bitrate = dialog.locator('#animation-export-bitrate');
 	await expect(bitrate).toContainText(studioMessage('export.bitrate.balanced'));
@@ -129,13 +131,13 @@ test('organizes export options into tabs and keeps select values readable', asyn
 	await expect(format).toContainText(studioMessage('export.format.webm'));
 
 	await dialog.getByRole('tab', { name: studioMessage('export.tab.background') }).click();
-	await expect(dialog.getByRole('group', { name: studioMessage('export.background') })).toBeVisible();
+	await expect(dialog.locator(`[role="group"][aria-label="${studioMessage('export.background')}"]`)).toBeVisible();
 });
 
 test('disables animation export when showing the last valid preview', async ({ page }) => {
 	await page.goto('/');
 	const visualKind = studioMessage('sidebar.resourceKindVisual');
-	const visualTab = page.locator(`.file-tab[aria-label^="${visualKind}:"]`).first();
+	const visualTab = page.getByRole('tab', { name: new RegExp(`^${visualKind}:`) }).first();
 	await expect(visualTab).toBeVisible();
 	await visualTab.click();
 

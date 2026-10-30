@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { studioMessage } from '../src/lib/i18n/messages.js';
 
 test('opens completion suggestions at the caret with their start aligned', async ({ page }) => {
 	await page.goto('/');
@@ -6,12 +7,13 @@ test('opens completion suggestions at the caret with their start aligned', async
 	await expect(editor).toBeEnabled();
 	await editor.fill('vis');
 
-	const suggestions = page.locator('.editor-completions');
+	const suggestions = page.getByRole('listbox', { name: studioMessage('editor.suggestions') });
 	await expect(suggestions).toBeVisible();
 	const alignment = await page.evaluate(() => {
 		const input = document.querySelector<HTMLTextAreaElement>('.editor-input');
 		const line = document.querySelector<HTMLElement>('.editor-line[data-line-index="0"]');
-		const popup = document.querySelector<HTMLElement>('.editor-completions');
+		const popupId = input?.getAttribute('aria-controls');
+		const popup = popupId ? document.getElementById(popupId) : null;
 		if (!input || !line || !popup) return null;
 
 		let remaining = input.selectionStart;
@@ -39,7 +41,7 @@ test('Shift+Enter inserts a newline and closes suggestions instead of accepting 
 	await expect(editor).toBeEnabled();
 	await editor.fill('vis');
 
-	const suggestions = page.locator('.editor-completions');
+	const suggestions = page.getByRole('listbox', { name: studioMessage('editor.suggestions') });
 	await expect(suggestions).toBeVisible();
 	await editor.press('Shift+Enter');
 

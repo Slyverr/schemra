@@ -42,6 +42,13 @@
 		type EditorPreferences
 	} from '../settings/editor.js';
 	import { studioMessage } from '../i18n/messages.js';
+	import { Button } from '../components/ui/button/index.js';
+	import {
+		editorClasses,
+		inlineDiagnosticClasses,
+		tooltipSeverityClasses
+	} from './editor-classes.js';
+	import { cn } from '#lib/utils.js';
 
 	interface Props {
 		projectId?: string | null;
@@ -909,7 +916,7 @@
 
 <div
 	bind:this={root}
-	class="source-editor"
+	class={editorClasses.root}
 	role="group"
 	aria-label={props.label ?? studioMessage('editor.sourceLabel')}
 	title={props.editorSymbols?.length ? studioMessage('editor.symbolNavigationHint') : undefined}
@@ -917,25 +924,24 @@
 	data-diagnostic-presentation={preferences.diagnosticPresentation}
 	onpointerleave={clearTooltip}
 >
-	<div class="editor-gutter" class:editor-gutter-hidden={!preferences.lineNumbers} aria-hidden="true">
-		<div bind:this={gutterLines} style:transform={`translateY(-${gutterScrollTop}px)`}>
+	<div class={cn(editorClasses.gutter, !preferences.lineNumbers && 'border-r-0')} aria-hidden="true">
+		<div bind:this={gutterLines} class={editorClasses.gutterLines} style:transform={`translateY(-${gutterScrollTop}px)`}>
 			{#each lines as line (line.index)}
-				<div class="editor-gutter-line" class:editor-gutter-error={line.hasErrors}>
+				<div class={`${editorClasses.gutterLine} ${line.hasErrors ? editorClasses.gutterError : ''}`}>
 					{#if preferences.lineNumbers}{line.index + 1}{/if}
 				</div>
 			{/each}
 		</div>
 	</div>
-	<div bind:this={viewport} class="editor-viewport" onscroll={handleScroll}>
-		<div bind:this={codeSurface} class="editor-content">
-			<div bind:this={highlightedLines} class="editor-highlight" aria-hidden="true">
+	<div bind:this={viewport} class={editorClasses.viewport} onscroll={handleScroll}>
+		<div bind:this={codeSurface} class={editorClasses.content}>
+			<div bind:this={highlightedLines} class={editorClasses.highlight} aria-hidden="true">
 				{#if preferences.indentGuides}
 					{#each scopeRanges as guide (guide.id)}
 						{@const position = scopeGuidePositions[guide.id]}
 						<span
-							class="scope-guide"
+							class={cn(editorClasses.scopeGuide, guide.id === activeScopeId && editorClasses.activeScopeGuide)}
 							data-scope-guide={guide.id}
-							class:scope-guide-active={guide.id === activeScopeId}
 							style:left={`${position?.left ?? 0}px`}
 							style:top={`${position?.top ?? 0}px`}
 							style:height={`${position?.height ?? 0}px`}
@@ -945,8 +951,7 @@
 				{#each lines as line (line.index)}
 					<div
 						data-line-index={line.index}
-						class="editor-line"
-						class:editor-line-active={preferences.activeLineHighlight && activeLineIndex === line.index}
+						class={cn(editorClasses.line, preferences.activeLineHighlight && activeLineIndex === line.index && editorClasses.activeLine)}
 						role="presentation"
 					>
 						{#each line.segments as segment, segmentIndex (`${line.index}-${segmentIndex}`)}
@@ -955,7 +960,7 @@
 						{#if preferences.diagnosticPresentation === 'inline'}
 							{@const inlineDiagnostic = firstLineDiagnostic(line.diagnostics, line.index + 1)}
 							{#if inlineDiagnostic}
-								<span class={`inline-diagnostic inline-diagnostic-${inlineDiagnostic.severity}`} aria-hidden="true">
+								<span class={inlineDiagnosticClasses[inlineDiagnostic.severity]} aria-hidden="true">
 									{inlineDiagnostic.message}
 								</span>
 							{/if}
@@ -965,7 +970,7 @@
 			</div>
 			<textarea
 				bind:this={input}
-				class="editor-input"
+				class={editorClasses.input}
 				value={props.source}
 				disabled={props.disabled ?? false}
 				aria-label={props.label ?? studioMessage('editor.sourceLabel')}
@@ -992,10 +997,11 @@
 	{#if tooltip}
 		<div
 			bind:this={tooltipElement}
-			class="editor-diagnostic-tooltip"
-			class:diagnostic-error={tooltip.diagnostic.severity === 'error'}
-			class:diagnostic-warning={tooltip.diagnostic.severity === 'warning'}
-			class:diagnostic-information={tooltip.diagnostic.severity === 'information'}
+			class={cn(
+				editorClasses.tooltip,
+				tooltip.diagnostic.severity === 'error' && editorClasses.tooltipError,
+				`diagnostic-${tooltip.diagnostic.severity}`
+			)}
 			role="status"
 			style:left={`${tooltip.left}px`}
 			style:top={`${tooltip.top}px`}
@@ -1003,13 +1009,20 @@
 			style:max-height={`${tooltip.maxHeight}px`}
 			onpointerleave={handleDiagnosticLeave}
 		>
-			<strong>{tooltip.diagnostic.severity}</strong>: {tooltip.diagnostic.message}
-			{#if tooltip.diagnostic.hint}<div class="diagnostic-hint">{tooltip.diagnostic.hint}</div>{/if}
+			<strong class={cn(editorClasses.tooltipSeverity, tooltipSeverityClasses[tooltip.diagnostic.severity])}>
+				{tooltip.diagnostic.severity}
+			</strong>: {tooltip.diagnostic.message}
+			{#if tooltip.diagnostic.hint}
+				<div class={editorClasses.tooltipHint}>{tooltip.diagnostic.hint}</div>
+			{/if}
 			{#if tooltipQuickFixes.options.length > 0 && props.onQuickFix && tooltipQuickFixes.diagnostic}
-				<div class="diagnostic-quick-fixes">
-						<span>{studioMessage('editor.quickFixReplace')}</span>
+				<div class={editorClasses.quickFixes}>
+					<span>{studioMessage('editor.quickFixReplace')}</span>
 					{#each tooltipQuickFixes.options as quickFix (`${tooltipQuickFixes.diagnostic.code}-${quickFix.replacement}`)}
-						<button
+						<Button
+							variant="outline"
+							size="xs"
+							class={editorClasses.quickFixButton}
 							type="button"
 							disabled={props.quickFixDisabled}
 							onpointerdown={(event) => event.preventDefault()}
@@ -1017,7 +1030,7 @@
 								event.stopPropagation();
 								if (tooltipQuickFixes.diagnostic) applyQuickFix(tooltipQuickFixes.diagnostic, quickFix.replacement);
 							}}
-						>{quickFix.replacement}</button>
+						>{quickFix.replacement}</Button>
 					{/each}
 				</div>
 			{/if}
@@ -1042,177 +1055,3 @@
 		/>
 	{/if}
 </div>
-
-<style>
-	.source-editor {
-		position: relative;
-		display: flex;
-		width: 100%;
-		height: 100%;
-		min-height: 12rem;
-		overflow: hidden;
-		background: var(--background);
-		color: var(--foreground);
-		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-		font-size: var(--editor-font-size);
-		line-height: var(--editor-line-height);
-	}
-	.editor-gutter {
-		position: absolute;
-		z-index: 4;
-		top: 0;
-		bottom: 0;
-		left: 0;
-		width: var(--editor-gutter-width);
-		overflow: hidden;
-		border-right: 1px solid var(--border);
-		background: var(--muted);
-		color: var(--muted-foreground);
-		text-align: right;
-		user-select: none;
-		pointer-events: none;
-	}
-	.editor-gutter-hidden { border-right: 0; }
-	.editor-gutter > div { padding-top: 0.5rem; }
-	.editor-gutter-line {
-		box-sizing: border-box;
-		height: var(--editor-line-height);
-		padding-right: 0.75rem;
-		font-size: calc(var(--editor-font-size) * 0.8);
-		line-height: var(--editor-line-height);
-	}
-	.editor-gutter-error { color: var(--destructive); font-weight: 600; }
-	.editor-viewport {
-		position: absolute;
-		inset: 0 0 0 var(--editor-gutter-width);
-		overflow: auto;
-		overscroll-behavior: contain;
-		scrollbar-gutter: stable;
-	}
-	.editor-content {
-		position: relative;
-		width: max-content;
-		min-width: 100%;
-		min-height: 100%;
-		padding: 0.5rem 1rem;
-		box-sizing: border-box;
-	}
-	.editor-highlight {
-		position: relative;
-		z-index: 1;
-		width: max-content;
-		min-width: 100%;
-		white-space: normal;
-		tab-size: var(--editor-indent-size);
-		font: inherit;
-		font-variant-ligatures: none;
-		pointer-events: none;
-	}
-	.editor-line {
-		position: relative;
-		z-index: 1;
-		width: max-content;
-		min-width: 100%;
-		height: var(--editor-line-height);
-		white-space: pre;
-		line-height: var(--editor-line-height);
-	}
-	.editor-line-active { background: color-mix(in srgb, var(--foreground) 3%, transparent); }
-	.inline-diagnostic {
-		margin-left: 0.75rem;
-		font-family: var(--font-sans, sans-serif);
-		font-size: calc(var(--editor-font-size) * 0.82);
-		font-weight: 400;
-		line-height: var(--editor-line-height);
-		white-space: nowrap;
-	}
-	.inline-diagnostic-error { color: var(--destructive); }
-	.inline-diagnostic-warning { color: #9a6500; }
-	.inline-diagnostic-information { color: var(--primary); }
-	.scope-guide {
-		position: absolute;
-		z-index: 0;
-		width: 1px;
-		background: color-mix(in srgb, var(--foreground) 16%, transparent);
-		pointer-events: none;
-	}
-	.scope-guide-active { background: color-mix(in srgb, var(--primary) 36%, transparent); }
-	.editor-input {
-		position: absolute;
-		z-index: 3;
-		inset: 0;
-		box-sizing: border-box;
-		width: 100%;
-		min-width: 100%;
-		height: 100%;
-		min-height: 100%;
-		resize: none;
-		overflow: hidden;
-		padding: inherit;
-		border: 0;
-		outline: none;
-		background: transparent;
-		color: transparent;
-		caret-color: var(--foreground);
-		-webkit-text-fill-color: transparent;
-		font: inherit;
-		font-variant-ligatures: none;
-		line-height: var(--editor-line-height);
-		tab-size: var(--editor-indent-size);
-		white-space: pre;
-	}
-	.editor-input::selection { background: color-mix(in srgb, var(--primary) 30%, transparent); }
-	.editor-input:disabled { cursor: wait; opacity: 1; }
-	.syntax-keyword { color: var(--primary); font-weight: 700; }
-	.syntax-property { color: #9251b2; font-weight: 600; }
-	.syntax-value { color: #23784b; font-weight: 600; }
-	.syntax-operator, .syntax-punctuation { color: var(--muted-foreground); }
-	.syntax-number { color: #9a6500; font-weight: 600; }
-	.syntax-string { color: #23784b; }
-	.syntax-comment { color: var(--muted-foreground); font-style: italic; }
-	.syntax-identifier { color: var(--foreground); }
-	.editor-matching-bracket {
-		border-radius: 1px;
-		background: color-mix(in srgb, var(--primary) 15%, transparent);
-		box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--primary) 54%, transparent);
-	}
-	.editor-diagnostic-error, .editor-diagnostic-warning, .editor-diagnostic-information {
-		text-decoration-line: underline;
-		text-underline-offset: 2px;
-	}
-	.editor-diagnostic-error { text-decoration-style: wavy; text-decoration-color: var(--destructive); }
-	.editor-diagnostic-warning { text-decoration-style: wavy; text-decoration-color: #b77900; }
-	.editor-diagnostic-information { text-decoration-style: dotted; text-decoration-color: var(--primary); }
-	.editor-diagnostic-tooltip {
-		position: absolute;
-		z-index: 10;
-		box-sizing: border-box;
-		border: 1px solid var(--border);
-		border-radius: 0.5rem;
-		background: var(--popover);
-		color: var(--popover-foreground);
-		box-shadow: 0 8px 24px rgb(15 35 65 / 16%);
-	}
-	.editor-diagnostic-tooltip {
-		max-width: calc(100% - 1rem);
-		overflow: auto;
-		padding: 0.5rem 0.75rem;
-		font-family: var(--font-sans, sans-serif);
-		font-size: 0.75rem;
-		line-height: 1.25rem;
-		pointer-events: auto;
-	}
-	.editor-diagnostic-tooltip strong { text-transform: capitalize; }
-	.editor-diagnostic-tooltip.diagnostic-error { border-color: color-mix(in srgb, var(--destructive) 48%, var(--border)); }
-	.editor-diagnostic-tooltip.diagnostic-error strong { color: var(--destructive); }
-	.editor-diagnostic-tooltip.diagnostic-warning strong { color: #9a6500; }
-	.editor-diagnostic-tooltip.diagnostic-information strong { color: var(--primary); }
-	.diagnostic-hint { margin-top: 0.25rem; color: var(--muted-foreground); }
-	.diagnostic-quick-fixes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.5rem; padding-top: 0.45rem; border-top: 1px solid var(--border); color: var(--muted-foreground); }
-	.diagnostic-quick-fixes button { padding: 0.12rem 0.35rem; border: 1px solid var(--border); border-radius: 0.25rem; color: var(--foreground); background: var(--background); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; cursor: pointer; }
-	.diagnostic-quick-fixes button:hover:not(:disabled) { background: var(--accent); }
-	.diagnostic-quick-fixes button:disabled { cursor: wait; opacity: 0.55; }
-	@media (prefers-reduced-motion: reduce) {
-		.editor-viewport { scroll-behavior: auto; }
-	}
-</style>

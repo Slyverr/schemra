@@ -5,6 +5,7 @@
 	import { studioMessage } from '../i18n/messages.js';
 	import { Button } from '../components/ui/button/index.js';
 	import { Input } from '../components/ui/input/index.js';
+	import { sceneNavigatorItemClass } from '../studio/ui-classes.js';
 	import { searchPreviewScene, type PreviewScene } from './model.js';
 
 	interface Props {
@@ -101,7 +102,7 @@
 						<section class="mb-1 last:mb-0" aria-label={studioMessage('preview.groups')}>
 							<h2 class="m-0 px-2 py-1 text-[.6875rem] font-semibold text-muted-foreground">{studioMessage('preview.groups')}</h2>
 							{#each results.groups as { item: group, index } (`${group.name}-${index}`)}
-								<Button variant="ghost" class="flex h-9 w-full justify-start gap-2 rounded-[.35rem] border-transparent px-2 text-left text-xs font-normal text-foreground hover:bg-muted hover:text-foreground [&_svg]:shrink-0 [&_svg]:text-muted-foreground" type="button" onclick={() => focusTarget(group.bounds)}>
+								<Button variant="ghost" class={sceneNavigatorItemClass} type="button" onclick={() => focusTarget(group.bounds)}>
 									<ListTree size={16} aria-hidden="true" />
 									<span class="min-w-0 flex-1 truncate">{group.title}</span>
 									<span class="max-w-32 shrink overflow-hidden text-ellipsis whitespace-nowrap text-[.625rem] text-muted-foreground">{studioMessage('preview.group')}</span>
@@ -113,7 +114,7 @@
 						<section class="mb-1 last:mb-0" aria-label={studioMessage('preview.nodes')}>
 							<h2 class="m-0 px-2 py-1 text-[.6875rem] font-semibold text-muted-foreground">{studioMessage('preview.nodes')}</h2>
 							{#each results.nodes as { item: node } (node.id)}
-								<Button variant="ghost" class="flex h-9 w-full justify-start gap-2 rounded-[.35rem] border-transparent px-2 text-left text-xs font-normal text-foreground hover:bg-muted hover:text-foreground [&_svg]:shrink-0 [&_svg]:text-muted-foreground" type="button" onclick={() => focusNode(node.id)}>
+								<Button variant="ghost" class={sceneNavigatorItemClass} type="button" onclick={() => focusNode(node.id)}>
 									<CircleDot size={16} aria-hidden="true" />
 									<span class="min-w-0 flex-1 truncate" title={`${node.label ?? node.id} · ${node.id}`}>{node.label ?? node.id}</span>
 									<span class="max-w-32 shrink overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[.625rem] text-muted-foreground">{node.id}</span>
@@ -128,7 +129,7 @@
 								{@const source = props.scene.nodes.find(({ id }) => id === edge.from)}
 								{@const target = props.scene.nodes.find(({ id }) => id === edge.to)}
 								{@const label = edge.label?.trim() || `${source?.label ?? edge.from} → ${target?.label ?? edge.to}`}
-								<Button variant="ghost" class="flex h-9 w-full justify-start gap-2 rounded-[.35rem] border-transparent px-2 text-left text-xs font-normal text-foreground hover:bg-muted hover:text-foreground [&_svg]:shrink-0 [&_svg]:text-muted-foreground" type="button" onclick={() => focusConnection(index)}>
+								<Button variant="ghost" class={sceneNavigatorItemClass} type="button" onclick={() => focusConnection(index)}>
 									<ArrowRight size={16} aria-hidden="true" />
 									<span class="min-w-0 flex-1 truncate" title={label}>{label}</span>
 									<span class="max-w-32 shrink overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[.625rem] text-muted-foreground" title={`${edge.from} → ${edge.to}`}>{edge.from} → {edge.to}</span>

@@ -16,17 +16,16 @@ export type ResolvedTheme = Exclude<StudioTheme, 'system'>;
 export const studioThemeOptions: Array<{
 	value: StudioTheme;
 	labelKey: StudioMessageId;
-	previewClass: ResolvedTheme | 'system';
 }> = [
-	{ value: 'system', labelKey: 'theme.system', previewClass: 'system' },
-	{ value: 'schemra-light', labelKey: 'theme.schemraLight', previewClass: 'schemra-light' },
-	{ value: 'schemra-dark', labelKey: 'theme.schemraDark', previewClass: 'schemra-dark' },
-	{ value: 'monochrome-light', labelKey: 'theme.monochromeLight', previewClass: 'monochrome-light' },
-	{ value: 'monochrome-dark', labelKey: 'theme.monochromeDark', previewClass: 'monochrome-dark' },
-	{ value: 'catppuccin-latte', labelKey: 'theme.catppuccinLatte', previewClass: 'catppuccin-latte' },
-	{ value: 'catppuccin-mocha', labelKey: 'theme.catppuccinMocha', previewClass: 'catppuccin-mocha' },
-	{ value: 'nord', labelKey: 'theme.nord', previewClass: 'nord' },
-	{ value: 'dracula', labelKey: 'theme.dracula', previewClass: 'dracula' }
+	{ value: 'system', labelKey: 'theme.system' },
+	{ value: 'schemra-light', labelKey: 'theme.schemraLight' },
+	{ value: 'schemra-dark', labelKey: 'theme.schemraDark' },
+	{ value: 'monochrome-light', labelKey: 'theme.monochromeLight' },
+	{ value: 'monochrome-dark', labelKey: 'theme.monochromeDark' },
+	{ value: 'catppuccin-latte', labelKey: 'theme.catppuccinLatte' },
+	{ value: 'catppuccin-mocha', labelKey: 'theme.catppuccinMocha' },
+	{ value: 'nord', labelKey: 'theme.nord' },
+	{ value: 'dracula', labelKey: 'theme.dracula' }
 ];
 
 export const editorThemeOptions = [

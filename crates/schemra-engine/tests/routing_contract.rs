@@ -20,8 +20,6 @@ fn visual(direction: Direction) -> VisualIr {
         title: "Routing".into(),
         direction,
         direction_explicit: false,
-        routing: None,
-        bend: None,
         groups: Vec::new(),
         nodes: Vec::new(),
         edges: Vec::new(),
@@ -48,8 +46,6 @@ fn edge(from: &str, to: &str) -> EdgeIr {
         to: NodeId(to.into()),
         to_span: span(),
         directionality: EdgeDirectionality::Directed,
-        routing: None,
-        bend: None,
         span: span(),
     }
 }
@@ -61,8 +57,6 @@ fn undirected_edge(from: &str, to: &str) -> EdgeIr {
         to: NodeId(to.into()),
         to_span: span(),
         directionality: EdgeDirectionality::Undirected,
-        routing: None,
-        bend: None,
         span: span(),
     }
 }
@@ -516,7 +510,9 @@ fn one_hundred_node_fan_in_is_deterministic_and_keeps_one_centered_target_port()
         edge.path.len() == 1
             && is_straight(&edge.path[0])
             && edge.route_diagnostic.as_ref().is_some_and(|diagnostic| {
-                diagnostic.status == SceneRouteStatus::Routed && diagnostic.target_port == "left"
+                diagnostic.status == SceneRouteStatus::Routed
+                    && diagnostic.target_port == "left"
+                    && diagnostic.route_conflicts == 0
             })
     }));
     let target_points = first

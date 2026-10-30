@@ -20,6 +20,8 @@
 	let scroller = $state<HTMLDivElement>();
 	let tabScrollState = $state({ canScrollLeft: false, canScrollRight: false });
 	let scrollFrame = 0;
+	const scrollButtonClass =
+		'size-[1.8rem] shrink-0 rounded-[.4rem] border border-transparent p-0 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1';
 
 	$effect(() => {
 		const element = scroller;
@@ -88,7 +90,7 @@
 
 <div class="flex h-full min-w-0 flex-1 items-center gap-[.15rem]">
 	{#if tabScrollState.canScrollLeft}
-		<Button variant="ghost" size="icon-sm" class="size-[1.8rem] shrink-0 rounded-[.4rem] border border-transparent p-0 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1" type="button" aria-label={studioMessage('tabs.scrollLeft')} title={studioMessage('tabs.scrollLeft')} aria-controls="project-file-tabs" onclick={() => scroll('left')}>
+		<Button variant="ghost" size="icon-sm" class={scrollButtonClass} type="button" aria-label={studioMessage('tabs.scrollLeft')} title={studioMessage('tabs.scrollLeft')} aria-controls="project-file-tabs" onclick={() => scroll('left')}>
 			<ChevronLeft size={15} class="size-[15px]" aria-hidden="true" />
 		</Button>
 	{/if}
@@ -97,7 +99,7 @@
 			{#each tabs as tab, index (tab.id)}
 				{@const selected = tab.id === activeTabId}
 				{@const kindLabel = tab.displayKind === 'visual' ? 'sidebar.resourceKindVisual' : tab.displayKind === 'scenario' ? 'sidebar.resourceKindScenario' : tab.displayKind === 'component' ? 'sidebar.resourceKindComponent' : 'sidebar.resourceKindSource'}
-				{@const tabColorClass = tab.hasErrors ? 'text-destructive' : tab.unsaved ? 'text-[var(--warning)]' : selected ? 'text-primary' : 'text-muted-foreground'}
+				{@const tabColorClass = tab.hasErrors ? 'text-destructive' : tab.unsaved ? 'text-warning' : selected ? 'text-primary' : 'text-muted-foreground'}
 				<ResourceContextMenu onRename={tab.rename} onRemove={tab.remove} renameDisabled={tab.renameDisabled} removeDisabled={tab.removeDisabled}>
 					<Button
 						id={`workspace-tab-${tab.id}`}
@@ -128,7 +130,7 @@
 		</div>
 	</div>
 	{#if tabScrollState.canScrollRight}
-		<Button variant="ghost" size="icon-sm" class="size-[1.8rem] shrink-0 rounded-[.4rem] border border-transparent p-0 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1" type="button" aria-label={studioMessage('tabs.scrollRight')} title={studioMessage('tabs.scrollRight')} aria-controls="project-file-tabs" onclick={() => scroll('right')}>
+		<Button variant="ghost" size="icon-sm" class={scrollButtonClass} type="button" aria-label={studioMessage('tabs.scrollRight')} title={studioMessage('tabs.scrollRight')} aria-controls="project-file-tabs" onclick={() => scroll('right')}>
 			<ChevronRight size={15} class="size-[15px]" aria-hidden="true" />
 		</Button>
 	{/if}

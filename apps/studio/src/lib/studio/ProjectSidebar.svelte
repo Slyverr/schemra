@@ -25,6 +25,7 @@
 		dropdownItemClass,
 		dropdownPanelClass
 	} from './menu-classes.js';
+	import { workspaceResizeGripClass } from './ui-classes.js';
 	import type { ResourceTabKind, ResourceTabMenuPolicy } from './resource-tab-menu.js';
 
 	type SidebarResourceMenuPolicy = Pick<ResourceTabMenuPolicy, 'showRename' | 'renameDisabled' | 'removeDisabled'>;
@@ -362,6 +363,6 @@
 		ondblclick={toggleCollapsed}
 	>
 		<span class="h-full w-px bg-border/50 transition-colors group-hover:bg-primary/50 group-focus-visible:bg-primary" aria-hidden="true"></span>
-		<GripVertical class="pointer-events-none absolute size-4 rounded-sm bg-background text-muted-foreground opacity-30 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden="true" />
+		<GripVertical class={workspaceResizeGripClass} aria-hidden="true" />
 	</div>
 </aside>

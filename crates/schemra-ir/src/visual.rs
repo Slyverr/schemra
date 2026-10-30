@@ -18,22 +18,6 @@ pub enum GroupLayout {
     },
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum LinkRouting {
-    Auto,
-    #[default]
-    Straight,
-    Smooth,
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum LinkBend {
-    #[default]
-    Auto,
-    Left,
-    Right,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VisualIr {
     pub id: VisualId,
@@ -41,8 +25,6 @@ pub struct VisualIr {
     pub title: String,
     pub direction: Direction,
     pub direction_explicit: bool,
-    pub routing: Option<LinkRouting>,
-    pub bend: Option<LinkBend>,
     pub groups: Vec<GroupIr>,
     pub nodes: Vec<NodeIr>,
     pub edges: Vec<EdgeIr>,
@@ -76,8 +58,6 @@ pub struct EdgeIr {
     pub to: NodeId,
     pub to_span: SourceSpan,
     pub directionality: EdgeDirectionality,
-    pub routing: Option<LinkRouting>,
-    pub bend: Option<LinkBend>,
     pub span: SourceSpan,
 }
 

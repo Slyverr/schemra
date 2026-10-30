@@ -1,14 +1,22 @@
 <script lang="ts">
 	import type { ComponentProps } from 'svelte';
-import { Tooltip } from 'bits-ui';
-import { AlertCircle, FileCode2, GripHorizontal, GripVertical, LoaderCircle, Maximize2, Minimize2, Minus, Plus, Workflow } from '@lucide/svelte';
-import { Button } from '../components/ui/button/index.js';
+	import { Tooltip } from 'bits-ui';
+	import { AlertCircle, FileCode2, GripHorizontal, GripVertical, LoaderCircle, Maximize2, Minimize2, Minus, Plus, Workflow } from '@lucide/svelte';
+	import { Button } from '../components/ui/button/index.js';
+	import {
+		workspacePaneToggleClass,
+		workspacePanelHeaderClass,
+		workspacePanelTitleClass,
+		workspaceResizeGripClass,
+		workspaceZoomButtonClass,
+		workspaceZoomIconClass
+	} from './ui-classes.js';
 	import DiagramPreview from '../preview/DiagramPreview.svelte';
 	import DiagnosticsMenu from './DiagnosticsMenu.svelte';
 	import SourceEditor from '../editor/SourceEditor.svelte';
 	import { studioMessage } from '../i18n/messages.js';
 	import type { DiagramExportFormat } from '../preview/export.js';
-import { DEFAULT_EDITOR_PREFERENCES, EDITOR_ZOOM_LEVELS, type EditorZoom } from '../settings/editor.js';
+	import { DEFAULT_EDITOR_PREFERENCES, EDITOR_ZOOM_LEVELS, type EditorZoom } from '../settings/editor.js';
 
 	type EditorProps = ComponentProps<typeof SourceEditor>;
 	type DiagnosticsProps = ComponentProps<typeof DiagnosticsMenu>;
@@ -80,9 +88,9 @@ import { DEFAULT_EDITOR_PREFERENCES, EDITOR_ZOOM_LEVELS, type EditorZoom } from 
 		class:hidden={focusedPane === 'preview'}
 		style={`flex: ${focusedPane === 'editor' ? 1 : focusedPane ? 0 : editorPaneRatio} 1 0%;`}
 	>
-		<header class="flex h-10 min-h-10 flex-[0_0_auto] items-center justify-between gap-2 border-b border-border bg-background px-3 sm:px-4">
+		<header class={workspacePanelHeaderClass}>
 			<div class="flex min-w-0 items-center gap-2">
-				<h2 class="m-0 overflow-hidden text-ellipsis whitespace-nowrap text-[.8125rem] font-medium text-foreground">{studioMessage('pane.editor')}</h2>
+				<h2 class={workspacePanelTitleClass}>{studioMessage('pane.editor')}</h2>
 				<DiagnosticsMenu {...diagnostics} />
 			</div>
 			<div class="flex min-w-0 items-center justify-end gap-3">
@@ -90,14 +98,14 @@ import { DEFAULT_EDITOR_PREFERENCES, EDITOR_ZOOM_LEVELS, type EditorZoom } from 
 					<Button
 						variant="ghost"
 						size="icon-xs"
-						class="size-7 rounded-[.3rem] p-0 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-40"
+						class={workspaceZoomButtonClass}
 						type="button"
 						aria-label={studioMessage('editor.zoomDecrease')}
 						title={studioMessage('editor.zoomDecrease')}
 						disabled={editorZoom === EDITOR_ZOOM_LEVELS[0]}
 						onclick={() => actions.adjustEditorZoom(-1)}
 					>
-						<Minus size={14} class="size-3.5" aria-hidden="true" />
+						<Minus size={14} class={workspaceZoomIconClass} aria-hidden="true" />
 					</Button>
 					<Button
 						variant="ghost"
@@ -113,20 +121,20 @@ import { DEFAULT_EDITOR_PREFERENCES, EDITOR_ZOOM_LEVELS, type EditorZoom } from 
 					<Button
 						variant="ghost"
 						size="icon-xs"
-						class="size-7 rounded-[.3rem] p-0 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-40"
+						class={workspaceZoomButtonClass}
 						type="button"
 						aria-label={studioMessage('editor.zoomIncrease')}
 						title={studioMessage('editor.zoomIncrease')}
 						disabled={editorZoom === EDITOR_ZOOM_LEVELS[EDITOR_ZOOM_LEVELS.length - 1]}
 						onclick={() => actions.adjustEditorZoom(1)}
 					>
-						<Plus size={14} class="size-3.5" aria-hidden="true" />
+						<Plus size={14} class={workspaceZoomIconClass} aria-hidden="true" />
 					</Button>
 				</div>
 				<Button
 					variant="outline"
 					size="icon-sm"
-					class="size-8 shrink-0"
+					class={workspacePaneToggleClass}
 					type="button"
 					aria-label={studioMessage(focusedPane === 'editor' ? 'pane.restoreSplit' : 'pane.maximizeEditor')}
 					title={studioMessage(focusedPane === 'editor' ? 'pane.restoreSplit' : 'pane.maximizeEditor')}
@@ -184,9 +192,9 @@ import { DEFAULT_EDITOR_PREFERENCES, EDITOR_ZOOM_LEVELS, type EditorZoom } from 
 			aria-hidden="true"
 		></span>
 		{#if paneLayoutWide}
-			<GripVertical class="pointer-events-none absolute size-4 rounded-sm bg-background text-muted-foreground opacity-30 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden="true" />
+			<GripVertical class={workspaceResizeGripClass} aria-hidden="true" />
 		{:else}
-			<GripHorizontal class="pointer-events-none absolute size-4 rounded-sm bg-background text-muted-foreground opacity-30 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden="true" />
+			<GripHorizontal class={workspaceResizeGripClass} aria-hidden="true" />
 		{/if}
 	</div>
 
@@ -196,9 +204,9 @@ import { DEFAULT_EDITOR_PREFERENCES, EDITOR_ZOOM_LEVELS, type EditorZoom } from 
 		style={`flex: ${focusedPane === 'preview' ? 1 : focusedPane ? 0 : 100 - editorPaneRatio} 1 0%;`}
 		aria-label={studioMessage('pane.previewPanel')}
 	>
-		<header class="flex h-10 min-h-10 flex-[0_0_auto] items-center justify-between gap-2 border-b border-border bg-background px-3 sm:px-4">
+		<header class={workspacePanelHeaderClass}>
 			<div class="flex min-w-0 items-center gap-2">
-				<h2 class="m-0 overflow-hidden text-ellipsis whitespace-nowrap text-[.8125rem] font-medium text-foreground">{studioMessage('pane.preview')}</h2>
+				<h2 class={workspacePanelTitleClass}>{studioMessage('pane.preview')}</h2>
 				{#if showLastValidPreview}
 					<Tooltip.Provider>
 						<Tooltip.Root bind:open={stalePreviewInfoOpen}>
@@ -223,7 +231,7 @@ import { DEFAULT_EDITOR_PREFERENCES, EDITOR_ZOOM_LEVELS, type EditorZoom } from 
 				<Button
 					variant="outline"
 					size="icon-sm"
-					class="size-8 shrink-0"
+					class={workspacePaneToggleClass}
 					type="button"
 					aria-label={studioMessage(focusedPane === 'preview' ? 'pane.restoreSplit' : 'pane.maximizePreview')}
 					title={studioMessage(focusedPane === 'preview' ? 'pane.restoreSplit' : 'pane.maximizePreview')}

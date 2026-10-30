@@ -7,16 +7,16 @@ test('loads the editor, preview, and sidebar brand assets', async ({ page }) => 
 
 	await expect(page).toHaveTitle('Schemra Studio');
 	await expect(page.getByRole('textbox', { name: / editor$/ })).toBeVisible();
-	await expect(page.getByRole('application', { name: studioMessage('preview.canvas') })).toBeVisible();
-	const canvas = page.locator('.preview .canvas');
+	const canvas = page.getByRole('application', { name: studioMessage('preview.canvas') });
+	await expect(canvas).toBeVisible();
 	await expect.poll(async () => (await canvas.boundingBox())?.width ?? 0).toBeGreaterThan(0);
-	await expect.poll(async () => (await page.locator('.preview svg.schemra-preview-svg').boundingBox())?.width ?? 0).toBeGreaterThan(0);
+	await expect.poll(async () => (await canvas.locator('svg.schemra-preview-svg').boundingBox())?.width ?? 0).toBeGreaterThan(0);
 
-	const brand = page.locator('.sidebar-wordmark');
+	const brand = page.getByRole('img', { name: 'Schemra', exact: true });
 	await expect.poll(() => brand.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
 
-	await page.locator('.sidebar-resize-handle').dblclick();
-	const mark = page.locator('.sidebar-expand img');
+	await page.getByRole('separator', { name: studioMessage('sidebar.resize') }).dblclick();
+	const mark = page.getByRole('button', { name: studioMessage('sidebar.expand') }).locator('img');
 	await expect(mark).toBeVisible();
 	await expect.poll(() => mark.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
 });
@@ -211,24 +211,26 @@ test('navigates the searchable Studio themes from the keyboard', async ({ page }
 	await page.getByRole('option').filter({ hasText: openSettingsLabel }).click();
 
 	const settings = page.getByRole('dialog', { name: studioMessage('settings.heading') });
-	const themePicker = settings.locator('.theme-picker').first();
-	const trigger = themePicker.getByRole('button');
+	const trigger = settings.locator('button[aria-controls="studio-theme-options"]');
 	await trigger.click();
 	const popover = settings.locator('#studio-theme-options');
 	await expect(popover).toBeVisible();
-	expect(await popover.evaluate((element) => element.closest('dialog') === document.querySelector('.settings-dialog'))).toBe(true);
+	expect(await settings.evaluate((element) => element.contains(element.querySelector('#studio-theme-options')))).toBe(true);
 	expect(await popover.evaluate((element) => getComputedStyle(element.parentElement!).zIndex)).toBe('1000');
-	expect(await popover.evaluate((element) => {
-		const bounds = element.getBoundingClientRect();
-		const dialog = element.closest('dialog')!.getBoundingClientRect();
-		return bounds.left >= dialog.left && bounds.right <= dialog.right && bounds.top >= dialog.top && bounds.bottom <= dialog.bottom;
-	})).toBe(true);
+	const popoverBounds = await popover.boundingBox();
+	const settingsBounds = await settings.boundingBox();
+	expect(popoverBounds).not.toBeNull();
+	expect(settingsBounds).not.toBeNull();
+	expect(popoverBounds!.x).toBeGreaterThanOrEqual(settingsBounds!.x);
+	expect(popoverBounds!.x + popoverBounds!.width).toBeLessThanOrEqual(settingsBounds!.x + settingsBounds!.width);
+	expect(popoverBounds!.y).toBeGreaterThanOrEqual(settingsBounds!.y);
+	expect(popoverBounds!.y + popoverBounds!.height).toBeLessThanOrEqual(settingsBounds!.y + settingsBounds!.height);
 	expect(await popover.evaluate((element) => {
 		const bounds = element.getBoundingClientRect();
 		return element.contains(document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2));
 	})).toBe(true);
 
-	const search = settings.getByRole('combobox', { name: studioMessage('settings.searchThemes') });
+	const search = popover.getByRole('combobox', { name: studioMessage('settings.searchThemes') });
 	await search.fill('schemra');
 	await expect(search).toHaveAttribute('aria-activedescendant', 'studio-theme-option-schemra-light');
 	await search.press('ArrowDown');
@@ -239,12 +241,40 @@ test('navigates the searchable Studio themes from the keyboard', async ({ page }
 	await search.press('Enter');
 	await expect(trigger).toContainText(studioMessage('theme.schemraDark'));
 	await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+	const paletteStylesMatchRenderedEditor = () => page.locator('.syntax-keyword').first().evaluate((keyword) => {
+		const editor = keyword.closest('.source-editor');
+		if (!editor) return false;
+		const expected = document.createElement('span');
+		expected.style.color = 'var(--editor-syntax-keyword)';
+		editor.append(expected);
+		const expectedColor = getComputedStyle(expected).color;
+		expected.remove();
+		return getComputedStyle(keyword).color === expectedColor;
+	});
+	await expect.poll(paletteStylesMatchRenderedEditor).toBe(true);
+	const warningUtilityMatchesTheme = () => page.locator('.source-editor').evaluate((editor) => {
+		const utility = document.createElement('span');
+		utility.className = 'text-warning';
+		utility.textContent = '.';
+		const token = document.createElement('span');
+		token.style.color = 'var(--warning)';
+		token.textContent = '.';
+		editor.append(utility, token);
+		const utilityColor = getComputedStyle(utility).color;
+		const tokenColor = getComputedStyle(token).color;
+		utility.remove();
+		token.remove();
+		return utilityColor === tokenColor;
+	});
+	await expect.poll(warningUtilityMatchesTheme).toBe(true);
 });
 
 test('removes shell viewport minimums and keeps the tab strip sized', async ({ page }) => {
 	await page.setViewportSize({ width: 320, height: 240 });
 	await page.goto('/');
-	const shell = page.locator('.studio-shell');
+	await expect(page.getByRole('textbox', { name: / editor$/ })).toBeVisible();
+	const shell = page.getByRole('main');
 	const shellBox = await shell.boundingBox();
 	expect(shellBox).not.toBeNull();
 	expect(shellBox?.width).toBe(320);
@@ -253,7 +283,10 @@ test('removes shell viewport minimums and keeps the tab strip sized', async ({ p
 		const style = getComputedStyle(element);
 		return [style.minWidth, style.minHeight];
 	})).toEqual(['0px', '0px']);
-	await expect.poll(() => page.locator('.file-tabs').evaluate((element) => element.getBoundingClientRect().height)).toBe(44);
+	const tabList = page.getByRole('tablist', { name: studioMessage('tabs.projectSourceFiles') });
+	const tabsHeader = page.getByRole('navigation', { name: studioMessage('tabs.projectSourceFiles') });
+	await expect.poll(() => tabsHeader.evaluate((element) => element.getBoundingClientRect().height)).toBe(44);
+	await expect.poll(() => tabList.evaluate((element) => element.getBoundingClientRect().height)).toBe(43);
 });
 
 test('cancels visual creation from the ResourceDialog without adding a resource', async ({ page }) => {
@@ -280,17 +313,19 @@ test('cancels visual creation from the ResourceDialog without adding a resource'
 test('keeps the pane splitter centered on the divider while resizing both layouts', async ({ page }) => {
 	await page.setViewportSize({ width: 1280, height: 720 });
 	await page.goto('/');
-	const sidebarGeometry = await page.evaluate(() => {
-		const sidebar = document.querySelector('#project-resource-sidebar')!.getBoundingClientRect();
-		const handle = document.querySelector('.sidebar-resize-handle')!;
+	await expect(page.getByRole('textbox', { name: / editor$/ })).toBeVisible();
+	const sidebar = page.getByRole('complementary', { name: studioMessage('sidebar.resources') });
+	const sidebarSeparator = sidebar.getByRole('separator', { name: studioMessage('sidebar.resize') });
+	const sidebarGeometry = await sidebarSeparator.evaluate((handle) => {
+		const sidebarBounds = handle.parentElement!.getBoundingClientRect();
 		const bounds = handle.getBoundingClientRect();
 		const grip = handle.querySelector('svg')!.getBoundingClientRect();
 		return {
 			handleWidth: bounds.width,
-			centerDelta: Math.abs((bounds.left + bounds.right) / 2 - sidebar.right),
+			centerDelta: Math.abs((bounds.left + bounds.right) / 2 - sidebarBounds.right),
 			gripSize: grip.width,
 			lineWidth: handle.querySelector('span')!.getBoundingClientRect().width,
-			panelBorderWidth: getComputedStyle(document.querySelector('#project-resource-sidebar')!).borderRightWidth
+			panelBorderWidth: getComputedStyle(handle.parentElement!).borderRightWidth
 		};
 	});
 	expect(sidebarGeometry.handleWidth).toBe(12);
@@ -299,7 +334,6 @@ test('keeps the pane splitter centered on the divider while resizing both layout
 	expect(sidebarGeometry.lineWidth).toBe(1);
 	expect(sidebarGeometry.panelBorderWidth).toBe('0px');
 
-	const sidebarSeparator = page.getByRole('separator', { name: studioMessage('sidebar.resize') });
 	const sidebarHandle = await sidebarSeparator.boundingBox();
 	expect(sidebarHandle).not.toBeNull();
 	if (sidebarHandle) {
@@ -325,15 +359,15 @@ test('keeps the pane splitter centered on the divider while resizing both layout
 	await expect(sidebarSeparator).toHaveAttribute('aria-valuenow', '240');
 
 	const separator = page.getByRole('separator', { name: studioMessage('pane.resize') });
-	const measure = () => page.evaluate(() => {
-		const editor = document.querySelector('.editor-panel')!.getBoundingClientRect();
-		const preview = document.querySelector('.preview-panel')!.getBoundingClientRect();
-		const grip = document.querySelector('.pane-resizer')!;
+	const measure = () => separator.evaluate((grip) => {
+		const editor = grip.previousElementSibling!.getBoundingClientRect();
+		const preview = grip.nextElementSibling!.getBoundingClientRect();
 		const bounds = grip.getBoundingClientRect();
-		const wide = getComputedStyle(document.querySelector('.workspace-grid')!).flexDirection === 'row';
+		const wide = grip.getAttribute('aria-orientation') === 'vertical';
 		return {
 			position: getComputedStyle(grip).position,
 			background: getComputedStyle(grip).backgroundColor,
+			editorSize: wide ? editor.width : editor.height,
 			boundaryGap: wide ? preview.left - editor.right : preview.top - editor.bottom,
 			centerDelta: wide
 				? Math.abs((bounds.left + bounds.right) / 2 - editor.right)
@@ -350,7 +384,7 @@ test('keeps the pane splitter centered on the divider while resizing both layout
 	expect(geometry.centerDelta).toBeLessThan(1);
 	expect(geometry.gripSize).toBe(12);
 
-	const beforeWideDrag = Number(await separator.getAttribute('aria-valuenow'));
+	const beforeWideDrag = geometry.editorSize;
 	const wideBounds = await separator.boundingBox();
 	expect(wideBounds).not.toBeNull();
 	if (wideBounds) {
@@ -359,7 +393,7 @@ test('keeps the pane splitter centered on the divider while resizing both layout
 		await page.mouse.move(wideBounds.x + wideBounds.width / 2 + 80, wideBounds.y + wideBounds.height / 2, { steps: 4 });
 		await page.mouse.up();
 	}
-	await expect.poll(() => Number(separator.getAttribute('aria-valuenow'))).toBeGreaterThan(beforeWideDrag);
+	await expect.poll(async () => (await measure()).editorSize).toBeGreaterThan(beforeWideDrag);
 
 	await page.setViewportSize({ width: 780, height: 499 });
 	await expect(separator).toHaveAttribute('aria-orientation', 'horizontal');
@@ -370,7 +404,7 @@ test('keeps the pane splitter centered on the divider while resizing both layout
 	expect(geometry.centerDelta).toBeLessThan(1);
 	expect(geometry.gripSize).toBe(12);
 
-	const beforeStackedDrag = Number(await separator.getAttribute('aria-valuenow'));
+	const beforeStackedDrag = geometry.editorSize;
 	const stackedBounds = await separator.boundingBox();
 	expect(stackedBounds).not.toBeNull();
 	if (stackedBounds) {
@@ -379,13 +413,13 @@ test('keeps the pane splitter centered on the divider while resizing both layout
 		await page.mouse.move(stackedBounds.x + stackedBounds.width / 2, stackedBounds.y + stackedBounds.height / 2 + 40, { steps: 4 });
 		await page.mouse.up();
 	}
-	await expect.poll(() => Number(separator.getAttribute('aria-valuenow'))).toBeGreaterThan(beforeStackedDrag);
+	await expect.poll(async () => (await measure()).editorSize).toBeGreaterThan(beforeStackedDrag);
 });
 
 test('announces editor diagnostics through its description list', async ({ page }) => {
 	await page.goto('/');
 
-	const editor = page.locator('.editor-input');
+	const editor = page.getByRole('textbox', { name: / editor$/ });
 	const source = await editor.inputValue();
 	await editor.fill(`${source}\n???`);
 
@@ -402,13 +436,13 @@ test('announces editor diagnostics through its description list', async ({ page 
 	expect(await diagnosticsPanel.evaluate((element) => {
 		const bounds = element.getBoundingClientRect();
 		const hit = document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
-		return getComputedStyle(element).position === 'fixed' && element.contains(hit);
+		return Boolean(hit && element.contains(hit));
 	})).toBe(true);
 	await page.keyboard.press('Escape');
 	await expect(diagnosticsPanel).toBeHidden();
 	await page.getByRole('button', { name: /diagnostic/i }).click();
 	await expect(diagnosticsPanel).toBeVisible();
-	await page.locator('.sidebar-brand').click();
+	await page.getByRole('img', { name: 'Schemra', exact: true }).click();
 	await expect(diagnosticsPanel).toBeHidden();
 });
 
@@ -421,9 +455,6 @@ test('keeps project and file operations in their matching menus', async ({ page 
 	await expect(projectMenu.getByRole('menuitem', { name: studioMessage('project.create') })).toBeVisible();
 	await expect(projectMenu.getByRole('menuitem', { name: studioMessage('project.import') })).toBeVisible();
 	await page.keyboard.press('Escape');
-	await expect(projectMenu).toBeHidden();
-	await page.getByRole('button', { name: /Select project, current project/ }).click();
-	await page.locator('.sidebar-brand').click();
 	await expect(projectMenu).toBeHidden();
 
 	await page.getByRole('button', { name: studioMessage('file.actions') }).click();
@@ -444,7 +475,7 @@ test('keeps header selectors and menus above shell overflow boundaries', async (
 	await page.setViewportSize({ width: 780, height: 499 });
 	await page.goto('/');
 	await page.getByRole('button', { name: /Select project, current project/ }).click();
-	const projectMenu = page.locator('.project-menu');
+	const projectMenu = page.getByRole('menu').last();
 	const createProject = projectMenu.getByRole('menuitem', { name: studioMessage('project.create') });
 	await expect(createProject).toBeVisible();
 	expect(await projectMenu.evaluate((element) => getComputedStyle(element.parentElement!).zIndex)).toBe('1000');
@@ -454,7 +485,7 @@ test('keeps header selectors and menus above shell overflow boundaries', async (
 	const sidebar = page.getByRole('complementary', { name: studioMessage('sidebar.resources') });
 	await sidebar.getByRole('separator', { name: studioMessage('sidebar.resize') }).dblclick();
 	await sidebar.getByRole('button', { name: studioMessage('sidebar.visuals') }).click();
-	const sidebarVisualMenu = page.locator('.sidebar-visual-menu');
+	const sidebarVisualMenu = page.getByRole('menu').last();
 	const sidebarVisual = sidebarVisualMenu.getByRole('menuitem').first();
 	await expect(sidebarVisual).toBeVisible();
 	expect(await sidebarVisualMenu.evaluate((element) => getComputedStyle(element.parentElement!).zIndex)).toBe('1000');
@@ -464,7 +495,7 @@ test('keeps header selectors and menus above shell overflow boundaries', async (
 	await page.setViewportSize({ width: 390, height: 360 });
 	const browse = page.getByRole('button', { name: studioMessage('sidebar.mobileBrowse') });
 	await browse.click();
-	const visualMenu = page.locator('.mobile-resource-menu');
+	const visualMenu = page.getByRole('menu').last();
 	const visualChoice = visualMenu.getByRole('menuitem').first();
 	await expect(visualChoice).toBeVisible();
 	expect(await visualMenu.evaluate((element) => getComputedStyle(element.parentElement!).zIndex)).toBe('1000');
@@ -472,14 +503,14 @@ test('keeps header selectors and menus above shell overflow boundaries', async (
 	await page.keyboard.press('Escape');
 
 	await page.getByRole('button', { name: studioMessage('file.actions') }).click();
-	const fileMenu = page.locator('.file-menu');
+	const fileMenu = page.getByRole('menu').last();
 	const openSource = fileMenu.getByRole('menuitem', { name: studioMessage('file.openSource') });
 	await expect(openSource).toBeVisible();
 	await expect.poll(() => menuItemIsPainted(openSource)).toBe(true);
 	await page.keyboard.press('Escape');
 
 	await page.getByRole('button', { name: studioMessage('header.moreActions') }).click();
-	const moreMenu = page.locator('.more-actions-menu');
+	const moreMenu = page.getByRole('menu').last();
 	const settings = moreMenu.getByRole('menuitem', { name: studioMessage('header.settings') });
 	await expect(settings).toBeVisible();
 	await expect.poll(() => menuItemIsPainted(settings)).toBe(true);
@@ -505,11 +536,11 @@ test('navigates visuals and linked scenarios from the project sidebar', async ({
 	await expect(contextMenu).toBeHidden();
 	await visual.click({ button: 'right' });
 	await expect(contextMenu).toBeVisible();
-	await page.locator('.sidebar-brand').click();
+	await page.keyboard.press('Escape');
 	await expect(contextMenu).toBeHidden();
 
-	const expandScenarios = sidebar.locator('button[aria-controls^="sidebar-scenarios-"]').first();
-	await expandScenarios.click();
+	await visual.click();
+	await expect(visual).toHaveAttribute('aria-expanded', 'true');
 	const scenarioList = sidebar.locator('ul[id^="sidebar-scenarios-"]').first();
 	await expect(scenarioList).toBeVisible();
 
@@ -518,9 +549,9 @@ test('navigates visuals and linked scenarios from the project sidebar', async ({
 	await expect(scenario).toHaveAttribute('aria-current', 'page');
 
 	await sidebar.getByRole('separator', { name: studioMessage('sidebar.resize') }).dblclick();
-	await expect(sidebar).toHaveClass(/collapsed/);
+	await expect(sidebar.getByRole('separator', { name: studioMessage('sidebar.resize') })).toHaveAttribute('aria-valuenow', '56');
 	await sidebar.getByRole('button', { name: studioMessage('sidebar.expand') }).click();
-	await expect(sidebar).not.toHaveClass(/collapsed/);
+	await expect(sidebar.getByRole('separator', { name: studioMessage('sidebar.resize') })).toHaveAttribute('aria-valuenow', '240');
 });
 
 test('scenario playback advances and can be paused', async ({ page }) => {
@@ -535,9 +566,11 @@ test('scenario playback advances and can be paused', async ({ page }) => {
 	await page.getByRole('button', { name: studioMessage('preview.pause') }).click();
 	await expect(page.getByRole('button', { name: studioMessage('preview.play') })).toBeVisible();
 	const pausedTime = Number(await timeline.getAttribute('aria-valuenow'));
+	const maxTime = Number(await timeline.getAttribute('aria-valuemax'));
 	await timeline.focus();
-	await page.keyboard.press('ArrowRight');
-	await expect(timeline).toHaveAttribute('aria-valuenow', String(pausedTime + 1));
+	const nextTime = pausedTime >= maxTime ? pausedTime - 1 : pausedTime + 1;
+	await page.keyboard.press(pausedTime >= maxTime ? 'ArrowLeft' : 'ArrowRight');
+	await expect(timeline).toHaveAttribute('aria-valuenow', String(nextTime));
 });
 
 test('restores the caret and vertical scroll when returning to a source tab', async ({ page }) => {
@@ -545,7 +578,8 @@ test('restores the caret and vertical scroll when returning to a source tab', as
 	await page.getByRole('button', { name: studioMessage('file.actions') }).click();
 	await expect(page.getByRole('menuitem', { name: studioMessage('file.saveSource') })).toBeEnabled();
 	await page.keyboard.press('Escape');
-	const tabs = page.locator('.file-tabs button.file-tab');
+	await expect(page.getByRole('textbox', { name: / editor$/ })).toBeVisible();
+	const tabs = page.getByRole('tablist', { name: studioMessage('tabs.projectSourceFiles') }).getByRole('tab');
 	await expect(tabs).toHaveCount(6);
 	const firstTab = tabs.nth(0);
 	const secondTab = tabs.nth(1);

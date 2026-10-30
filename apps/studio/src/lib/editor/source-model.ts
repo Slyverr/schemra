@@ -1,3 +1,5 @@
+import { editorClasses, editorDiagnosticClasses, editorSyntaxClasses } from './editor-classes.js';
+
 export interface EditorPosition {
 	line: number;
 	column: number;
@@ -134,15 +136,7 @@ export function mapEditorSelection(
 }
 
 const syntaxClasses: Readonly<Record<string, string>> = {
-	keyword: 'syntax-keyword',
-	property: 'syntax-property',
-	value: 'syntax-value',
-	operator: 'syntax-operator',
-	punctuation: 'syntax-punctuation',
-	number: 'syntax-number',
-	string: 'syntax-string',
-	comment: 'syntax-comment',
-	identifier: 'syntax-identifier'
+	...editorSyntaxClasses
 };
 
 /** Validate the compiler's untyped JSON token list before using its source positions. */
@@ -201,9 +195,9 @@ export function buildEditorLines(
 			const character = characters[column] ?? '';
 			const diagnostic = diagnosticsByCharacter[column] ?? null;
 			const matching = matchingOffsets.has(startOffset + characterOffset);
-			const classNames = [syntaxClasses[tokenKinds[column] ?? ''] ?? 'syntax-identifier'];
-			if (matching) classNames.push('editor-matching-bracket');
-			if (diagnostic) classNames.push(`editor-diagnostic-${diagnostic.severity}`);
+			const classNames = [syntaxClasses[tokenKinds[column] ?? ''] ?? editorSyntaxClasses.identifier];
+			if (matching) classNames.push(editorClasses.matchingBracket);
+			if (diagnostic) classNames.push(editorDiagnosticClasses[diagnostic.severity]);
 			const className = classNames.join(' ');
 			const previous = segments.at(-1);
 			if (previous?.className === className && previous.diagnostic === diagnostic) {
