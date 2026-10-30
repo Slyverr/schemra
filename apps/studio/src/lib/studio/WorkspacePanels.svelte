@@ -7,6 +7,7 @@ import { Button } from '../components/ui/button/index.js';
 	import DiagnosticsMenu from './DiagnosticsMenu.svelte';
 	import SourceEditor from '../editor/SourceEditor.svelte';
 	import { studioMessage } from '../i18n/messages.js';
+	import type { DiagramExportFormat } from '../preview/export.js';
 import { DEFAULT_EDITOR_PREFERENCES, EDITOR_ZOOM_LEVELS, type EditorZoom } from '../settings/editor.js';
 
 	type EditorProps = ComponentProps<typeof SourceEditor>;
@@ -54,11 +55,11 @@ import { DEFAULT_EDITOR_PREFERENCES, EDITOR_ZOOM_LEVELS, type EditorZoom } from 
 		editorPalette,
 		actions
 	}: Props = $props();
-	let previewHandle = $state<{ exportDiagram: (format: 'svg' | 'png') => Promise<void> } | null>(null);
+	let previewHandle = $state<{ exportDiagram: (format: DiagramExportFormat) => Promise<void> } | null>(null);
 	let sourceEditorHandle = $state<{ formatDocument: () => Promise<'formatted' | 'unchanged' | 'stale'> } | null>(null);
 	let stalePreviewInfoOpen = $state(false);
 
-	export async function exportDiagram(format: 'svg' | 'png') {
+	export async function exportDiagram(format: DiagramExportFormat) {
 		await previewHandle?.exportDiagram(format);
 	}
 

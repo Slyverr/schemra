@@ -329,11 +329,18 @@
 
 	function handleInput(event: Event) {
 		const target = event.currentTarget as HTMLTextAreaElement;
+		const inputEvent = event as InputEvent;
+		const inputType = typeof inputEvent.inputType === 'string' ? inputEvent.inputType : '';
 		syncSelection();
 		dismissCompletions();
 		clearTooltip();
 		props.onChange(target.value);
-		scheduleCompletions(false, target.value, target.selectionStart);
+		const insertedText = inputType.startsWith('insert') &&
+			inputType !== 'insertLineBreak' &&
+			inputType !== 'insertParagraph' &&
+			!inputEvent.data?.includes('\n') &&
+			!inputEvent.data?.includes('\r');
+		if (insertedText) scheduleCompletions(false, target.value, target.selectionStart);
 	}
 
 	function syncSelection() {
@@ -528,7 +535,7 @@
 				selectedCompletion = (selectedCompletion + direction + completion.items.length) % completion.items.length;
 				return;
 			}
-			if (event.key === 'Enter' || event.key === 'Tab') {
+			if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
 				if (acceptCompletion()) event.preventDefault();
 				return;
 			}
@@ -710,18 +717,25 @@
 	}
 
 	function positionCompletions(cursor: number) {
-		if (!root || !input) return;
+		if (!root || !input || !highlightedLines) return;
 		const before = input.value.slice(0, cursor);
 		const linesBefore = before.split('\n');
 		const lineIndex = linesBefore.length - 1;
-		const column = Array.from(linesBefore.at(-1) ?? '').length;
+		const sourceColumn = linesBefore.at(-1)?.length ?? 0;
+		const line = highlightedLines.querySelector<HTMLElement>(`[data-line-index="${lineIndex}"]`);
+		const lineRect = line?.getBoundingClientRect();
+		const rootRect = root.getBoundingClientRect();
 		const width = Math.min(340, Math.max(190, root.clientWidth - 16));
-		const left = Math.max(8, Math.min(8 + column * fontSize * 0.61, root.clientWidth - width - 8));
+		const caretLeft = line && lineRect
+			? lineRect.left + (measureCaretX(line, sourceColumn) ?? 0) - rootRect.left
+			: 8;
+		const left = Math.max(8, Math.min(caretLeft, root.clientWidth - width - 8));
 		const popupHeight = Math.min(280, Math.max(48, (completion?.items.length ?? 1) * 52 + 8));
-		const lineTop = verticalPadding + lineIndex * lineHeight - (viewport?.scrollTop ?? 0);
-		const top = lineTop + lineHeight + popupHeight > (viewport?.clientHeight ?? root.clientHeight)
+		const lineTop = lineRect ? lineRect.top - rootRect.top : verticalPadding + lineIndex * lineHeight;
+		const lineBottom = lineRect ? lineRect.bottom - rootRect.top : lineTop + lineHeight;
+		const top = lineBottom + popupHeight > root.clientHeight
 			? Math.max(8, lineTop - popupHeight)
-			: lineTop + lineHeight;
+			: lineBottom;
 		completionPosition = { left, top, width };
 	}
 
@@ -898,7 +912,7 @@
 	class="source-editor"
 	role="group"
 	aria-label={props.label ?? studioMessage('editor.sourceLabel')}
-	title={props.editorSymbols?.length ? 'Ctrl/Cmd-click a reference to navigate; F2 renames the symbol at the caret' : undefined}
+	title={props.editorSymbols?.length ? studioMessage('editor.symbolNavigationHint') : undefined}
 	style={`--editor-font-size:${fontSize}px;--editor-line-height:${lineHeight}px;--editor-indent-size:${preferences.indentSize};--editor-gutter-width:${preferences.lineNumbers ? '3.5rem' : '0px'}`}
 	data-diagnostic-presentation={preferences.diagnosticPresentation}
 	onpointerleave={clearTooltip}

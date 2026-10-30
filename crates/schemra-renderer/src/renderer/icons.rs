@@ -31,6 +31,20 @@ pub(super) fn write_node_icon(
     )
     .expect("writing to a String cannot fail");
 
+    if name.starts_with("data:image/") && is_safe_image_source(name) {
+        write!(
+            svg,
+            "<image x=\"{}\" y=\"{}\" width=\"24\" height=\"24\" preserveAspectRatio=\"xMidYMid meet\" href=\"",
+            number(x + 3.0),
+            number(y + 3.0)
+        )
+        .expect("writing to a String cannot fail");
+        write_xml(svg, name);
+        svg.push_str("\"/>");
+        svg.push_str("</g>");
+        return;
+    }
+
     if icon_pack == SceneIconPack::Solid {
         write_solid_icon(svg, name, x + 3.0, y + 3.0, foreground, background);
     } else {

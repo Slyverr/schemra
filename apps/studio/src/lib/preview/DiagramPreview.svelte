@@ -7,8 +7,11 @@
 		createDiagramPngBlob,
 		createDiagramSvgBlob,
 		diagramExportFileName,
-		downloadDiagramBlob
+		downloadDiagramBlob,
+		serializeDiagramSvg,
+		type DiagramExportFormat
 	} from './export';
+	import { printDiagramPdf } from './pdf-export.js';
 	import AnimationExportDialog, { type AnimationExportSettings } from './AnimationExportDialog.svelte';
 	import { cancelActiveAnimationExport, exportAnimation } from './animation-export.js';
 	import { applyPreviewFrame, createAnimationFrameRenderer, type AnimationFrameRenderer } from './frame-renderer.js';
@@ -54,7 +57,7 @@
 	let timeMs = $state(0);
 	let zoomPercent = $state(100);
 	let pan = $state({ x: 0, y: 0 });
-	let exporting = $state<'svg' | 'png' | null>(null);
+	let exporting = $state<DiagramExportFormat | null>(null);
 	let exportError = $state<string | null>(null);
 	let animationExportOpen = $state(false);
 	let animationExportBusy = $state(false);
@@ -357,7 +360,7 @@
 		animationExportOpen = true;
 	}
 
-	export async function exportDiagram(format: 'svg' | 'png') {
+	export async function exportDiagram(format: DiagramExportFormat) {
 		const root = svgHost?.querySelector('svg');
 		if (!root) {
 			exportError = studioMessage('preview.exportDiagramNotReady');
@@ -367,9 +370,13 @@
 		exportError = null;
 		try {
 			const name = scenario?.title || root.querySelector('title')?.textContent?.trim() || props.visualId || 'Schemra diagram';
-			const fileName = diagramExportFileName(name, format);
-			const blob = format === 'svg' ? createDiagramSvgBlob(root) : await createDiagramPngBlob(root);
-			downloadDiagramBlob(blob, fileName);
+			if (format === 'pdf') {
+				await printDiagramPdf(serializeDiagramSvg(root), name);
+			} else {
+				const fileName = diagramExportFileName(name, format);
+				const blob = format === 'svg' ? createDiagramSvgBlob(root) : await createDiagramPngBlob(root);
+				downloadDiagramBlob(blob, fileName);
+			}
 		} catch (error) {
 			exportError = error instanceof Error ? error.message : studioMessage('preview.exportDiagramFailed');
 		} finally {

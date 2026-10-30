@@ -12,6 +12,9 @@ export interface SvgMarkupAdapter {
 	sanitize(markup: string): string;
 }
 
+export type DiagramExportFormat = 'svg' | 'png' | 'pdf';
+export type DiagramDownloadFormat = Exclude<DiagramExportFormat, 'pdf'>;
+
 export interface DiagramPngOptions {
 	scale?: number;
 }
@@ -93,7 +96,7 @@ export async function createDiagramPngBlob(
 }
 
 /** Build a safe, predictable filename for a diagram export. */
-export function diagramExportFileName(name: string, format: 'svg' | 'png'): string {
+export function diagramExportFileName(name: string, format: DiagramDownloadFormat): string {
 	const base = name
 		.trim()
 		.replace(/\.(?:svg|png)$/i, '')

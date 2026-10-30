@@ -3,6 +3,7 @@
 	import { Download, FileCode2, FolderOpen, LoaderCircle, Save } from '@lucide/svelte';
 	import { studioMessage } from '../i18n/messages.js';
 	import { Button } from '../components/ui/button/index.js';
+	import type { DiagramExportFormat } from '../preview/export.js';
 	import StudioDropdownContent from './StudioDropdownContent.svelte';
 
 	interface Props {
@@ -12,7 +13,7 @@
 		sourceOperation: 'opening' | 'saving' | null;
 		onOpenSource: () => void;
 		onSaveSource: () => void;
-		onExportDiagram: (format: 'svg' | 'png') => void;
+		onExportDiagram: (format: DiagramExportFormat) => void;
 	}
 
 	let {
@@ -51,6 +52,7 @@
 		<DropdownMenu.Group>
 			<DropdownMenu.Item disabled={!canExportDiagram} onSelect={() => onExportDiagram('svg')} class="flex min-h-8 items-center gap-2 rounded-[.35rem] px-[.45rem] py-[.35rem] font-[inherit] text-[.75rem] text-foreground outline-none hover:bg-accent hover:text-accent-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground aria-disabled:opacity-50 [&>svg]:shrink-0"><Download size={15} aria-hidden="true" />{studioMessage('file.exportSvg')}</DropdownMenu.Item>
 			<DropdownMenu.Item disabled={!canExportDiagram} onSelect={() => onExportDiagram('png')} class="flex min-h-8 items-center gap-2 rounded-[.35rem] px-[.45rem] py-[.35rem] font-[inherit] text-[.75rem] text-foreground outline-none hover:bg-accent hover:text-accent-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground aria-disabled:opacity-50 [&>svg]:shrink-0"><Download size={15} aria-hidden="true" />{studioMessage('file.exportPng')}</DropdownMenu.Item>
+			<DropdownMenu.Item disabled={!canExportDiagram} onSelect={() => onExportDiagram('pdf')} class="flex min-h-8 items-center gap-2 rounded-[.35rem] px-[.45rem] py-[.35rem] font-[inherit] text-[.75rem] text-foreground outline-none hover:bg-accent hover:text-accent-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground aria-disabled:opacity-50 [&>svg]:shrink-0"><Download size={15} aria-hidden="true" />{studioMessage('file.exportPdf')}</DropdownMenu.Item>
 		</DropdownMenu.Group>
 	</StudioDropdownContent>
 	</DropdownMenu.Portal>

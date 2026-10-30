@@ -64,6 +64,24 @@ fn renders_a_builtin_node_icon_with_the_selected_icon_pack() {
 }
 
 #[test]
+fn renders_safe_raster_data_urls_as_node_icons() {
+    let icon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j5nQAAAAASUVORK5CYII=";
+    let svg = render_svg(&scene(node(Some(icon)))).unwrap();
+
+    assert!(svg.contains("preserveAspectRatio=\"xMidYMid meet\""));
+    assert!(svg.contains(&format!("href=\"{icon}\"/>")));
+}
+
+#[test]
+fn does_not_embed_unsafe_raster_data_urls_as_node_icons() {
+    let svg_data = "data:image/svg+xml;base64,PHN2Zz48c2NyaXB0Lz48L3N2Zz4=";
+    let svg = render_svg(&scene(node(Some(svg_data)))).unwrap();
+
+    assert!(!svg.contains(&format!("href=\"{svg_data}\"")));
+    assert!(svg.contains("<circle cx=\"12\" cy=\"12\" r=\"8\"/>"));
+}
+
+#[test]
 fn renders_custom_variant_colors_on_node_fill_stroke_and_text() {
     let mut visual = scene(node(None));
     visual.theme.variants.push(SceneThemeVariant {

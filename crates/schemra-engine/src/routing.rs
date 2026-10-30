@@ -8,10 +8,12 @@ use schemra_scene::{
 
 mod geometry;
 mod search;
+mod straight;
 
 pub(crate) use geometry::RouteGeometry;
 
 use geometry::{Side, center, direct_connector, natural_sides, side_anchor};
+use straight::{SharedTargetRequest, choose_direct_pair, choose_shared_target_face};
 
 #[cfg(test)]
 mod tests;
@@ -80,7 +82,17 @@ fn route_edges_with_mode(
     for index in &route_indices {
         let edge = &edges[*index];
         if edge.from == edge.to {
-            edges[*index].route_diagnostic = Some(unsupported_self_link_diagnostic());
+            let source_id = edge.from.clone();
+            let Some(source) = node_bounds.get(source_id.as_str()).copied() else {
+                edges[*index].route_diagnostic = Some(missing_node_diagnostic(edge, nodes));
+                continue;
+            };
+            let obstacles = nodes
+                .iter()
+                .filter(|node| node.id != source_id)
+                .map(|node| node.bounds)
+                .collect::<Vec<_>>();
+            route_self_link(&mut edges[*index], source, &obstacles, mode);
             continue;
         }
         let Some((natural_source, natural_target)) = natural.get(index).copied() else {
@@ -102,6 +114,91 @@ fn route_edges_with_mode(
         );
     }
 
+    let mut direct_choices = HashMap::with_capacity(route_indices.len());
+    if mode == RoutingMode::Straight {
+        let obstacles_by_edge = route_indices
+            .iter()
+            .filter_map(|index| {
+                let edge = edges.get(*index)?;
+                (edge.from != edge.to).then(|| {
+                    (
+                        *index,
+                        nodes
+                            .iter()
+                            .filter(|node| node.id != edge.from && node.id != edge.to)
+                            .map(|node| node.bounds)
+                            .collect::<Vec<_>>(),
+                    )
+                })
+            })
+            .collect::<HashMap<_, _>>();
+
+        let mut shared_targets = shared_target_sides.iter().collect::<Vec<_>>();
+        shared_targets.sort_by(|left, right| left.0.cmp(right.0));
+        for (target_id, preferred_target) in shared_targets {
+            let Some(target) = node_bounds.get(target_id.as_str()).copied() else {
+                continue;
+            };
+            let requests = route_indices
+                .iter()
+                .filter_map(|index| {
+                    let edge = edges.get(*index)?;
+                    if edge.to != *target_id || edge.from == edge.to {
+                        return None;
+                    }
+                    Some(SharedTargetRequest {
+                        index: *index,
+                        source: *node_bounds.get(edge.from.as_str())?,
+                        preferred_source: plans.get(index)?.source_side,
+                        obstacles: obstacles_by_edge.get(index)?,
+                    })
+                })
+                .collect::<Vec<_>>();
+            for (index, choice) in choose_shared_target_face(target, *preferred_target, &requests) {
+                plans.insert(
+                    index,
+                    EdgePlan {
+                        source_side: choice.source_side,
+                        target_side: choice.target_side,
+                    },
+                );
+                direct_choices.insert(index, choice);
+            }
+        }
+
+        for index in &route_indices {
+            if direct_choices.contains_key(index) {
+                continue;
+            }
+            let Some(edge) = edges.get(*index) else {
+                continue;
+            };
+            let (Some(plan), Some(source), Some(target), Some(obstacles)) = (
+                plans.get(index).copied(),
+                node_bounds.get(edge.from.as_str()).copied(),
+                node_bounds.get(edge.to.as_str()).copied(),
+                obstacles_by_edge.get(index),
+            ) else {
+                continue;
+            };
+            let choice = choose_direct_pair(
+                source,
+                target,
+                plan.source_side,
+                plan.target_side,
+                obstacles,
+            );
+            plans.insert(
+                *index,
+                EdgePlan {
+                    source_side: choice.source_side,
+                    target_side: choice.target_side,
+                },
+            );
+            direct_choices.insert(*index, choice);
+        }
+    }
+
     for index in &route_indices {
         let Some(edge) = edges.get(*index) else {
             continue;
@@ -115,15 +212,23 @@ fn route_edges_with_mode(
         };
         let start = side_anchor(source, plan.source_side);
         let end = side_anchor(target, plan.target_side);
-        let direct_path = vec![direct_connector(start, end)];
+        let direct_path = direct_choices.get(index).map_or_else(
+            || vec![direct_connector(start, end)],
+            |choice| choice.path.clone(),
+        );
         let obstacles = nodes
             .iter()
             .filter(|node| node.id != edge.from && node.id != edge.to)
             .map(|node| node.bounds)
             .collect::<Vec<_>>();
-        let direct_obstruction_count =
+        let actual_direct_obstruction_count =
             geometry::path_obstacle_intersections(&direct_path, &obstacles);
-        let path = if mode == RoutingMode::Auto && direct_obstruction_count > 0 {
+        let direct_candidate_clear = direct_choices
+            .get(index)
+            .map_or(actual_direct_obstruction_count == 0, |choice| {
+                choice.original_direct_clear
+            });
+        let path = if mode == RoutingMode::Auto && actual_direct_obstruction_count > 0 {
             search::orthogonal_route(start, end, &obstacles)
                 .map(|points| geometry::polyline_connectors(&points))
                 .filter(|path| !path.is_empty())
@@ -133,9 +238,13 @@ fn route_edges_with_mode(
         };
         let obstruction_count = geometry::path_obstacle_intersections(&path, &obstacles);
         let length = geometry::path_length(&path);
-        let geometric_lower_bound = geometry::path_length(&direct_path);
-        let selected_auto_route =
-            mode == RoutingMode::Auto && direct_obstruction_count > 0 && obstruction_count == 0;
+        let geometric_lower_bound = direct_choices.get(index).map_or_else(
+            || geometry::path_length(&direct_path),
+            |choice| choice.geometric_lower_bound,
+        );
+        let selected_auto_route = mode == RoutingMode::Auto
+            && actual_direct_obstruction_count > 0
+            && obstruction_count == 0;
         edges[*index].path = path;
         edges[*index].route_diagnostic = Some(SceneRouteDiagnostic {
             status: SceneRouteStatus::Routed,
@@ -145,12 +254,20 @@ fn route_edges_with_mode(
             target_port: plans
                 .get(index)
                 .map_or_else(String::new, |plan| plan.target_side.name().to_owned()),
-            candidates_considered: if mode == RoutingMode::Auto && direct_obstruction_count > 0 {
-                2
-            } else {
-                1
-            },
-            rejected_for_obstacles: usize::from(direct_obstruction_count > 0),
+            candidates_considered: direct_choices.get(index).map_or_else(
+                || {
+                    if mode == RoutingMode::Auto && actual_direct_obstruction_count > 0 {
+                        2
+                    } else {
+                        1
+                    }
+                },
+                |choice| choice.candidates_considered,
+            ),
+            rejected_for_obstacles: direct_choices.get(index).map_or_else(
+                || usize::from(actual_direct_obstruction_count > 0),
+                |choice| choice.rejected_for_obstacles,
+            ),
             rejected_for_route_conflicts: 0,
             obstacle_intersections: obstruction_count,
             route_conflicts: 0,
@@ -162,15 +279,17 @@ fn route_edges_with_mode(
             } else {
                 1.0
             },
-            direct_candidate_clear: direct_obstruction_count == 0,
+            direct_candidate_clear,
             selected_routing: if mode == RoutingMode::Auto {
                 "auto".into()
             } else {
                 "straight".into()
             },
-            selection_reason: if selected_auto_route {
+            selection_reason: if let Some(choice) = direct_choices.get(index) {
+                choice.selection_reason.clone()
+            } else if selected_auto_route {
                 "direct path was obstructed; selected a deterministic clear route".into()
-            } else if mode == RoutingMode::Auto && direct_obstruction_count == 0 {
+            } else if mode == RoutingMode::Auto && actual_direct_obstruction_count == 0 {
                 "direct path was clear".into()
             } else if mode == RoutingMode::Auto {
                 "no clear detour was found; retained the direct path".into()
@@ -181,7 +300,9 @@ fn route_edges_with_mode(
                 if mode == RoutingMode::Auto {
                     format!("The selected route intersects {obstruction_count} node(s).")
                 } else {
-                    format!("The direct connector passes beneath {obstruction_count} node(s); nodes render above links.")
+                    format!(
+                        "The selected straight connector intersects {obstruction_count} node(s)."
+                    )
                 }
             }),
         });
@@ -319,26 +440,73 @@ fn choose_reciprocal_orientation(
     }
 }
 
-fn unsupported_self_link_diagnostic() -> SceneRouteDiagnostic {
-    SceneRouteDiagnostic {
+fn route_self_link(edge: &mut SceneEdge, source: Rect, obstacles: &[Rect], mode: RoutingMode) {
+    let attempts = [32.0, 48.0, 72.0, 112.0, 176.0];
+    let mut candidate_rejections = Vec::new();
+    let mut minimum_intersections = usize::MAX;
+    let mut selected = None;
+
+    for (index, reach) in attempts.into_iter().enumerate() {
+        let path = geometry::self_loop_route(source, reach);
+        let intersections = geometry::path_obstacle_intersections(&path, obstacles);
+        minimum_intersections = minimum_intersections.min(intersections);
+        if intersections == 0 {
+            selected = Some((index + 1, path));
+            break;
+        }
+        candidate_rejections.push(format!(
+            "self-loop reach {reach} intersects {intersections} node(s)"
+        ));
+    }
+
+    if let Some((candidates_considered, path)) = selected {
+        let route_length = geometry::path_length(&path);
+        edge.path = path;
+        edge.route_diagnostic = Some(SceneRouteDiagnostic {
+            status: SceneRouteStatus::Routed,
+            source_port: "right".into(),
+            target_port: "right".into(),
+            candidates_considered,
+            rejected_for_obstacles: candidate_rejections.len(),
+            rejected_for_route_conflicts: 0,
+            obstacle_intersections: 0,
+            route_conflicts: 0,
+            candidate_rejections,
+            route_length,
+            geometric_lower_bound: 0.0,
+            detour_ratio: 1.0,
+            direct_candidate_clear: false,
+            selected_routing: routing_mode_name(mode).into(),
+            selection_reason: "selected the first obstacle-free self-loop".into(),
+            message: None,
+        });
+        return;
+    }
+
+    edge.route_diagnostic = Some(SceneRouteDiagnostic {
         status: SceneRouteStatus::Unroutable,
         source_port: "right".into(),
         target_port: "right".into(),
-        candidates_considered: 0,
-        rejected_for_obstacles: 0,
+        candidates_considered: attempts.len(),
+        rejected_for_obstacles: attempts.len(),
         rejected_for_route_conflicts: 0,
-        obstacle_intersections: 0,
+        obstacle_intersections: minimum_intersections,
         route_conflicts: 0,
-        candidate_rejections: vec![
-            "a self-link cannot be represented by a straight segment".into(),
-        ],
+        candidate_rejections,
         route_length: 0.0,
         geometric_lower_bound: 0.0,
         detour_ratio: 0.0,
         direct_candidate_clear: false,
-        selected_routing: "straight".into(),
-        selection_reason: "a loop needs non-straight geometry".into(),
-        message: Some("No non-zero straight route exists for a self-link.".into()),
+        selected_routing: routing_mode_name(mode).into(),
+        selection_reason: "all self-loop candidates intersected node obstacles".into(),
+        message: Some("No obstacle-free self-loop route was found.".into()),
+    });
+}
+
+fn routing_mode_name(mode: RoutingMode) -> &'static str {
+    match mode {
+        RoutingMode::Auto => "auto",
+        RoutingMode::Straight => "straight",
     }
 }
 

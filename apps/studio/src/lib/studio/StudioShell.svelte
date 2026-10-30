@@ -64,6 +64,7 @@ import LanguageReferenceDialog from './LanguageReferenceDialog.svelte';
 		type ResourceDialogState
 	} from './resource-actions.js';
 	import { studioBrandAssets } from './brand-assets.js';
+	import type { DiagramExportFormat } from '../preview/export.js';
 	import {
 		compileProject,
 		type CompileResult,
@@ -74,7 +75,7 @@ import LanguageReferenceDialog from './LanguageReferenceDialog.svelte';
 	import { readPreviewScene } from '../preview/model.js';
 
 	type WorkspacePanelsHandle = {
-		exportDiagram: (format: 'svg' | 'png') => Promise<void>;
+		exportDiagram: (format: DiagramExportFormat) => Promise<void>;
 		formatSource: () => Promise<'formatted' | 'unchanged' | 'stale'>;
 	};
 	type LastValidCompile = { projectId: string; sourcesKey: string; sources: ProjectSource[]; result: ProjectCompileResult };
@@ -237,6 +238,7 @@ import LanguageReferenceDialog from './LanguageReferenceDialog.svelte';
 		{ id: 'format-source', label: studioMessage('command.action.formatSource'), description: studioMessage('command.action.formatSourceDescription'), disabled: !workspace.initialized || !activeFile || sourceActionState.operation !== null, shortcut: studioMessage('command.shortcut.format'), icon: 'format' },
 		{ id: 'export-svg', label: studioMessage('command.action.exportSvg'), description: studioMessage('command.action.exportSvgDescription'), disabled: !currentProjectValid || !currentVisual?.output.svg, icon: 'export-diagram' },
 		{ id: 'export-png', label: studioMessage('command.action.exportPng'), description: studioMessage('command.action.exportPngDescription'), disabled: !currentProjectValid || !currentVisual?.output.svg, icon: 'export-diagram' },
+		{ id: 'export-pdf', label: studioMessage('command.action.exportPdf'), description: studioMessage('command.action.exportPdfDescription'), disabled: !currentProjectValid || !currentVisual?.output.svg, icon: 'export-diagram' },
 		{ id: 'export-project', label: studioMessage('command.action.exportProject'), description: studioMessage('command.action.exportProjectDescription'), disabled: !workspace.initialized || !activeProject, icon: 'export-project' },
 		{ id: 'import-project', label: studioMessage('command.action.importProject'), description: studioMessage('command.action.importProjectDescription'), disabled: !workspace.initialized, icon: 'import-project' },
 		{ id: 'open-settings', label: studioMessage('command.action.openSettings'), description: studioMessage('command.action.openSettingsDescription'), icon: 'settings' },
@@ -542,6 +544,7 @@ import LanguageReferenceDialog from './LanguageReferenceDialog.svelte';
 			case 'format-source': void formatActiveSource(); break;
 			case 'export-svg': void workspacePanels?.exportDiagram('svg'); break;
 			case 'export-png': void workspacePanels?.exportDiagram('png'); break;
+			case 'export-pdf': void workspacePanels?.exportDiagram('pdf'); break;
 			case 'export-project': sourceActions.exportProject(); break;
 			case 'import-project': importInput?.click(); break;
 			case 'open-settings': settingsOpen = true; break;

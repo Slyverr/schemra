@@ -1,7 +1,7 @@
-use schemra_engine::layout_visual;
+use schemra_engine::{SceneTimelineSampler, compile_timeline, layout_visual, render_svg};
 use schemra_ir::{
-    Direction, EdgeDirectionality, EdgeIr, GroupId, GroupIr, GroupLayout, NodeId, NodeIr,
-    SourceLocation, SourceSpan, VisualId, VisualIr,
+    ActionIr, Direction, EdgeDirectionality, EdgeIr, GroupId, GroupIr, GroupLayout, NodeId, NodeIr,
+    ScenarioId, ScenarioIr, SourceLocation, SourceSpan, TokenId, VisualId, VisualIr,
 };
 use schemra_scene::SceneRouteStatus;
 
@@ -126,6 +126,8 @@ fn direct_route_diagnostics_report_an_intermediate_node_obstruction() {
 
     assert_eq!(diagnostic.obstacle_intersections, 1);
     assert!(!diagnostic.direct_candidate_clear);
+    assert!(diagnostic.candidates_considered > 1);
+    assert!(diagnostic.selection_reason.contains("least obstructed"));
 }
 
 #[test]
@@ -438,15 +440,17 @@ fn six_client_service_diagram_keeps_shared_ports_and_reciprocal_routes_stable() 
         .collect::<Vec<_>>();
     assert_eq!(first.edges.len(), 10);
     assert_eq!(bot_routes.len(), 6);
-    assert!(bot_routes.iter().all(|route| {
-        let diagnostic = route.route_diagnostic.as_ref().unwrap();
-        diagnostic.status == SceneRouteStatus::Routed
-            && diagnostic.source_port == "right"
-            && diagnostic.target_port == "left"
-            && diagnostic.route_conflicts == 0
-            && route.path.len() == 1
-            && is_straight(&route.path[0])
-    }));
+    assert!(
+        bot_routes.iter().all(|route| {
+            let diagnostic = route.route_diagnostic.as_ref().unwrap();
+            diagnostic.status == SceneRouteStatus::Routed
+                && diagnostic.target_port == "left"
+                && diagnostic.route_conflicts == 0
+                && route.path.len() == 1
+                && is_straight(&route.path[0])
+        }),
+        "bot fan paths should retain the shared target face and direct geometry: {bot_routes:#?}"
+    );
     for (upper, lower) in [("bot_1", "bot_4"), ("bot_2", "bot_5"), ("bot_3", "bot_6")] {
         let route_length = |source: &str| {
             bot_routes
@@ -541,17 +545,96 @@ fn reciprocal_links_share_and_reverse_one_canonical_route() {
 }
 
 #[test]
-fn self_link_does_not_create_a_zero_length_dot() {
+fn self_link_is_a_visible_loop_with_canvas_padding() {
     let mut model = visual(Direction::LeftToRight);
     model.nodes.push(node("worker", None));
     model.edges.push(edge("worker", "worker"));
     let scene = layout_visual(&model);
+    let link = &scene.edges[0];
 
-    assert!(scene.edges[0].path.is_empty());
+    assert_eq!(link.path.len(), 3);
     assert_eq!(
-        scene.edges[0].route_diagnostic.as_ref().unwrap().status,
-        SceneRouteStatus::Unroutable
+        link.path.first().unwrap().start,
+        link.path.last().unwrap().end
     );
+    assert!(link.path.iter().all(|segment| {
+        [
+            segment.start,
+            segment.control1,
+            segment.control2,
+            segment.end,
+        ]
+        .into_iter()
+        .all(|point| point.x.is_finite() && point.y.is_finite())
+    }));
+    let diagnostic = link.route_diagnostic.as_ref().unwrap();
+    assert_eq!(diagnostic.status, SceneRouteStatus::Routed);
+    assert_eq!(diagnostic.source_port, "right");
+    assert_eq!(diagnostic.target_port, "right");
+    assert!(diagnostic.route_length > 0.0);
+
+    for segment in &link.path {
+        for step in 0..=20 {
+            let point = evaluate(*segment, step as f32 / 20.0);
+            assert!(point.x >= 48.0 - 0.01 && point.y >= 48.0 - 0.01);
+            assert!(point.x <= scene.width - 48.0 + 0.01);
+            assert!(point.y <= scene.height - 48.0 + 0.01);
+        }
+    }
+
+    let svg = render_svg(&scene).unwrap();
+    assert!(svg.contains("data-from=\"worker\" data-to=\"worker\""));
+    assert!(svg.contains("data-arrow-start=\"false\" data-arrow-end=\"true\""));
+    assert!(svg.contains("class=\"schemra-edge-path\""));
+}
+
+#[test]
+fn self_link_playback_follows_the_loop_and_consumes_the_marker_at_arrival() {
+    let mut model = visual(Direction::LeftToRight);
+    model.nodes.push(node("worker", None));
+    model.edges.push(edge("worker", "worker"));
+    let scene = layout_visual(&model);
+    let span = span();
+    let timeline = compile_timeline(&ScenarioIr {
+        id: ScenarioId("self-loop".into()),
+        id_span: span,
+        visual: VisualId("routing".into()),
+        visual_span: span,
+        tokens: Vec::new(),
+        actions: vec![ActionIr::Move {
+            token: TokenId("request".into()),
+            token_span: span,
+            from: NodeId("worker".into()),
+            from_span: span,
+            to: NodeId("worker".into()),
+            to_span: span,
+            duration_ms: Some(1_000),
+            span,
+        }],
+        span,
+    })
+    .unwrap();
+    let sampler = SceneTimelineSampler::new(&scene, &timeline);
+    let marker = sampler.sample(500).tokens;
+    let start = scene.edges[0].path[0].start;
+
+    assert_eq!(marker.len(), 1);
+    assert!((marker[0].x - start.x).hypot(marker[0].y - start.y) > 1.0);
+    assert!(sampler.sample(1_000).tokens.is_empty());
+}
+
+fn evaluate(segment: schemra_scene::CubicBezier, t: f32) -> schemra_scene::Point {
+    let inverse = 1.0 - t;
+    schemra_scene::Point {
+        x: inverse.powi(3) * segment.start.x
+            + 3.0 * inverse.powi(2) * t * segment.control1.x
+            + 3.0 * inverse * t.powi(2) * segment.control2.x
+            + t.powi(3) * segment.end.x,
+        y: inverse.powi(3) * segment.start.y
+            + 3.0 * inverse.powi(2) * t * segment.control1.y
+            + 3.0 * inverse * t.powi(2) * segment.control2.y
+            + t.powi(3) * segment.end.y,
+    }
 }
 
 fn is_straight(segment: &schemra_scene::CubicBezier) -> bool {

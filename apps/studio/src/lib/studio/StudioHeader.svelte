@@ -7,6 +7,7 @@
 	import MobileResourceBrowser from './MobileResourceBrowser.svelte';
 	import ProjectPicker from './ProjectPicker.svelte';
 	import type { SidebarResource, SidebarVisual } from './project-sidebar.js';
+	import type { DiagramExportFormat } from '../preview/export.js';
 
 	type ProjectOption = { id: string; name: string; files: readonly unknown[] };
 	type CompileStatus = 'compiling' | 'error' | 'ready' | 'attention';
@@ -38,7 +39,7 @@
 		onOpenSettings: () => void;
 		onOpenSource: () => void;
 		onSaveSource: () => void;
-		onExportDiagram: (format: 'svg' | 'png') => void;
+		onExportDiagram: (format: DiagramExportFormat) => void;
 	}
 
 	let {

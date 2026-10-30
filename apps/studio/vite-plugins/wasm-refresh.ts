@@ -28,9 +28,19 @@ function terminateProcessTree(child: ChildProcess): void {
 }
 
 export function wasmRefreshPlugin(studioRoot: string, workspaceRoot: string): Plugin {
+	const generatedFiles = [
+		resolve(studioRoot, 'src/lib/generated/schemra_wasm.js'),
+		resolve(studioRoot, 'src/lib/generated/schemra_wasm_bg.wasm')
+	];
+	const generatedFileSet = new Set(generatedFiles);
+
 	return {
 		name: 'schemra-wasm-refresh',
 		apply: 'serve',
+		handleHotUpdate({ file }) {
+			// Rust builds replace these files one at a time; reload only after both are ready.
+			if (generatedFileSet.has(resolve(file))) return [];
+		},
 		configureServer(server: ViteDevServer) {
 			const watchedPaths = [
 				resolve(workspaceRoot, 'Cargo.toml'),
@@ -83,6 +93,12 @@ export function wasmRefreshPlugin(studioRoot: string, workspaceRoot: string): Pl
 							server.config.logger.info(
 								`[schemra-wasm] build completed in ${((Date.now() - startedAt) / 1000).toFixed(1)}s; reloading browser`
 							);
+							const timestamp = Date.now();
+							for (const file of generatedFiles) {
+								for (const module of server.moduleGraph.getModulesByFile(file) ?? []) {
+									server.moduleGraph.invalidateModule(module, undefined, timestamp, true);
+								}
+							}
 							server.ws.send({ type: 'full-reload' });
 						} else {
 							const details = [spawnError?.message, stderr.trim(), stdout.trim()]

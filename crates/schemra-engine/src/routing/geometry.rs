@@ -270,6 +270,56 @@ pub(super) fn side_anchor(rect: Rect, side: Side) -> Point {
     }
 }
 
+pub(super) fn self_loop_route(bounds: Rect, reach: f32) -> Vec<CubicBezier> {
+    let start = side_anchor(bounds, Side::Right);
+    let above = Point {
+        x: start.x + reach,
+        y: bounds.y - reach,
+    };
+    let below = Point {
+        x: start.x + reach,
+        y: bounds.y + bounds.height + reach,
+    };
+    vec![
+        CubicBezier {
+            start,
+            control1: Point {
+                x: start.x + reach,
+                y: start.y,
+            },
+            control2: Point {
+                x: above.x,
+                y: above.y + reach,
+            },
+            end: above,
+        },
+        CubicBezier {
+            start: above,
+            control1: Point {
+                x: above.x + reach,
+                y: above.y - reach,
+            },
+            control2: Point {
+                x: below.x + reach,
+                y: below.y + reach,
+            },
+            end: below,
+        },
+        CubicBezier {
+            start: below,
+            control1: Point {
+                x: below.x,
+                y: below.y - reach,
+            },
+            control2: Point {
+                x: start.x + reach,
+                y: start.y,
+            },
+            end: start,
+        },
+    ]
+}
+
 pub(super) fn direct_connector(start: Point, end: Point) -> CubicBezier {
     CubicBezier {
         start,

@@ -9,6 +9,8 @@ use schemra_scene::{
     SceneStyle, SceneTextAlign,
 };
 
+mod route_bounds;
+
 const NODE_WIDTH: f32 = 252.0;
 const NODE_GAP: f32 = 64.0;
 const GROUP_NODE_GAP: f32 = 88.0;
@@ -179,12 +181,12 @@ pub fn layout_visual(visual: &VisualIr) -> Scene {
         }
     }
     positioned_nodes.sort_by_key(|(index, _)| *index);
-    let nodes = positioned_nodes
+    let mut nodes = positioned_nodes
         .into_iter()
         .map(|(_, node)| node)
         .collect::<Vec<_>>();
 
-    let groups = visual
+    let mut groups = visual
         .groups
         .iter()
         .filter_map(|group| {
@@ -220,34 +222,14 @@ pub fn layout_visual(visual: &VisualIr) -> Scene {
         })
         .collect::<Vec<_>>();
     crate::routing::route_edges(&mut edges, &nodes, flow_direction(visual.direction));
-
-    let max_x = nodes
-        .iter()
-        .map(|node| node.bounds.x + node.bounds.width)
-        .chain(
-            groups
-                .iter()
-                .map(|group| group.bounds.x + group.bounds.width),
-        )
-        .reduce(f32::max)
-        .unwrap_or(CANVAS_PADDING);
-    let max_y = nodes
-        .iter()
-        .map(|node| node.bounds.y + node.bounds.height)
-        .chain(
-            groups
-                .iter()
-                .map(|group| group.bounds.y + group.bounds.height),
-        )
-        .reduce(f32::max)
-        .unwrap_or(CANVAS_PADDING);
+    let (width, height) = route_bounds::fit_scene(&mut nodes, &mut groups, &mut edges, rank_extent);
 
     Scene {
         title: visual.title.clone(),
         direction: flow_direction(visual.direction),
         theme: Default::default(),
-        width: (max_x + CANVAS_PADDING).max(rank_extent + CANVAS_PADDING * 2.0),
-        height: max_y + CANVAS_PADDING,
+        width,
+        height,
         groups,
         nodes,
         texts: Vec::new(),
