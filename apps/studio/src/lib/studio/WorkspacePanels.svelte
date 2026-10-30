@@ -76,7 +76,7 @@ import { DEFAULT_EDITOR_PREFERENCES, EDITOR_ZOOM_LEVELS, type EditorZoom } from 
 	aria-labelledby={editorFileId ? `workspace-tab-${editorFileId}` : undefined}
 >
 	<div
-		class="flex min-h-0 min-w-0 flex-col overflow-hidden border-b border-border max-[1023px]:min-h-52 lg:border-r lg:border-b-0"
+		class="flex min-h-0 min-w-0 flex-col overflow-hidden max-[1023px]:min-h-52"
 		class:hidden={focusedPane === 'preview'}
 		style={`flex: ${focusedPane === 'editor' ? 1 : focusedPane ? 0 : editorPaneRatio} 1 0%;`}
 	>
@@ -179,14 +179,14 @@ import { DEFAULT_EDITOR_PREFERENCES, EDITOR_ZOOM_LEVELS, type EditorZoom } from 
 	>
 		<span
 			class={paneLayoutWide
-				? 'h-full w-px bg-border transition-colors group-hover:bg-primary/50 group-focus-visible:bg-primary'
-				: 'h-px w-full bg-border transition-colors group-hover:bg-primary/50 group-focus-visible:bg-primary'}
+				? 'h-full w-px bg-border/50 transition-colors group-hover:bg-primary/50 group-focus-visible:bg-primary'
+				: 'h-px w-full bg-border/50 transition-colors group-hover:bg-primary/50 group-focus-visible:bg-primary'}
 			aria-hidden="true"
 		></span>
 		{#if paneLayoutWide}
-			<GripVertical class="pointer-events-none absolute size-4 rounded-sm bg-background text-muted-foreground opacity-40 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden="true" />
+			<GripVertical class="pointer-events-none absolute size-4 rounded-sm bg-background text-muted-foreground opacity-30 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden="true" />
 		{:else}
-			<GripHorizontal class="pointer-events-none absolute size-4 rounded-sm bg-background text-muted-foreground opacity-40 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden="true" />
+			<GripHorizontal class="pointer-events-none absolute size-4 rounded-sm bg-background text-muted-foreground opacity-30 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden="true" />
 		{/if}
 	</div>
 

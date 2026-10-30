@@ -1,4 +1,4 @@
-use schemra_engine::SceneGeometrySampler;
+use schemra_engine::{SceneGeometrySampler, TimelineSampler};
 use schemra_ir::Timeline;
 use schemra_scene::Scene;
 
@@ -7,7 +7,8 @@ use crate::compilation;
 /// Reusable playback sampler compiled from one project visual and scenario.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
 pub struct ScenarioSampler {
-    timeline: Timeline,
+    timeline: TimelineSampler,
+    duration_ms: u32,
     geometry: SceneGeometrySampler,
 }
 
@@ -27,19 +28,26 @@ impl ScenarioSampler {
     /// Returns the total scenario duration in milliseconds.
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen(js_name = durationMs))]
     pub fn duration_ms(&self) -> u32 {
-        self.timeline.duration_ms as u32
+        self.duration_ms
     }
 
     /// Samples markers, link progress, and node highlights at the requested time.
     pub fn sample(&self, time_ms: u32) -> String {
-        serde_json::to_string(&self.geometry.sample(&self.timeline, u64::from(time_ms)))
+        let frame = self.timeline.sample(u64::from(time_ms));
+        serde_json::to_string(&self.geometry.sample_frame(frame))
             .unwrap_or_else(|_| "null".to_owned())
     }
 }
 
 impl ScenarioSampler {
     fn from_scene_and_timeline(scene: Scene, timeline: Timeline) -> Self {
+        let duration_ms = timeline.duration_ms as u32;
+        let timeline = TimelineSampler::new(timeline);
         let geometry = SceneGeometrySampler::new(&scene);
-        Self { timeline, geometry }
+        Self {
+            timeline,
+            duration_ms,
+            geometry,
+        }
     }
 }

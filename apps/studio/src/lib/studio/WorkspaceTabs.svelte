@@ -97,31 +97,31 @@
 			{#each tabs as tab, index (tab.id)}
 				{@const selected = tab.id === activeTabId}
 				{@const kindLabel = tab.displayKind === 'visual' ? 'sidebar.resourceKindVisual' : tab.displayKind === 'scenario' ? 'sidebar.resourceKindScenario' : tab.displayKind === 'component' ? 'sidebar.resourceKindComponent' : 'sidebar.resourceKindSource'}
+				{@const tabColorClass = tab.hasErrors ? 'text-destructive' : tab.unsaved ? 'text-[var(--warning)]' : selected ? 'text-primary' : 'text-muted-foreground'}
 				<ResourceContextMenu onRename={tab.rename} onRemove={tab.remove} renameDisabled={tab.renameDisabled} removeDisabled={tab.removeDisabled}>
 					<Button
 						id={`workspace-tab-${tab.id}`}
 						variant="ghost"
-						class={`relative mb-[-1px] h-9 max-w-[19rem] min-w-max shrink-0 items-center gap-2 rounded-t-[.4rem] rounded-b-none border border-transparent px-[.78rem] text-[.77rem] font-normal shadow-none hover:border-border/60 hover:bg-background/70 hover:text-foreground disabled:cursor-wait disabled:opacity-100 max-[700px]:px-[.55rem] max-[700px]:text-[.7rem] max-[700px]:[&>svg]:size-[.85rem] ${selected ? 'z-[1] border-border border-b-background bg-background text-foreground shadow-[0_-0.125rem_0.25rem_rgb(15_35_65_/_4%)] hover:bg-background' : 'text-muted-foreground'} ${tab.hasErrors ? 'text-destructive' : ''}`}
+						class={`relative mb-[-1px] h-9 max-w-[19rem] min-w-max shrink-0 items-center gap-2 rounded-t-[.4rem] rounded-b-none border border-transparent px-[.78rem] text-[.77rem] font-normal shadow-none hover:border-border/60 hover:bg-background/70 hover:text-current disabled:cursor-wait disabled:opacity-100 max-[700px]:px-[.55rem] max-[700px]:text-[.7rem] max-[700px]:[&>svg]:size-[.85rem] ${selected ? 'z-[1] border-border border-b-background bg-background shadow-[0_-0.125rem_0.25rem_rgb(15_35_65_/_4%)] hover:bg-background' : ''} ${tabColorClass}`}
 						type="button"
 						tabindex={selected ? 0 : -1}
 						disabled={!initialized}
 						role="tab"
 						aria-selected={selected}
 						aria-controls="project-file-panel"
-						aria-label={tab.hasErrors ? studioMessage('tabs.hasErrors', { name: tab.title }) : `${studioMessage(kindLabel)}: ${tab.title}`}
+						aria-label={tab.hasErrors ? studioMessage('tabs.hasErrors', { name: tab.title }) : `${studioMessage(kindLabel)}: ${tab.title}${tab.unsaved ? `, ${studioMessage('tabs.unsavedState')}` : ''}`}
 						aria-haspopup="menu"
 						aria-keyshortcuts="Shift+F10"
 						title={tab.hasErrors ? `${tab.path} — ${studioMessage('tabs.hasErrors', { name: tab.title })}` : tab.path}
 						onclick={() => onSelect(tab.id)}
 						onkeydown={(event) => handleTabKeydown(event, index)}
 					>
-						{#if tab.hasErrors}<AlertCircle size={15} class="size-[15px]" aria-hidden="true" />
-						{:else if tab.displayKind === 'visual'}<Workflow size={15} class="size-[15px]" aria-hidden="true" />
-						{:else if tab.displayKind === 'scenario'}<Play size={15} class="size-[15px]" aria-hidden="true" />
-						{:else if tab.displayKind === 'component'}<Puzzle size={15} class="size-[15px]" aria-hidden="true" />
-						{:else}<FileCode2 size={15} class="size-[15px]" aria-hidden="true" />{/if}
-						<span class="min-w-0 max-w-40 overflow-hidden text-ellipsis whitespace-nowrap">{tab.title}</span>
-						{#if tab.unsaved}<span class="size-[.38rem] shrink-0 rounded-full bg-primary" aria-label={studioMessage('tabs.unsavedChanges', { name: tab.title })}></span>{/if}
+						{#if tab.hasErrors}<AlertCircle size={15} class={`size-[15px] ${tabColorClass}`} aria-hidden="true" />
+						{:else if tab.displayKind === 'visual'}<Workflow size={15} class={`size-[15px] ${tabColorClass}`} aria-hidden="true" />
+						{:else if tab.displayKind === 'scenario'}<Play size={15} class={`size-[15px] ${tabColorClass}`} aria-hidden="true" />
+						{:else if tab.displayKind === 'component'}<Puzzle size={15} class={`size-[15px] ${tabColorClass}`} aria-hidden="true" />
+						{:else}<FileCode2 size={15} class={`size-[15px] ${tabColorClass}`} aria-hidden="true" />{/if}
+						<span class={`min-w-0 max-w-40 overflow-hidden text-ellipsis whitespace-nowrap ${tabColorClass}`}>{tab.title}</span>
 					</Button>
 				</ResourceContextMenu>
 			{/each}

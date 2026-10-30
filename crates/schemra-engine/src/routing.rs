@@ -12,7 +12,7 @@ mod straight;
 
 pub(crate) use geometry::RouteGeometry;
 
-use geometry::{Side, center, direct_connector, natural_sides, side_anchor};
+use geometry::{Side, center, direct_connector, natural_sides, paths_conflict, side_anchor};
 use straight::{SharedTargetRequest, choose_direct_pair, choose_shared_target_face};
 
 #[cfg(test)]
@@ -77,7 +77,7 @@ fn route_edges_with_mode(
             Some((*index, natural_sides(source, target, direction)))
         })
         .collect::<HashMap<_, _>>();
-    let shared_target_sides = shared_target_sides(&edges, &route_indices, &node_bounds, direction);
+    let shared_target_sides = shared_target_sides(edges, &route_indices, &node_bounds, direction);
     let mut plans = HashMap::with_capacity(route_indices.len());
     for index in &route_indices {
         let edge = &edges[*index];
@@ -166,7 +166,37 @@ fn route_edges_with_mode(
             }
         }
 
-        for index in &route_indices {
+        let mut direct_order = route_indices
+            .iter()
+            .copied()
+            .filter(|index| {
+                edges.get(*index).is_some_and(|edge| {
+                    edge.from != edge.to
+                        && !shared_target_sides.contains_key(edge.to.as_str())
+                        && node_bounds.contains_key(edge.from.as_str())
+                        && node_bounds.contains_key(edge.to.as_str())
+                        && !direct_choices.contains_key(index)
+                })
+            })
+            .collect::<Vec<_>>();
+        direct_order.sort_by(|left, right| {
+            let left_edge = &edges[*left];
+            let right_edge = &edges[*right];
+            let left_source = center(node_bounds[left_edge.from.as_str()]);
+            let right_source = center(node_bounds[right_edge.from.as_str()]);
+            let left_target = center(node_bounds[left_edge.to.as_str()]);
+            let right_target = center(node_bounds[right_edge.to.as_str()]);
+            left_source
+                .x
+                .total_cmp(&right_source.x)
+                .then(left_source.y.total_cmp(&right_source.y))
+                .then(left_target.x.total_cmp(&right_target.x))
+                .then(left_target.y.total_cmp(&right_target.y))
+                .then(left_edge.from.cmp(&right_edge.from))
+                .then(left_edge.to.cmp(&right_edge.to))
+        });
+
+        for index in &direct_order {
             if direct_choices.contains_key(index) {
                 continue;
             }
@@ -181,12 +211,17 @@ fn route_edges_with_mode(
             ) else {
                 continue;
             };
+            let other_paths = direct_choices
+                .values()
+                .map(|choice| choice.path.as_slice())
+                .collect::<Vec<_>>();
             let choice = choose_direct_pair(
                 source,
                 target,
                 plan.source_side,
                 plan.target_side,
                 obstacles,
+                &other_paths,
             );
             plans.insert(
                 *index,
@@ -196,6 +231,45 @@ fn route_edges_with_mode(
                 },
             );
             direct_choices.insert(*index, choice);
+        }
+
+        // Reconsider each route against the complete set so earlier edges do
+        // not keep an arbitrary advantage from the first pass.
+        for _ in 0..2 {
+            for index in &direct_order {
+                let Some(edge) = edges.get(*index) else {
+                    continue;
+                };
+                let (Some(preferred), Some(source), Some(target), Some(obstacles)) = (
+                    natural.get(index).copied(),
+                    node_bounds.get(edge.from.as_str()).copied(),
+                    node_bounds.get(edge.to.as_str()).copied(),
+                    obstacles_by_edge.get(index),
+                ) else {
+                    continue;
+                };
+                let other_paths = direct_choices
+                    .iter()
+                    .filter(|(other_index, _)| **other_index != *index)
+                    .map(|(_, choice)| choice.path.as_slice())
+                    .collect::<Vec<_>>();
+                let choice = choose_direct_pair(
+                    source,
+                    target,
+                    preferred.0,
+                    preferred.1,
+                    obstacles,
+                    &other_paths,
+                );
+                plans.insert(
+                    *index,
+                    EdgePlan {
+                        source_side: choice.source_side,
+                        target_side: choice.target_side,
+                    },
+                );
+                direct_choices.insert(*index, choice);
+            }
         }
     }
 
@@ -268,7 +342,9 @@ fn route_edges_with_mode(
                 || usize::from(actual_direct_obstruction_count > 0),
                 |choice| choice.rejected_for_obstacles,
             ),
-            rejected_for_route_conflicts: 0,
+            rejected_for_route_conflicts: direct_choices
+                .get(index)
+                .map_or(0, |choice| choice.rejected_for_route_conflicts),
             obstacle_intersections: obstruction_count,
             route_conflicts: 0,
             candidate_rejections: Vec::new(),
@@ -523,16 +599,7 @@ fn mark_route_conflicts(edges: &mut [SceneEdge]) {
             {
                 continue;
             }
-            if edges[left].path.iter().any(|left_segment| {
-                edges[right].path.iter().any(|right_segment| {
-                    geometry::segments_conflict(
-                        left_segment.start,
-                        left_segment.end,
-                        right_segment.start,
-                        right_segment.end,
-                    )
-                })
-            }) {
+            if paths_conflict(&edges[left].path, &edges[right].path) {
                 conflicts[left] += 1;
                 conflicts[right] += 1;
             }

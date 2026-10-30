@@ -432,6 +432,19 @@ pub(super) fn segments_conflict(a: Point, b: Point, c: Point, d: Point) -> bool 
     (0.001..0.999).contains(&t) && (0.001..0.999).contains(&u)
 }
 
+pub(super) fn paths_conflict(left: &[CubicBezier], right: &[CubicBezier]) -> bool {
+    left.iter().any(|left_segment| {
+        right.iter().any(|right_segment| {
+            segments_conflict(
+                left_segment.start,
+                left_segment.end,
+                right_segment.start,
+                right_segment.end,
+            )
+        })
+    })
+}
+
 fn normalized(rect: Rect) -> Rect {
     let x1 = finite(rect.x);
     let y1 = finite(rect.y);

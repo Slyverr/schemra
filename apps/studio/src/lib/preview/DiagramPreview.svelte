@@ -242,9 +242,14 @@
 		playbackStartedAt = 0;
 	}
 
-	function seek(event: Event) {
-		playing = false;
-		timeMs = Number((event.currentTarget as HTMLInputElement).value);
+	function seek(nextTimeMs: number) {
+		timeMs = nextTimeMs;
+	}
+
+	function pauseOnTimelineInput(event: KeyboardEvent) {
+		if (['ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'End', 'Home', 'PageDown', 'PageUp'].includes(event.key)) {
+			playing = false;
+		}
 	}
 
 	function setZoom(value: number, anchor?: { x: number; y: number }) {
@@ -519,6 +524,8 @@
 			onToggle={togglePlayback}
 			onReset={resetPlayback}
 			onSeek={seek}
+			onTimelinePointerDown={() => (playing = false)}
+			onTimelineKeydown={pauseOnTimelineInput}
 		/>
 	{/if}
 	{#if playbackError}

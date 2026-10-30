@@ -5,7 +5,9 @@ use std::cmp::Ordering;
 use schemra_scene::{CubicBezier, Rect};
 
 use super::Side;
-use super::geometry::{direct_connector, path_length, path_obstacle_intersections, side_anchor};
+use super::geometry::{
+    direct_connector, path_length, path_obstacle_intersections, paths_conflict, side_anchor,
+};
 
 #[derive(Clone, Debug)]
 pub(super) struct DirectChoice {
@@ -15,6 +17,7 @@ pub(super) struct DirectChoice {
     pub(super) original_direct_clear: bool,
     pub(super) candidates_considered: usize,
     pub(super) rejected_for_obstacles: usize,
+    pub(super) rejected_for_route_conflicts: usize,
     pub(super) geometric_lower_bound: f32,
     pub(super) selection_reason: String,
 }
@@ -32,11 +35,23 @@ struct Candidate {
     target_side: Side,
     path: Vec<CubicBezier>,
     intersections: usize,
+    route_conflicts: usize,
     changed_source: bool,
     changed_target: bool,
     source_rank: usize,
     target_rank: usize,
     length: f32,
+}
+
+struct CandidateRequest<'obstacles, 'paths> {
+    source: Rect,
+    target: Rect,
+    source_side: Side,
+    target_side: Side,
+    obstacles: &'obstacles [Rect],
+    other_paths: &'obstacles [&'paths [CubicBezier]],
+    source_rank: usize,
+    target_rank: usize,
 }
 
 /// Selects one direct connector, preferring the natural pair unless it is blocked.
@@ -46,17 +61,19 @@ pub(super) fn choose_direct_pair(
     preferred_source: Side,
     preferred_target: Side,
     obstacles: &[Rect],
+    other_paths: &[&[CubicBezier]],
 ) -> DirectChoice {
-    let original = candidate(
+    let original = candidate(CandidateRequest {
         source,
         target,
-        preferred_source,
-        preferred_target,
+        source_side: preferred_source,
+        target_side: preferred_target,
         obstacles,
-        0,
-        0,
-    );
-    if original.intersections == 0 {
+        other_paths,
+        source_rank: 0,
+        target_rank: 0,
+    });
+    if original.intersections == 0 && original.route_conflicts == 0 {
         return DirectChoice {
             source_side: preferred_source,
             target_side: preferred_target,
@@ -64,6 +81,7 @@ pub(super) fn choose_direct_pair(
             original_direct_clear: true,
             candidates_considered: 1,
             rejected_for_obstacles: 0,
+            rejected_for_route_conflicts: 0,
             geometric_lower_bound: original.length,
             selection_reason: "the natural straight connector was clear".into(),
         };
@@ -73,18 +91,21 @@ pub(super) fn choose_direct_pair(
     let target_sides = ordered_sides(preferred_target);
     let mut best: Option<Candidate> = None;
     let mut rejected_for_obstacles = 0;
+    let mut rejected_for_route_conflicts = 0;
     for (target_rank, target_side) in target_sides.iter().copied().enumerate() {
         for (source_rank, source_side) in source_sides.iter().copied().enumerate() {
-            let next = candidate(
+            let next = candidate(CandidateRequest {
                 source,
                 target,
                 source_side,
                 target_side,
                 obstacles,
+                other_paths,
                 source_rank,
                 target_rank,
-            );
+            });
             rejected_for_obstacles += usize::from(next.intersections > 0);
+            rejected_for_route_conflicts += usize::from(next.route_conflicts > 0);
             if best
                 .as_ref()
                 .is_none_or(|current| compare_candidates(&next, current).is_lt())
@@ -94,7 +115,9 @@ pub(super) fn choose_direct_pair(
         }
     }
     let selected = best.expect("each node has four port faces");
-    let selection_reason = if selected.intersections == 0 {
+    let selection_reason = if original.route_conflicts > selected.route_conflicts {
+        "the natural straight connector crossed another route; selected a clearer direct connector"
+    } else if selected.intersections == 0 {
         "the natural connector was blocked; selected a clear straight connector from alternate ports"
     } else {
         "no obstacle-free port pair exists; selected the least obstructed straight connector"
@@ -106,6 +129,7 @@ pub(super) fn choose_direct_pair(
         original_direct_clear: false,
         candidates_considered: source_sides.len() * target_sides.len(),
         rejected_for_obstacles,
+        rejected_for_route_conflicts,
         geometric_lower_bound: original.length,
         selection_reason: selection_reason.into(),
     }
@@ -123,15 +147,16 @@ pub(super) fn choose_shared_target_face(
     let original = requests
         .iter()
         .map(|request| {
-            candidate(
-                request.source,
+            candidate(CandidateRequest {
+                source: request.source,
                 target,
-                request.preferred_source,
-                preferred_target,
-                request.obstacles,
-                0,
-                0,
-            )
+                source_side: request.preferred_source,
+                target_side: preferred_target,
+                obstacles: request.obstacles,
+                other_paths: &[],
+                source_rank: 0,
+                target_rank: 0,
+            })
         })
         .collect::<Vec<_>>();
     if original
@@ -151,6 +176,7 @@ pub(super) fn choose_shared_target_face(
                         original_direct_clear: true,
                         candidates_considered: 1,
                         rejected_for_obstacles: 0,
+                        rejected_for_route_conflicts: 0,
                         geometric_lower_bound: candidate.length,
                         selection_reason: "the shared target face has clear straight connectors"
                             .into(),
@@ -168,15 +194,16 @@ pub(super) fn choose_shared_target_face(
             let mut best: Option<Candidate> = None;
             let mut rejected_for_obstacles = 0;
             for (source_rank, source_side) in source_sides.iter().copied().enumerate() {
-                let next = candidate(
-                    request.source,
+                let next = candidate(CandidateRequest {
+                    source: request.source,
                     target,
                     source_side,
-                    preferred_target,
-                    request.obstacles,
+                    target_side: preferred_target,
+                    obstacles: request.obstacles,
+                    other_paths: &[],
                     source_rank,
-                    0,
-                );
+                    target_rank: 0,
+                });
                 rejected_for_obstacles += usize::from(next.intersections > 0);
                 if best
                     .as_ref()
@@ -202,6 +229,7 @@ pub(super) fn choose_shared_target_face(
                     original_direct_clear: original.intersections == 0,
                     candidates_considered: source_sides.len(),
                     rejected_for_obstacles,
+                    rejected_for_route_conflicts: 0,
                     geometric_lower_bound: original.length,
                     selection_reason: selection_reason.into(),
                 },
@@ -210,15 +238,17 @@ pub(super) fn choose_shared_target_face(
         .collect()
 }
 
-fn candidate(
-    source: Rect,
-    target: Rect,
-    source_side: Side,
-    target_side: Side,
-    obstacles: &[Rect],
-    source_rank: usize,
-    target_rank: usize,
-) -> Candidate {
+fn candidate(request: CandidateRequest<'_, '_>) -> Candidate {
+    let CandidateRequest {
+        source,
+        target,
+        source_side,
+        target_side,
+        obstacles,
+        other_paths,
+        source_rank,
+        target_rank,
+    } = request;
     let start = side_anchor(source, source_side);
     let end = side_anchor(target, target_side);
     let path = vec![direct_connector(start, end)];
@@ -226,6 +256,10 @@ fn candidate(
         source_side,
         target_side,
         intersections: path_obstacle_intersections(&path, obstacles),
+        route_conflicts: other_paths
+            .iter()
+            .filter(|other| paths_conflict(&path, other))
+            .count(),
         changed_source: source_rank > 0,
         changed_target: target_rank > 0,
         source_rank,
@@ -248,6 +282,7 @@ fn ordered_sides(preferred: Side) -> Vec<Side> {
 fn compare_candidates(left: &Candidate, right: &Candidate) -> Ordering {
     left.intersections
         .cmp(&right.intersections)
+        .then(left.route_conflicts.cmp(&right.route_conflicts))
         .then(left.changed_target.cmp(&right.changed_target))
         .then(left.changed_source.cmp(&right.changed_source))
         .then_with(|| left.length.total_cmp(&right.length))

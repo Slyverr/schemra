@@ -20,6 +20,11 @@
 	import type { SidebarResource, SidebarVisual } from './project-sidebar.js';
 	import ResourceContextMenu from './ResourceContextMenu.svelte';
 	import StudioDropdownContent from './StudioDropdownContent.svelte';
+	import {
+		dropdownGroupHeadingClass,
+		dropdownItemClass,
+		dropdownPanelClass
+	} from './menu-classes.js';
 	import type { ResourceTabKind, ResourceTabMenuPolicy } from './resource-tab-menu.js';
 
 	type SidebarResourceMenuPolicy = Pick<ResourceTabMenuPolicy, 'showRename' | 'renameDisabled' | 'removeDisabled'>;
@@ -220,7 +225,7 @@
 	id="project-resource-sidebar"
 	aria-label={studioMessage('sidebar.resources')}
 	class={[
-		'relative flex h-full min-h-0 shrink-0 flex-col overflow-visible border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] max-[767px]:hidden',
+		'relative flex h-full min-h-0 shrink-0 flex-col overflow-visible bg-sidebar text-sidebar-foreground transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] max-[767px]:hidden',
 		resizeStart !== null || reduceMotion ? 'transition-none' : ''
 	].filter(Boolean).join(' ')}
 	style:width="{collapsed ? COLLAPSED_WIDTH : width}px"
@@ -250,11 +255,11 @@
 					{/snippet}
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Portal>
-				<StudioDropdownContent side="right" align="start" sideOffset={6} class="grid max-h-[min(70vh,30rem)] w-[min(14rem,calc(100vw-4rem))] gap-[.15rem] overflow-auto rounded-[.55rem] border border-border bg-popover p-[.45rem] text-popover-foreground shadow-[0_.75rem_2rem_rgb(7_21_41_/_18%)] [&>[role=group]]:grid [&>[role=group]]:gap-[.1rem]">
+				<StudioDropdownContent side="right" align="start" sideOffset={6} class={`max-h-[min(70vh,30rem)] w-[min(14rem,calc(100vw-4rem))] overflow-auto rounded-[.55rem] ${dropdownPanelClass} [&>[role=group]]:grid [&>[role=group]]:gap-[.1rem]`}>
 					<DropdownMenu.Group>
-						<DropdownMenu.GroupHeading class="px-[.45rem] py-[.3rem] text-[.63rem] font-[650] tracking-[.06em] text-muted-foreground uppercase">{studioMessage('sidebar.visuals')}</DropdownMenu.GroupHeading>
+						<DropdownMenu.GroupHeading class={dropdownGroupHeadingClass}>{studioMessage('sidebar.visuals')}</DropdownMenu.GroupHeading>
 						{#each [...primaryVisuals, ...exampleVisuals] as visual (visual.id)}
-							<DropdownMenu.Item disabled={resourcesDisabled} onSelect={() => onSelectFile(visual.fileId)} class="flex min-h-8 items-center gap-2 rounded-[.35rem] px-[.45rem] py-[.35rem] font-[inherit] text-[.75rem] text-foreground outline-none hover:bg-accent hover:text-accent-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground aria-disabled:opacity-50 [&>svg:first-child]:size-[.95rem] [&>svg:first-child]:shrink-0 [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate">
+							<DropdownMenu.Item disabled={resourcesDisabled} onSelect={() => onSelectFile(visual.fileId)} class={`${dropdownItemClass} [&>svg:first-child]:size-[.95rem] [&>svg:first-child]:shrink-0 [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate`}>
 								<Workflow class="size-[.95rem] shrink-0" aria-hidden="true" />
 								<span>{visual.title}</span>
 								{#if activeVisualId === visual.id}<Check aria-hidden="true" class="size-[.85rem] shrink-0" />{/if}
@@ -264,7 +269,7 @@
 						{/each}
 					</DropdownMenu.Group>
 					<DropdownMenu.Separator class="my-1 h-px bg-border" />
-					<DropdownMenu.Item disabled={resourcesDisabled || creationDisabled} onSelect={onCreateVisual} class="flex min-h-8 items-center gap-2 rounded-[.35rem] px-[.45rem] py-[.35rem] font-[inherit] text-[.75rem] text-foreground outline-none hover:bg-accent hover:text-accent-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground aria-disabled:opacity-50 [&>svg:first-child]:size-[.95rem] [&>svg:first-child]:shrink-0 [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate">
+					<DropdownMenu.Item disabled={resourcesDisabled || creationDisabled} onSelect={onCreateVisual} class={`${dropdownItemClass} [&>svg:first-child]:size-[.95rem] [&>svg:first-child]:shrink-0 [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate`}>
 						<Plus class="size-[.95rem] shrink-0" aria-hidden="true" /><span>{studioMessage('sidebar.newVisual')}</span>
 					</DropdownMenu.Item>
 				</StudioDropdownContent>
@@ -339,7 +344,7 @@
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 	<div
-		class="group absolute top-0 right-0 z-[2] grid h-full w-2 place-items-center touch-none cursor-col-resize after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-sidebar-border after:content-[''] hover:after:bg-sidebar-ring/70 focus-visible:after:bg-sidebar-ring"
+		class="sidebar-resize-handle group absolute top-0 -right-1.5 z-10 grid h-full w-3 place-items-center touch-none cursor-col-resize bg-transparent text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 		role="separator"
 		tabindex="0"
 		aria-label={studioMessage('sidebar.resize')}
@@ -356,6 +361,7 @@
 		onkeydown={handleResizeKeydown}
 		ondblclick={toggleCollapsed}
 	>
-		<GripVertical class="pointer-events-none z-[1] size-[.875rem] rounded-[.15rem] bg-background text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 group-active:opacity-100 motion-reduce:transition-none" aria-hidden="true" />
+		<span class="h-full w-px bg-border/50 transition-colors group-hover:bg-primary/50 group-focus-visible:bg-primary" aria-hidden="true"></span>
+		<GripVertical class="pointer-events-none absolute size-4 rounded-sm bg-background text-muted-foreground opacity-30 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden="true" />
 	</div>
 </aside>

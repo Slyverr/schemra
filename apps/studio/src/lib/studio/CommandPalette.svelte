@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { onDestroy, tick } from 'svelte';
-	import { fade, scale } from 'svelte/transition';
+	import { tick } from 'svelte';
 	import {
 		AlignLeft,
 		Command,
@@ -16,7 +15,11 @@
 		Workflow,
 		X
 	} from '@lucide/svelte';
+	import * as Dialog from '../components/ui/dialog/index.js';
+	import { Button } from '../components/ui/button/index.js';
+	import { cn } from '../utils.js';
 	import { studioMessage } from '../i18n/messages.js';
+	import { commandPaletteClasses as classes } from './command-palette-classes.js';
 	import {
 		buildCommandPaletteEntries,
 		firstCommandPaletteSelection,
@@ -73,7 +76,6 @@
 	const searchId = `${instanceId}-search`;
 	const resultsId = `${instanceId}-results`;
 	let searchInput = $state<HTMLInputElement>();
-	let closeButton = $state<HTMLButtonElement>();
 	let query = $state('');
 	let activeIndex = $state(0);
 	let wasOpen = false;
@@ -154,18 +156,6 @@
 		if (event.key === 'Enter') {
 			event.preventDefault();
 			if (activeEntry && !activeEntry.disabled) selectEntry(activeEntry);
-			return;
-		}
-		if (event.key === 'Tab') {
-			event.preventDefault();
-			if (event.shiftKey) {
-				if (document.activeElement === searchInput) closeButton?.focus();
-				else searchInput?.focus();
-			} else if (document.activeElement === closeButton) {
-				searchInput?.focus();
-			} else {
-				closeButton?.focus();
-			}
 		}
 	}
 
@@ -192,42 +182,41 @@
 		open = false;
 	}
 
-	onDestroy(() => {
-		wasOpen = false;
-		previousFocus = null;
-	});
 </script>
 
-{#if open}
-	<div class="palette-backdrop" role="presentation" transition:fade={{ duration: 150 }} onclick={(event) => event.target === event.currentTarget && close()}>
-		<div
+<Dialog.Root bind:open>
+	{#if open}
+		<Dialog.Content
 			id={dialogId}
-			class="palette-dialog"
-			transition:scale={{ duration: 150, start: 0.98 }}
-			role="dialog"
-			tabindex="-1"
-			aria-modal="true"
+			class={classes.content}
+			overlayClass={classes.overlay}
+			showCloseButton={false}
 			aria-labelledby={`${instanceId}-title`}
 			aria-describedby={`${instanceId}-description`}
-			onkeydown={handleKeydown}
+		onkeydown={handleKeydown}
 		>
-			<header class="palette-heading">
-				<div class="palette-heading-icon" aria-hidden="true"><Command size={18} /></div>
-				<div class="palette-heading-copy">
-					<h2 id={`${instanceId}-title`}>{studioMessage('command.title')}</h2>
-					<p id={`${instanceId}-description`}>{studioMessage('command.description')}</p>
+			<Dialog.Header class={classes.heading}>
+				<div class={classes.icon} aria-hidden="true"><Command size={18} /></div>
+				<div class={classes.copy}>
+					<Dialog.Title id={`${instanceId}-title`} class={classes.title}>{studioMessage('command.title')}</Dialog.Title>
+					<Dialog.Description id={`${instanceId}-description`} class={classes.description}>{studioMessage('command.description')}</Dialog.Description>
 				</div>
-				<button bind:this={closeButton} class="palette-close" type="button" aria-label={studioMessage('command.close')} onclick={close}>
-					<X size={17} aria-hidden="true" />
-				</button>
-			</header>
+				<Dialog.Close>
+					{#snippet child({ props })}
+						<Button variant="ghost" size="icon-sm" class={classes.close} aria-label={studioMessage('command.close')} title={studioMessage('command.close')} {...props}>
+							<X size={17} aria-hidden="true" />
+						</Button>
+					{/snippet}
+				</Dialog.Close>
+			</Dialog.Header>
 
-			<div class="palette-search-wrap">
+			<div class={classes.search}>
 				<Search size={17} aria-hidden="true" />
 				<label class="sr-only" for={searchId}>{studioMessage('command.inputLabel')}</label>
 				<input
 					id={searchId}
 					bind:this={searchInput}
+					class={classes.input}
 					value={query}
 					role="combobox"
 					aria-autocomplete="list"
@@ -238,54 +227,53 @@
 					placeholder={studioMessage('command.placeholder')}
 					oninput={handleQueryInput}
 				/>
-				<kbd class="keyboard-hint">ESC</kbd>
+				<kbd class={classes.keyboardHint}>ESC</kbd>
 			</div>
 
-			<div id={resultsId} class="palette-results" role="listbox" aria-label={studioMessage('command.results')}>
+			<div id={resultsId} class={classes.results} role="listbox" aria-label={studioMessage('command.results')}>
 				{#if groups.length === 0}
-					<p class="palette-empty" role="status">{studioMessage('command.empty')}</p>
+					<p class={classes.empty} role="status">{studioMessage('command.empty')}</p>
 				{:else}
 					{#each groups as group (group.id)}
-						<div class="palette-group" role="group" aria-label={studioMessage(group.label)}>
-							<h3>{studioMessage(group.label)}<span>{group.items.length}</span></h3>
+						<div class={classes.group} role="group" aria-label={studioMessage(group.label)}>
+							<h3 class={classes.groupTitle}>{studioMessage(group.label)}<span class={classes.groupCount}>{group.items.length}</span></h3>
 							{#each group.items as item (`${item.entry.key}`)}
 								{@const entry = item.entry}
+								{@const isActive = activeIndexInResults === item.index}
 								{@const Icon = entry.type === 'action' ? actionIcons[entry.icon] : entry.type === 'project' ? FolderOpen : FileCode2}
 								<button
 									id={optionId(entry)}
-									class="palette-option"
-									class:active={activeIndexInResults === item.index}
-									class:disabled={entry.disabled}
+									class={cn(classes.option, isActive && 'border-primary/15 bg-accent text-accent-foreground')}
 									type="button"
 									role="option"
-									aria-selected={activeIndexInResults === item.index}
+									aria-selected={isActive}
 									aria-disabled={entry.disabled ? 'true' : undefined}
 									tabindex="-1"
 									disabled={entry.disabled}
 									onpointermove={() => (activeIndex = item.index)}
 									onclick={() => selectEntry(entry)}
 								>
-									<span class="option-icon" aria-hidden="true">
+									<span class={cn(classes.optionIcon, isActive && classes.optionIconActive)} aria-hidden="true">
 										<Icon size={16} />
 									</span>
-									<span class="option-copy">
-										<span class="option-title">{entry.title}</span>
+									<span class={classes.optionCopy}>
+										<span class={classes.optionTitle}>{entry.title}</span>
 										{#if entry.type === 'file'}
-											<span class="option-detail">{entry.path}</span>
+											<span class={classes.optionDetail}>{entry.path}</span>
 										{:else if entry.type === 'action' && entry.description}
-											<span class="option-detail">{entry.description}</span>
+											<span class={classes.optionDetail}>{entry.description}</span>
 										{:else if entry.type === 'project'}
-							<span class="option-detail">{studioMessage(entry.fileCount === 1 ? 'command.fileCount.one' : 'command.fileCount.other', { count: entry.fileCount })}</span>
+											<span class={classes.optionDetail}>{studioMessage(entry.fileCount === 1 ? 'command.fileCount.one' : 'command.fileCount.other', { count: entry.fileCount })}</span>
 										{/if}
 									</span>
 									{#if entry.type === 'file'}
-											<span class="option-badge">{studioMessage(entry.kind === 'visual' ? 'sidebar.resourceKindVisual' : entry.kind === 'scenario' ? 'sidebar.resourceKindScenario' : 'sidebar.resourceKindSource')}</span>
-											{#if entry.current}<span class="option-current">{studioMessage('command.current')}</span>{/if}
-											{#if entry.unsaved}<span class="option-unsaved">{studioMessage('command.unsaved')}</span>{/if}
+										<span class={cn(classes.badge, classes.resourceKind)}>{studioMessage(entry.kind === 'visual' ? 'sidebar.resourceKindVisual' : entry.kind === 'scenario' ? 'sidebar.resourceKindScenario' : 'sidebar.resourceKindSource')}</span>
+										{#if entry.current}<span class={cn(classes.badge, classes.current)}>{studioMessage('command.current')}</span>{/if}
+										{#if entry.unsaved}<span class={cn(classes.badge, classes.unsaved)}>{studioMessage('command.unsaved')}</span>{/if}
 									{:else if entry.type === 'project' && entry.current}
-											<span class="option-current">{studioMessage('command.current')}</span>
+										<span class={cn(classes.badge, classes.current)}>{studioMessage('command.current')}</span>
 									{:else if entry.type === 'action' && entry.shortcut}
-										<kbd class="option-shortcut">{entry.shortcut}</kbd>
+										<kbd class={classes.shortcut}>{entry.shortcut}</kbd>
 									{/if}
 								</button>
 							{/each}
@@ -294,134 +282,10 @@
 				{/if}
 			</div>
 
-			<footer class="palette-footer">
-				<span><kbd>↑</kbd><kbd>↓</kbd> {studioMessage('command.footerNavigate')}</span>
-				<span><kbd>Enter</kbd> {studioMessage('command.footerSelect')}</span>
+			<footer class={classes.footer}>
+				<span class={classes.footerHint}><kbd class={classes.footerKey}>↑</kbd><kbd class={classes.footerKey}>↓</kbd> {studioMessage('command.footerNavigate')}</span>
+				<span class={classes.footerHint}><kbd class={classes.footerKey}>Enter</kbd> {studioMessage('command.footerSelect')}</span>
 			</footer>
-		</div>
-	</div>
-{/if}
-
-<style>
-	.palette-backdrop {
-		position: fixed;
-		z-index: 1000;
-		inset: 0;
-		display: grid;
-		align-items: start;
-		justify-items: center;
-		padding: min(14vh, 7rem) 1rem 1rem;
-		background: rgb(12 25 43 / 48%);
-		backdrop-filter: blur(2px);
-	}
-	.palette-dialog {
-		width: min(100%, 42rem);
-		max-height: min(78vh, 46rem);
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-		border: 1px solid var(--border);
-		border-radius: calc(var(--radius) + 0.25rem);
-		background: var(--popover);
-		color: var(--popover-foreground);
-		box-shadow: 0 1.5rem 4rem rgb(10 30 56 / 26%);
-	}
-	.palette-heading {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 1rem 1rem 0.85rem;
-	}
-	.palette-heading-icon, .option-icon {
-		flex: 0 0 auto;
-		display: grid;
-		place-items: center;
-		color: var(--muted-foreground);
-	}
-	.palette-heading-icon {
-		width: 2.25rem;
-		height: 2.25rem;
-		border: 1px solid var(--border);
-		border-radius: 0.65rem;
-		background: var(--muted);
-		color: var(--primary);
-	}
-	.palette-heading-copy { min-width: 0; flex: 1; }
-	.palette-heading h2 { margin: 0; font-size: 0.95rem; font-weight: 650; letter-spacing: -0.01em; }
-	.palette-heading p { margin: 0.2rem 0 0; color: var(--muted-foreground); font-size: 0.76rem; line-height: 1.4; }
-	.palette-close {
-		width: 2rem;
-		height: 2rem;
-		flex: 0 0 auto;
-		display: grid;
-		place-items: center;
-		border: 1px solid transparent;
-		border-radius: 0.5rem;
-		background: transparent;
-		color: var(--muted-foreground);
-		cursor: pointer;
-	}
-	.palette-close:hover, .palette-close:focus-visible { border-color: var(--border); background: var(--muted); color: var(--foreground); outline: none; }
-	.palette-search-wrap {
-		min-height: 3rem;
-		margin: 0 0.75rem;
-		padding: 0 0.75rem;
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		border: 1px solid var(--input);
-		border-radius: 0.65rem;
-		background: var(--background);
-		color: var(--muted-foreground);
-	}
-	.palette-search-wrap:focus-within { border-color: var(--ring); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 20%, transparent); }
-	.palette-search-wrap input { min-width: 0; flex: 1; height: 2.8rem; border: 0; outline: none; background: transparent; color: var(--foreground); font: inherit; font-size: 0.875rem; }
-	.palette-search-wrap input::placeholder { color: var(--muted-foreground); opacity: 0.85; }
-	.keyboard-hint, .option-shortcut, .palette-footer kbd { border: 1px solid var(--border); border-radius: 0.3rem; background: var(--muted); color: var(--muted-foreground); font: 500 0.65rem/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; }
-	.keyboard-hint { padding: 0.12rem 0.35rem; }
-	.palette-results { min-height: 4rem; overflow: auto; padding: 0.5rem 0.5rem 0.7rem; overscroll-behavior: contain; }
-	.palette-empty { margin: 0; padding: 2rem 1rem; color: var(--muted-foreground); text-align: center; font-size: 0.82rem; }
-	.palette-group + .palette-group { margin-top: 0.5rem; }
-	.palette-group h3 { display: flex; justify-content: space-between; margin: 0; padding: 0.45rem 0.6rem 0.35rem; color: var(--muted-foreground); font-size: 0.68rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; }
-	.palette-group h3 span { font-variant-numeric: tabular-nums; font-weight: 500; letter-spacing: 0; }
-	.palette-option {
-		width: 100%;
-		min-height: 3rem;
-		padding: 0.42rem 0.55rem;
-		display: flex;
-		align-items: center;
-		gap: 0.65rem;
-		border: 1px solid transparent;
-		border-radius: 0.55rem;
-		background: transparent;
-		color: var(--foreground);
-		text-align: left;
-		cursor: pointer;
-	}
-	.palette-option:hover, .palette-option.active { border-color: color-mix(in srgb, var(--primary) 16%, transparent); background: var(--accent); color: var(--accent-foreground); }
-	.palette-option:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
-	.palette-option.disabled { opacity: 0.45; cursor: not-allowed; }
-	.option-icon { width: 1.8rem; height: 1.8rem; border-radius: 0.45rem; background: var(--muted); }
-	.palette-option.active .option-icon { background: color-mix(in srgb, var(--primary) 12%, var(--background)); color: var(--primary); }
-	.option-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 0.13rem; }
-	.option-title, .option-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.option-title { font-size: 0.82rem; font-weight: 550; }
-	.option-detail { color: var(--muted-foreground); font-size: 0.7rem; }
-	.option-badge, .option-current, .option-unsaved { flex: 0 0 auto; border-radius: 999px; padding: 0.16rem 0.5rem; font-size: 0.64rem; line-height: 1.25; text-transform: capitalize; }
-	.option-badge { border: 1px solid var(--border); color: var(--muted-foreground); }
-	.option-current { background: var(--secondary); color: var(--secondary-foreground); text-transform: none; }
-	.option-unsaved { color: #986300; background: color-mix(in srgb, #e6a700 14%, var(--background)); text-transform: none; }
-	.option-shortcut { padding: 0.16rem 0.4rem; }
-	.palette-footer { min-height: 2.5rem; padding: 0.4rem 0.85rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-top: 1px solid var(--border); color: var(--muted-foreground); font-size: 0.68rem; }
-	.palette-footer span { display: inline-flex; align-items: center; gap: 0.25rem; }
-	.palette-footer kbd { min-width: 1.25rem; padding: 0.08rem 0.25rem; text-align: center; }
-	.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-	@media (max-width: 36rem) {
-		.palette-backdrop { padding: 0.5rem; align-items: start; }
-		.palette-dialog { max-height: calc(100dvh - 1rem); border-radius: 0.8rem; }
-		.palette-heading { padding: 0.75rem 0.75rem 0.65rem; }
-		.palette-heading p { font-size: 0.69rem; }
-		.palette-option { gap: 0.45rem; padding-inline: 0.4rem; }
-		.option-detail { max-width: min(70vw, 22rem); }
-	}
-</style>
+		</Dialog.Content>
+	{/if}
+</Dialog.Root>

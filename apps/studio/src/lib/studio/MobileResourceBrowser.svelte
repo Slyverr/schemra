@@ -4,6 +4,11 @@
 	import { studioMessage } from '../i18n/messages.js';
 	import { Button } from '../components/ui/button/index.js';
 	import StudioDropdownContent from './StudioDropdownContent.svelte';
+	import {
+		dropdownGroupHeadingClass,
+		dropdownItemClass,
+		dropdownPanelClass
+	} from './menu-classes.js';
 	import type { SidebarResource, SidebarVisual } from './project-sidebar.js';
 
 	interface Props {
@@ -30,16 +35,16 @@
 			{/snippet}
 		</DropdownMenu.Trigger>
 		<DropdownMenu.Portal>
-		<StudioDropdownContent align="start" sideOffset={6} class="grid max-h-[min(70vh,30rem)] w-[min(16rem,calc(100vw-1rem))] gap-[.15rem] overflow-auto rounded-[.6rem] border border-border bg-popover p-[.45rem] text-popover-foreground shadow-[0_.75rem_2rem_rgb(7_21_41_/_18%)] [&>[role=group]]:grid [&>[role=group]]:gap-[.1rem]">
+		<StudioDropdownContent align="start" sideOffset={6} class={`max-h-[min(70vh,30rem)] w-[min(16rem,calc(100vw-1rem))] overflow-auto rounded-[.6rem] ${dropdownPanelClass} [&>[role=group]]:grid [&>[role=group]]:gap-[.1rem]`}>
 			<DropdownMenu.Group>
-				<DropdownMenu.GroupHeading class="px-[.45rem] py-[.3rem] text-[.63rem] font-[650] tracking-[.06em] text-muted-foreground uppercase">{studioMessage('sidebar.visuals')}</DropdownMenu.GroupHeading>
+				<DropdownMenu.GroupHeading class={dropdownGroupHeadingClass}>{studioMessage('sidebar.visuals')}</DropdownMenu.GroupHeading>
 				{#each visuals as visual (visual.id)}
 					<DropdownMenu.Item
 						disabled={resourcesDisabled}
 						onSelect={() => onSelectFile(visual.fileId)}
 						aria-label={visual.pathHint ? `${visual.title}, ${visual.path}` : undefined}
 						title={visual.pathHint ? `${visual.title} — ${visual.path}` : visual.title}
-						class="flex min-h-8 items-center gap-2 rounded-[.35rem] px-[.45rem] py-[.35rem] font-[inherit] text-[.75rem] text-foreground outline-none hover:bg-accent hover:text-accent-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground aria-disabled:opacity-50 [&>svg:first-child]:size-[.95rem] [&>svg:first-child]:shrink-0 [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate [&>small]:max-w-24 [&>small]:truncate [&>small]:text-[.62rem] [&>small]:text-muted-foreground"
+						class={`${dropdownItemClass} [&>svg:first-child]:size-[.95rem] [&>svg:first-child]:shrink-0 [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate [&>small]:max-w-24 [&>small]:truncate [&>small]:text-[.62rem] [&>small]:text-muted-foreground`}
 					>
 						<Workflow class="size-[.95rem] shrink-0" aria-hidden="true" />
 						<span>{visual.title}</span>
@@ -50,16 +55,16 @@
 				{:else}
 					<div class="px-[.55rem] py-[.4rem] text-[.72rem] text-muted-foreground" role="status">{studioMessage('sidebar.noVisuals')}</div>
 				{/each}
-				<DropdownMenu.Item disabled={resourcesDisabled || creationDisabled} onSelect={onCreateVisual} class="flex min-h-8 items-center gap-2 rounded-[.35rem] px-[.45rem] py-[.35rem] font-[inherit] text-[.75rem] text-foreground outline-none hover:bg-accent hover:text-accent-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground aria-disabled:opacity-50 [&>svg:first-child]:size-[.95rem] [&>svg:first-child]:shrink-0 [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate">
+				<DropdownMenu.Item disabled={resourcesDisabled || creationDisabled} onSelect={onCreateVisual} class={`${dropdownItemClass} [&>svg:first-child]:size-[.95rem] [&>svg:first-child]:shrink-0 [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate`}>
 					<Plus class="size-[.95rem] shrink-0" aria-hidden="true" /><span>{studioMessage('sidebar.newVisual')}</span>
 				</DropdownMenu.Item>
 			</DropdownMenu.Group>
 			{#if otherSources.length > 0}
 				<DropdownMenu.Separator class="my-1 h-px bg-border" />
 				<DropdownMenu.Group>
-					<DropdownMenu.GroupHeading class="px-[.45rem] py-[.3rem] text-[.63rem] font-[650] tracking-[.06em] text-muted-foreground uppercase">{studioMessage('sidebar.otherSourceFiles')}</DropdownMenu.GroupHeading>
+					<DropdownMenu.GroupHeading class={dropdownGroupHeadingClass}>{studioMessage('sidebar.otherSourceFiles')}</DropdownMenu.GroupHeading>
 					{#each otherSources as source (source.fileId)}
-						<DropdownMenu.Item disabled={resourcesDisabled} onSelect={() => onSelectFile(source.fileId)} title={source.path} class="flex min-h-8 items-center gap-2 rounded-[.35rem] px-[.45rem] py-[.35rem] font-[inherit] text-[.75rem] text-foreground outline-none hover:bg-accent hover:text-accent-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground aria-disabled:opacity-50 [&>svg:first-child]:size-[.95rem] [&>svg:first-child]:shrink-0 [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate">
+						<DropdownMenu.Item disabled={resourcesDisabled} onSelect={() => onSelectFile(source.fileId)} title={source.path} class={`${dropdownItemClass} [&>svg:first-child]:size-[.95rem] [&>svg:first-child]:shrink-0 [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate`}>
 							<FileCode2 class="size-[.95rem] shrink-0" aria-hidden="true" />
 							<span>{source.path.split('/').at(-1) ?? source.path}</span>
 							{#if source.dirty}<i class="block size-[.38rem] shrink-0 rounded-full bg-primary" aria-label={studioMessage('sidebar.unsavedChanges', { name: source.title })}></i>{/if}

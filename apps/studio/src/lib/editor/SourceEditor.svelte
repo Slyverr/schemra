@@ -1136,7 +1136,7 @@
 		background: color-mix(in srgb, var(--foreground) 16%, transparent);
 		pointer-events: none;
 	}
-	.scope-guide-active { background: color-mix(in srgb, var(--primary) 62%, transparent); }
+	.scope-guide-active { background: color-mix(in srgb, var(--primary) 36%, transparent); }
 	.editor-input {
 		position: absolute;
 		z-index: 3;

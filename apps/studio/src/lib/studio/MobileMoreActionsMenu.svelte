@@ -4,6 +4,11 @@
 	import { studioMessage } from '../i18n/messages.js';
 	import { Button } from '../components/ui/button/index.js';
 	import StudioDropdownContent from './StudioDropdownContent.svelte';
+	import {
+		dropdownGroupHeadingClass,
+		dropdownItemClass,
+		dropdownPanelClass
+	} from './menu-classes.js';
 
 	interface Props {
 		disabled: boolean;
@@ -25,13 +30,13 @@
 			{/snippet}
 		</DropdownMenu.Trigger>
 		<DropdownMenu.Portal>
-		<StudioDropdownContent align="end" sideOffset={6} class="grid w-[min(14rem,calc(100vw-1rem))] gap-[.15rem] overflow-auto rounded-[.6rem] border border-border bg-popover p-[.45rem] text-popover-foreground shadow-[0_.75rem_2rem_rgb(7_21_41_/_18%)] [&>[role=group]]:grid [&>[role=group]]:gap-[.1rem]">
+		<StudioDropdownContent align="end" sideOffset={6} class={`w-[min(14rem,calc(100vw-1rem))] overflow-auto rounded-[.6rem] ${dropdownPanelClass} [&>[role=group]]:grid [&>[role=group]]:gap-[.1rem]`}>
 			<DropdownMenu.Group>
-				<DropdownMenu.GroupHeading class="px-[.45rem] py-[.3rem] text-[.63rem] font-[650] tracking-[.06em] text-muted-foreground uppercase">{studioMessage('header.moreActions')}</DropdownMenu.GroupHeading>
-				<DropdownMenu.Item onSelect={onOpenSettings} class="flex min-h-8 items-center gap-2 rounded-[.35rem] px-[.45rem] py-[.35rem] font-[inherit] text-[.75rem] text-foreground outline-none hover:bg-accent hover:text-accent-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground aria-disabled:opacity-50 [&>svg]:size-[.95rem] [&>svg]:shrink-0">
+				<DropdownMenu.GroupHeading class={dropdownGroupHeadingClass}>{studioMessage('header.moreActions')}</DropdownMenu.GroupHeading>
+				<DropdownMenu.Item onSelect={onOpenSettings} class={`${dropdownItemClass} [&>svg]:size-[.95rem] [&>svg]:shrink-0`}>
 					<Settings2 aria-hidden="true" /><span>{studioMessage('header.settings')}</span>
 				</DropdownMenu.Item>
-				<DropdownMenu.Item disabled={disabled || creationDisabled} onSelect={onCreateVisual} class="flex min-h-8 items-center gap-2 rounded-[.35rem] px-[.45rem] py-[.35rem] font-[inherit] text-[.75rem] text-foreground outline-none hover:bg-accent hover:text-accent-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground aria-disabled:opacity-50 [&>svg]:size-[.95rem] [&>svg]:shrink-0">
+				<DropdownMenu.Item disabled={disabled || creationDisabled} onSelect={onCreateVisual} class={`${dropdownItemClass} [&>svg]:size-[.95rem] [&>svg]:shrink-0`}>
 					<Plus aria-hidden="true" /><span>{studioMessage('sidebar.newVisual')}</span>
 				</DropdownMenu.Item>
 			</DropdownMenu.Group>

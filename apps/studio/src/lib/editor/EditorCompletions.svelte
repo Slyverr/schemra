@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { cn } from '../utils.js';
 	import { studioMessage } from '../i18n/messages.js';
 
 	interface CompletionItem {
@@ -22,7 +23,7 @@
 
 <ul
 	id={id}
-	class="editor-completions"
+	class="absolute z-10 box-border m-0 max-h-[17.5rem] list-none overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-[0_8px_24px_rgb(15_35_65_/_16%)]"
 	role="listbox"
 	aria-label={studioMessage('editor.suggestions')}
 	style:left={`${left}px`}
@@ -33,8 +34,10 @@
 		<li role="presentation">
 			<button
 				id={`${id}-${index}`}
-				class="completion-option"
-				class:completion-selected={index === selectedIndex}
+				class={cn(
+					'block w-full cursor-pointer rounded border-0 p-2 text-left font-[inherit] text-inherit hover:bg-accent hover:text-accent-foreground',
+					index === selectedIndex && 'bg-accent text-accent-foreground'
+				)}
 				role="option"
 				aria-selected={index === selectedIndex}
 				type="button"
@@ -43,43 +46,9 @@
 				onmousedown={(event) => event.preventDefault()}
 				onclick={() => onSelect(index)}
 			>
-				<span class="completion-heading"><code>{item.label}</code><small>{item.kind}</small></span>
-				<span class="completion-detail">{item.detail}</span>
+				<span class="flex items-center gap-2"><code class="flex-1 truncate font-[inherit]">{item.label}</code><small class="text-[.625rem] text-muted-foreground uppercase">{item.kind}</small></span>
+				<span class="mt-0.5 block font-sans text-[.6875rem] leading-4 text-muted-foreground">{item.detail}</span>
 			</button>
 		</li>
 	{/each}
 </ul>
-
-<style>
-	.editor-completions {
-		position: absolute;
-		z-index: 10;
-		box-sizing: border-box;
-		max-height: 17.5rem;
-		margin: 0;
-		overflow-y: auto;
-		padding: 0.25rem;
-		border: 1px solid var(--border);
-		border-radius: 0.5rem;
-		background: var(--popover);
-		color: var(--popover-foreground);
-		box-shadow: 0 8px 24px rgb(15 35 65 / 16%);
-		list-style: none;
-	}
-	.completion-option {
-		display: block;
-		width: 100%;
-		padding: 0.5rem;
-		border: 0;
-		border-radius: 0.25rem;
-		background: transparent;
-		color: inherit;
-		text-align: left;
-		cursor: pointer;
-	}
-	.completion-selected, .completion-option:hover { background: var(--accent); color: var(--accent-foreground); }
-	.completion-heading { display: flex; align-items: center; gap: 0.5rem; }
-	.completion-heading code { flex: 1; overflow: hidden; font: inherit; text-overflow: ellipsis; white-space: nowrap; }
-	.completion-heading small { color: var(--muted-foreground); font-size: 0.625rem; text-transform: uppercase; }
-	.completion-detail { display: block; margin-top: 0.125rem; color: var(--muted-foreground); font-family: var(--font-sans, sans-serif); font-size: 0.6875rem; line-height: 1rem; }
-</style>

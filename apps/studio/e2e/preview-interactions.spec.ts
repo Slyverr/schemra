@@ -90,6 +90,22 @@ test('switches between a scenario and the static visual preview', async ({ page 
 	await expect(page.locator('.preview svg.schemra-preview-svg')).toBeVisible();
 });
 
+test('searches diagram targets from the preview finder', async ({ page }) => {
+	await page.goto('/');
+	const trigger = page.getByRole('button', { name: studioMessage('preview.findDiagram') });
+	await trigger.click();
+
+	const finder = page.getByRole('dialog', { name: studioMessage('preview.findInDiagram') });
+	const search = finder.getByRole('searchbox', { name: studioMessage('preview.searchScene') });
+	await expect(finder).toBeVisible();
+	await search.fill('Database');
+	const database = finder.getByRole('button', { name: 'Database database' });
+	await expect(database).toBeVisible();
+	await database.click();
+	await expect(finder).toBeHidden();
+	await expect(trigger).toBeFocused();
+});
+
 test('organizes export options into tabs and keeps select values readable', async ({ page }) => {
 	await page.goto('/');
 	const selector = page.getByRole('combobox', { name: studioMessage('preview.scenarioLabel') });

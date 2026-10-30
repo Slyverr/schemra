@@ -1,4 +1,4 @@
-use schemra_engine::{TimelineSampling, compile_timeline};
+use schemra_engine::{TimelineSampler, TimelineSampling, compile_timeline};
 use schemra_ir::{
     ActionIr, HighlightEffect, HighlightOrigin, NodeId, ScenarioId, ScenarioIr, SourceLocation,
     SourceSpan, TokenId, TokenPosition, VisualId,
@@ -134,6 +134,31 @@ fn highlight_intervals_are_sampled_without_changing_node_ordering() {
         [NodeId("alpha".into()), NodeId("zeta".into())]
     );
     assert!(result.sample(300).highlighted_nodes.is_empty());
+}
+
+#[test]
+fn reusable_sampler_matches_timeline_for_forward_and_repeated_seeks() {
+    let span = span();
+    let timeline = compile_timeline(&scenario(vec![ActionIr::Parallel {
+        actions: vec![
+            movement("request", "client", "proxy", Some(400)),
+            ActionIr::Highlight {
+                node: NodeId("proxy".into()),
+                node_span: span,
+                duration_ms: Some(600),
+                effect: HighlightEffect::Trace,
+                origin: HighlightOrigin::Default,
+                span,
+            },
+        ],
+        span,
+    }]))
+    .unwrap();
+    let sampler = TimelineSampler::new(timeline.clone());
+
+    for time_ms in [0, 250, 400, 599, 600, 250, 0, 600] {
+        assert_eq!(sampler.sample(time_ms), timeline.sample(time_ms));
+    }
 }
 
 #[test]

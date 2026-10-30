@@ -63,3 +63,15 @@ fn sampler_rejects_unknown_visuals_scenarios_and_invalid_projects() {
     assert!(ScenarioSampler::new(&project(), "network", "missing").is_err());
     assert!(ScenarioSampler::new("{", "network", "requests").is_err());
 }
+
+#[test]
+fn repeated_sampling_is_independent_of_seek_order() {
+    let sampler = ScenarioSampler::new(&project(), "network", "requests").unwrap();
+    let expected = frame(&sampler, 50);
+
+    for time_ms in [125, 0, 100, 25, 175, 50, 75, 50] {
+        let _ = frame(&sampler, time_ms);
+    }
+
+    assert_eq!(frame(&sampler, 50), expected);
+}

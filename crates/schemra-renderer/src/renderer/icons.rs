@@ -81,8 +81,7 @@ pub(super) fn write_annotation_icon(
     .expect("writing to a String cannot fail");
     write!(
         svg,
-        "<rect width=\"30\" height=\"30\" rx=\"9\" fill=\"{}\"/>",
-        background
+        "<rect width=\"30\" height=\"30\" rx=\"9\" fill=\"{background}\"/>"
     )
     .expect("writing to a String cannot fail");
 

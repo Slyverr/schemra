@@ -31,13 +31,31 @@ class FakeSvgElement {
 	}
 
 	querySelector(selector: string) {
-		const name = selector.match(/\[data-([\w-]+)\]/)?.[1];
+		const name = selector.match(/\[data-([\w-]+)(?:=[^\]]*)?\]/)?.[1];
 		return name ? this.children.find((child) => child.attributes.has(`data-${name}`)) ?? null : null;
 	}
 
 	querySelectorAll(selector: string) {
-		const name = selector.match(/\[data-([\w-]+)\]/)?.[1];
+		const name = selector.match(/\[data-([\w-]+)(?:=[^\]]*)?\]/)?.[1];
 		return name ? this.children.filter((child) => child.attributes.has(`data-${name}`)) : [];
+	}
+
+	removeAttribute(name: string) {
+		this.attributes.delete(name);
+	}
+
+	cloneNode() {
+		const clone = new FakeSvgElement(this.ownerDocument);
+		for (const [name, value] of this.attributes) clone.setAttribute(name, value);
+		return clone;
+	}
+
+	getTotalLength() {
+		return 400;
+	}
+
+	getPointAtLength(distance: number) {
+		return { x: distance, y: 0 };
 	}
 
 	append(...children: FakeSvgElement[]) {
@@ -64,6 +82,19 @@ class FakeSvgElement {
 		if (index !== -1) this.children.splice(index, 1);
 		child.parentElement = null;
 	}
+}
+
+function createTraceRoot() {
+	const document = new FakeSvgDocument();
+	const root = new FakeSvgElement(document);
+	const node = new FakeSvgElement(document);
+	node.setAttribute('data-node-id', 'worker');
+	const background = new FakeSvgElement(document);
+	background.setAttribute('data-node-background', 'true');
+	node.append(background);
+	root.append(node);
+	const scene: PreviewScene = { width: 400, height: 100, groups: [], edges: [], nodes: [] };
+	return { root, scene };
 }
 
 describe('animated diagram layers', () => {
@@ -122,5 +153,68 @@ describe('animated diagram layers', () => {
 		expect(markersBelowNodes?.children[0]).toBe(marker);
 		expect(root.children.indexOf(markersBelowNodes!)).toBeLessThan(root.children.indexOf(node));
 		expect(markersAboveNodes?.children).toHaveLength(0);
+	});
+
+	test('coalesces only close traces that share the same node port', () => {
+		const { root, scene } = createTraceRoot();
+		const frame: PreviewFrame = {
+			tokens: [],
+			edges: [],
+			highlights: [
+				{ instanceId: 1, nodeId: 'worker', effect: 'trace', progress: 0.4, opacity: 0.7, origin: { x: 20, y: 0 } },
+				{ instanceId: 2, nodeId: 'worker', effect: 'trace', progress: 0.42, opacity: 0.8, origin: { x: 20.001, y: 0 } },
+				{ instanceId: 3, nodeId: 'worker', effect: 'trace', progress: 0.41, opacity: 1, origin: { x: 40, y: 0 } },
+				{ instanceId: 4, nodeId: 'worker', effect: 'trace', progress: 0.8, opacity: 1, origin: { x: 20, y: 0 } }
+			]
+		};
+
+		applyPreviewFrame(root as unknown as SVGSVGElement, frame, scene, null);
+
+		const highlights = root.children.find((child) => child.attributes.has('data-schemra-preview-highlights'));
+		expect(highlights?.children).toHaveLength(6);
+		const strokeWidths = highlights?.children.map((child) => child.getAttribute('stroke-width'));
+		expect(strokeWidths?.filter((width) => width === '3.25')).toHaveLength(2);
+		expect(strokeWidths?.filter((width) => width === '2.5')).toHaveLength(4);
+		const forwardOffset = highlights?.children[0]?.getAttribute('stroke-dashoffset');
+		const backwardOffset = highlights?.children[1]?.getAttribute('stroke-dashoffset');
+		expect(forwardOffset).not.toBe(backwardOffset);
+	});
+
+	test('renders no more than four trace pulses for one crowded port', () => {
+		const { root, scene } = createTraceRoot();
+		const frame: PreviewFrame = {
+			tokens: [],
+			edges: [],
+			highlights: Array.from({ length: 7 }, (_, index) => ({
+				instanceId: index + 1,
+				nodeId: 'worker',
+				effect: 'trace' as const,
+				progress: index / 6,
+				opacity: 0.5,
+				origin: { x: 20, y: 0 }
+			}))
+		};
+
+		applyPreviewFrame(root as unknown as SVGSVGElement, frame, scene, null);
+
+		const highlights = root.children.find((child) => child.attributes.has('data-schemra-preview-highlights'));
+		expect(highlights?.children).toHaveLength(8);
+	});
+
+	test('leaves pulse highlights independent', () => {
+		const { root, scene } = createTraceRoot();
+		const frame: PreviewFrame = {
+			tokens: [],
+			edges: [],
+			highlights: [
+				{ instanceId: 1, nodeId: 'worker', effect: 'pulse', progress: 0.4, opacity: 0.7, origin: { x: 20, y: 0 } },
+				{ instanceId: 2, nodeId: 'worker', effect: 'pulse', progress: 0.42, opacity: 0.8, origin: { x: 20, y: 0 } }
+			]
+		};
+
+		applyPreviewFrame(root as unknown as SVGSVGElement, frame, scene, null);
+
+		const highlights = root.children.find((child) => child.attributes.has('data-schemra-preview-highlights'));
+		expect(highlights?.children).toHaveLength(2);
 	});
 });

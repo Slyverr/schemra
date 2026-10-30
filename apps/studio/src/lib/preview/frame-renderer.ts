@@ -8,6 +8,7 @@ import {
 	type PreviewScenario,
 	type PreviewScene
 } from './model';
+import { bidirectionalTrace, mergeNearbyTracePulses, type TracePulseState } from './trace-pulses';
 
 export type AnimationFrameRenderer = ((timeMs: number, background: string) => string) & {
 	dispose: () => void;
@@ -16,7 +17,12 @@ export type AnimationFrameRenderer = ((timeMs: number, background: string) => st
 interface FrameRenderCache {
 	progressPaths: Map<number, SVGPathElement>;
 	markerGroups: Map<number, SVGGElement>;
-	highlightGroups: Map<number, SVGGraphicsElement[]>;
+	highlightGroups: Map<string, SVGGraphicsElement[]>;
+}
+
+interface TraceHighlightSource {
+	highlight: PreviewFrame['highlights'][number];
+	shape: SVGGraphicsElement;
 }
 
 const frameRenderCaches = new WeakMap<SVGSVGElement, FrameRenderCache>();
@@ -45,7 +51,7 @@ export function applyPreviewFrame(
 	const highlightLayer = ensureLayer(root, 'schemra-preview-highlights', true);
 	const activeEdges = new Set<number>();
 	const activeTokens = new Set<number>();
-	const activeHighlights = new Set<number>();
+	const activeHighlights = new Set<string>();
 
 	for (const edge of frame?.edges ?? []) {
 		const path = scene?.edges[edge.edgeIndex]?.path;
@@ -69,50 +75,46 @@ export function applyPreviewFrame(
 		progressPath.setAttribute('stroke-dasharray', `${edge.progress} 1`);
 	}
 
+	const tracePulses: TracePulseState[] = [];
+	const traceSources = new Map<string, TraceHighlightSource>();
 	for (const highlight of frame?.highlights ?? []) {
 		const node = [...root.querySelectorAll<SVGGElement>(':scope > g[data-node-id]')]
 			.find((candidate) => candidate.getAttribute('data-node-id') === highlight.nodeId);
 		const shape = node?.querySelector<SVGGraphicsElement>('[data-node-background="true"]');
 		if (!shape) continue;
-		activeHighlights.add(highlight.instanceId);
-		const length = typeof (shape as SVGGeometryElement).getTotalLength === 'function'
-			? (shape as SVGGeometryElement).getTotalLength()
-			: 0;
-		const originLength = highlight.origin && length > 0
-			? nearestPathLength(shape as SVGGeometryElement, length, highlight.origin.x, highlight.origin.y)
-			: 0;
-		const traceLength = length * 0.025;
-		let outlines = highlightGroups.get(highlight.instanceId);
-		const outlineCount = highlight.effect === 'trace' ? 2 : 1;
-		if (!outlines || outlines.length !== outlineCount) {
-			for (const outline of outlines ?? []) outline.remove();
-			outlines = Array.from({ length: outlineCount }, () => {
-				const outline = shape.cloneNode(false) as SVGGraphicsElement;
-				outline.removeAttribute('data-node-background');
-				outline.removeAttribute('filter');
-				outline.setAttribute('fill', 'none');
-				outline.setAttribute('stroke', 'var(--primary)');
-				outline.setAttribute('stroke-width', '2.5');
-				outline.setAttribute('pointer-events', 'none');
-				outline.setAttribute('aria-hidden', 'true');
-				highlightLayer.append(outline);
-				return outline;
-			});
-			highlightGroups.set(highlight.instanceId, outlines);
+		if (highlight.effect === 'trace') {
+			const id = String(highlight.instanceId);
+			const originKey = highlight.origin
+				? `${highlight.nodeId}:${highlight.origin.x.toFixed(2)},${highlight.origin.y.toFixed(2)}`
+				: `${highlight.nodeId}:default`;
+			tracePulses.push({ id, originKey, progress: highlight.progress, pulseOpacity: highlight.opacity });
+			traceSources.set(id, { highlight, shape });
+		} else {
+			applyHighlightOverlay(
+				highlightLayer,
+				highlightGroups,
+				activeHighlights,
+				`pulse:${highlight.instanceId}`,
+				highlight,
+				shape,
+				1
+			);
 		}
-		for (let index = 0; index < outlines.length; index += 1) {
-			const outline = outlines[index]!;
-			const direction = highlight.effect === 'trace' ? (index === 0 ? 1 : -1) : 0;
-			if (highlight.effect === 'trace' && length > 0) {
-				const distance = length * 0.5 * highlight.progress;
-				outline.setAttribute('stroke-dasharray', `${traceLength} ${Math.max(0.001, length - traceLength)}`);
-				outline.setAttribute('stroke-dashoffset', String(direction > 0
-					? -(originLength + distance)
-					: traceLength - originLength + distance));
-			} else {
-				outline.setAttribute('opacity', String(highlight.opacity));
-			}
-		}
+	}
+
+	for (const pulse of mergeNearbyTracePulses(tracePulses)) {
+		const sourceId = pulse.sourceIds[0];
+		const source = sourceId ? traceSources.get(sourceId) : undefined;
+		if (!source) continue;
+		applyHighlightOverlay(
+			highlightLayer,
+			highlightGroups,
+			activeHighlights,
+			`trace:${pulse.id}`,
+			{ ...source.highlight, progress: pulse.progress, opacity: pulse.pulseOpacity },
+			source.shape,
+			pulse.count
+		);
 	}
 
 	const icons = new Map((scenario?.tokens ?? []).map(({ token, icon }) => [token, icon ?? '']));
@@ -152,6 +154,62 @@ export function applyPreviewFrame(
 	removeInactive(progressPaths, activeEdges);
 	removeInactive(markerGroups, activeTokens);
 	removeInactive(highlightGroups, activeHighlights);
+}
+
+function applyHighlightOverlay(
+	highlightLayer: SVGGElement,
+	highlightGroups: Map<string, SVGGraphicsElement[]>,
+	activeHighlights: Set<string>,
+	key: string,
+	highlight: PreviewFrame['highlights'][number],
+	shape: SVGGraphicsElement,
+	pulseCount: number
+) {
+	activeHighlights.add(key);
+	const geometry = shape as SVGGeometryElement;
+	const length = typeof geometry.getTotalLength === 'function' ? geometry.getTotalLength() : 0;
+	const originLength = highlight.origin && length > 0
+		? nearestPathLength(geometry, length, highlight.origin.x, highlight.origin.y)
+		: 0;
+	let outlines = highlightGroups.get(key);
+	const outlineCount = highlight.effect === 'trace' ? 2 : 1;
+	if (!outlines || outlines.length !== outlineCount) {
+		for (const outline of outlines ?? []) outline.remove();
+		outlines = Array.from({ length: outlineCount }, () => {
+			const outline = shape.cloneNode(false) as SVGGraphicsElement;
+			outline.removeAttribute('data-node-background');
+			outline.removeAttribute('filter');
+			outline.setAttribute('fill', 'none');
+			outline.setAttribute('stroke', 'var(--primary)');
+			outline.setAttribute('stroke-width', '2.5');
+			outline.setAttribute('stroke-linecap', 'round');
+			outline.setAttribute('stroke-linejoin', 'round');
+			outline.setAttribute('pointer-events', 'none');
+			outline.setAttribute('aria-hidden', 'true');
+			highlightLayer.append(outline);
+			return outline;
+		});
+		highlightGroups.set(key, outlines);
+	}
+
+	for (let index = 0; index < outlines.length; index += 1) {
+		const outline = outlines[index]!;
+		outline.setAttribute(
+			'stroke-width',
+			String(highlight.effect === 'trace' ? 2.5 + Math.min(pulseCount - 1, 3) * 0.75 : 2.5)
+		);
+		outline.setAttribute('opacity', String(highlight.opacity));
+		if (highlight.effect !== 'trace') continue;
+
+		const trace = bidirectionalTrace(length, originLength, highlight.progress);
+		if (trace.dashArray === null) {
+			outline.removeAttribute('stroke-dasharray');
+			outline.removeAttribute('stroke-dashoffset');
+			continue;
+		}
+		outline.setAttribute('stroke-dasharray', trace.dashArray);
+		outline.setAttribute('stroke-dashoffset', String(index === 0 ? trace.forwardOffset : trace.backwardOffset));
+	}
 }
 
 function shouldShowDepartureMarkerAboveNode(
@@ -228,7 +286,7 @@ function frameRenderCacheFor(root: SVGSVGElement): FrameRenderCache {
 	return cache;
 }
 
-function removeInactive<T extends Element | Element[]>(elements: Map<number, T>, active: Set<number>) {
+function removeInactive<K, T extends Element | Element[]>(elements: Map<K, T>, active: Set<K>) {
 	for (const [id, element] of elements) {
 		if (active.has(id)) continue;
 		for (const child of Array.isArray(element) ? element : [element]) child.remove();

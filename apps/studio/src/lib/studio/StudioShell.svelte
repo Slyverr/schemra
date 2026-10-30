@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
-import { AlertCircle, Download, FilePlus2, Save, X } from '@lucide/svelte';
+import { AlertCircle, Download, Plus, Save, X } from '@lucide/svelte';
 import { Button } from '../components/ui/button/index.js';
 	import { editorOffsetAtPosition, readEditorDiagnostics, readEditorSyntaxTokens } from '../editor/source-model.js';
 	import { studioMessage } from '../i18n/messages.js';
@@ -784,9 +784,7 @@ import LanguageReferenceDialog from './LanguageReferenceDialog.svelte';
 			}
 			const saved = await controller.flush();
 			if (workspace.activeProjectId === projectId) {
-				fileMessage = saved.ok
-					? { kind: 'success', text: studioMessage('project.workspaceSaved') }
-					: { kind: 'error', text: saved.error.message };
+				fileMessage = saved.ok ? null : { kind: 'error', text: saved.error.message };
 			}
 		} catch (error) {
 			if (workspace.activeProjectId === projectId) {
@@ -882,8 +880,8 @@ import LanguageReferenceDialog from './LanguageReferenceDialog.svelte';
 
 	<nav class="flex h-11 min-h-11 flex-[0_0_auto] items-stretch justify-between gap-2 border-b border-border bg-background px-3 sm:px-4" aria-label={studioMessage('tabs.projectSourceFiles')}>
 		<WorkspaceTabs tabs={workspaceTabViews} activeTabId={activeFileId} initialized={workspace.initialized} onSelect={openFile} />
-		<Button variant="ghost" size="xs" class="h-8 shrink-0 gap-2 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 lg:px-[.65rem]" type="button" aria-label={studioMessage('resource.newScenario')} title={studioMessage('resource.newScenario')} onclick={() => resourceActions.openResourceCreation('scenario')} disabled={resourceCreationDisabled || !currentProjectValid || !currentVisual}>
-			<FilePlus2 size={15} class="size-[15px]" aria-hidden="true" /><span class="hidden lg:inline">{studioMessage('resource.newScenario')}</span>
+		<Button variant="ghost" size="xs" class="h-8 w-8 shrink-0 self-center justify-center gap-0 rounded-md p-0 text-primary hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 lg:w-auto lg:gap-2 lg:px-[.65rem]" type="button" aria-label={studioMessage('resource.newScenario')} title={studioMessage('resource.newScenario')} onclick={() => resourceActions.openResourceCreation('scenario')} disabled={resourceCreationDisabled || !currentProjectValid || !currentVisual}>
+			<Plus size={16} class="size-4" aria-hidden="true" /><span class="hidden lg:inline">{studioMessage('resource.newScenario')}</span>
 		</Button>
 	</nav>
 

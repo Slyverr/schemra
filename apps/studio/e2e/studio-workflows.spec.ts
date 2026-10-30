@@ -21,6 +21,84 @@ test('loads the editor, preview, and sidebar brand assets', async ({ page }) => 
 	await expect.poll(() => mark.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
 });
 
+test('shows tab save state through icon and text colors instead of status dots', async ({ page }) => {
+	await page.goto('/');
+
+	const selectedTab = page.getByRole('tab', { selected: true });
+	const inactiveTab = page.getByRole('tab', { selected: false }).first();
+	const selectedLabel = selectedTab.locator('span');
+	const inactiveLabel = inactiveTab.locator('span');
+	const selectedIcon = selectedTab.locator('svg').first();
+	const inactiveIcon = inactiveTab.locator('svg').first();
+	const matchesThemeColor = (label: typeof selectedLabel, token: string) => label.evaluate((element, name) => {
+		const probe = document.createElement('span');
+		probe.style.color = `var(--${name})`;
+		document.body.append(probe);
+		const expected = getComputedStyle(probe).color;
+		probe.remove();
+		return getComputedStyle(element).color === expected;
+	}, token);
+
+	await expect.poll(() => matchesThemeColor(selectedLabel, 'primary')).toBe(true);
+	await expect.poll(() => matchesThemeColor(selectedIcon, 'primary')).toBe(true);
+	await expect.poll(() => matchesThemeColor(inactiveLabel, 'muted-foreground')).toBe(true);
+	await expect.poll(() => matchesThemeColor(inactiveIcon, 'muted-foreground')).toBe(true);
+
+	const editor = page.getByRole('textbox', { name: / editor$/ });
+	await editor.fill(`${await editor.inputValue()}\n`);
+	const title = (await selectedTab.locator('span').textContent())?.trim() ?? '';
+	await expect(selectedTab).toHaveAttribute('aria-label', `${studioMessage('sidebar.resourceKindVisual')}: ${title}, ${studioMessage('tabs.unsavedState')}`);
+	await expect.poll(() => matchesThemeColor(selectedLabel, 'warning')).toBe(true);
+	await expect.poll(() => matchesThemeColor(selectedIcon, 'warning')).toBe(true);
+	await expect(selectedTab.locator('span')).toHaveCount(1);
+});
+
+test('exposes compile errors in the source tab accessibility state', async ({ page }) => {
+	await page.goto('/');
+	const editor = page.getByRole('textbox', { name: / editor$/ });
+	const source = await editor.inputValue();
+	await editor.fill(source.replace(/\}\s*$/, ''));
+
+	const selectedTab = page.getByRole('tab', { selected: true });
+	const tabTitle = (await selectedTab.locator('span').textContent())?.trim() ?? '';
+	await expect(selectedTab).toHaveAccessibleName(studioMessage('tabs.hasErrors', { name: tabTitle }));
+	const hasDestructiveColor = (element: typeof selectedTab) => element.evaluate((node) => {
+		const probe = document.createElement('span');
+		probe.style.color = 'var(--destructive)';
+		document.body.append(probe);
+		const expected = getComputedStyle(probe).color;
+		probe.remove();
+		return getComputedStyle(node).color === expected;
+	});
+	await expect.poll(() => hasDestructiveColor(selectedTab.locator('span'))).toBe(true);
+	await expect.poll(() => hasDestructiveColor(selectedTab.locator('svg').first())).toBe(true);
+});
+
+test('keeps the new-scenario action centered and opens scenario creation', async ({ page }) => {
+	await page.setViewportSize({ width: 780, height: 600 });
+	await page.goto('/');
+	const action = page.getByRole('button', { name: studioMessage('resource.newScenario'), exact: true });
+	await expect(action).toBeEnabled();
+	const verticalCenterDelta = await action.evaluate((button) => {
+		const nav = button.parentElement!.getBoundingClientRect();
+		const bounds = button.getBoundingClientRect();
+		return Math.abs((bounds.top + bounds.bottom) / 2 - (nav.top + nav.bottom) / 2);
+	});
+	const horizontalCenterDelta = await action.evaluate((button) => {
+		const icon = button.querySelector('svg')!.getBoundingClientRect();
+		const bounds = button.getBoundingClientRect();
+		return Math.abs((icon.left + icon.right) / 2 - (bounds.left + bounds.right) / 2);
+	});
+	expect(verticalCenterDelta).toBeLessThan(1);
+	expect(horizontalCenterDelta).toBeLessThan(1);
+	await action.click();
+	const dialog = page.getByRole('dialog', { name: studioMessage('resource.dialog.createScenarioTitle') });
+	await expect(dialog).toBeVisible();
+	await expect(dialog.getByLabel(studioMessage('resource.dialog.scenarioName'))).toBeVisible();
+	await dialog.getByRole('button', { name: studioMessage('resource.dialog.cancel') }).click();
+	await expect(dialog).toBeHidden();
+});
+
 test('keeps pointer selection and deletion aligned with highlighted source text', async ({ page }) => {
 	await page.goto('/');
 	const editor = page.locator('.editor-input');
@@ -202,6 +280,50 @@ test('cancels visual creation from the ResourceDialog without adding a resource'
 test('keeps the pane splitter centered on the divider while resizing both layouts', async ({ page }) => {
 	await page.setViewportSize({ width: 1280, height: 720 });
 	await page.goto('/');
+	const sidebarGeometry = await page.evaluate(() => {
+		const sidebar = document.querySelector('#project-resource-sidebar')!.getBoundingClientRect();
+		const handle = document.querySelector('.sidebar-resize-handle')!;
+		const bounds = handle.getBoundingClientRect();
+		const grip = handle.querySelector('svg')!.getBoundingClientRect();
+		return {
+			handleWidth: bounds.width,
+			centerDelta: Math.abs((bounds.left + bounds.right) / 2 - sidebar.right),
+			gripSize: grip.width,
+			lineWidth: handle.querySelector('span')!.getBoundingClientRect().width,
+			panelBorderWidth: getComputedStyle(document.querySelector('#project-resource-sidebar')!).borderRightWidth
+		};
+	});
+	expect(sidebarGeometry.handleWidth).toBe(12);
+	expect(sidebarGeometry.centerDelta).toBeLessThan(1);
+	expect(sidebarGeometry.gripSize).toBe(16);
+	expect(sidebarGeometry.lineWidth).toBe(1);
+	expect(sidebarGeometry.panelBorderWidth).toBe('0px');
+
+	const sidebarSeparator = page.getByRole('separator', { name: studioMessage('sidebar.resize') });
+	const sidebarHandle = await sidebarSeparator.boundingBox();
+	expect(sidebarHandle).not.toBeNull();
+	if (sidebarHandle) {
+		const centerX = sidebarHandle.x + sidebarHandle.width / 2;
+		const centerY = sidebarHandle.y + sidebarHandle.height / 2;
+		await page.mouse.move(centerX, centerY);
+		await page.mouse.down();
+		await page.mouse.move(centerX - 200, centerY, { steps: 4 });
+		await page.mouse.up();
+	}
+	await expect(sidebarSeparator).toHaveAttribute('aria-valuenow', '56');
+
+	const collapsedHandle = await sidebarSeparator.boundingBox();
+	expect(collapsedHandle).not.toBeNull();
+	if (collapsedHandle) {
+		const centerX = collapsedHandle.x + collapsedHandle.width / 2;
+		const centerY = collapsedHandle.y + collapsedHandle.height / 2;
+		await page.mouse.move(centerX, centerY);
+		await page.mouse.down();
+		await page.mouse.move(240, centerY, { steps: 4 });
+		await page.mouse.up();
+	}
+	await expect(sidebarSeparator).toHaveAttribute('aria-valuenow', '240');
+
 	const separator = page.getByRole('separator', { name: studioMessage('pane.resize') });
 	const measure = () => page.evaluate(() => {
 		const editor = document.querySelector('.editor-panel')!.getBoundingClientRect();
@@ -408,10 +530,14 @@ test('scenario playback advances and can be paused', async ({ page }) => {
 	await expect(timeline).toBeEnabled();
 	await page.getByRole('button', { name: studioMessage('preview.play') }).click();
 	await expect(page.getByRole('button', { name: studioMessage('preview.pause') })).toBeVisible();
-	await expect.poll(async () => Number(await timeline.inputValue())).toBeGreaterThan(0);
+	await expect.poll(async () => Number(await timeline.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
 
 	await page.getByRole('button', { name: studioMessage('preview.pause') }).click();
 	await expect(page.getByRole('button', { name: studioMessage('preview.play') })).toBeVisible();
+	const pausedTime = Number(await timeline.getAttribute('aria-valuenow'));
+	await timeline.focus();
+	await page.keyboard.press('ArrowRight');
+	await expect(timeline).toHaveAttribute('aria-valuenow', String(pausedTime + 1));
 });
 
 test('restores the caret and vertical scroll when returning to a source tab', async ({ page }) => {

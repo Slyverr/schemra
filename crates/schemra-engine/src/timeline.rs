@@ -27,58 +27,87 @@ impl TimelineSampling for Timeline {
         let mut highlights = Vec::new();
 
         for (instance_id, event) in self.events.iter().enumerate() {
-            if !(event.start_ms <= time_ms && time_ms < event.end_ms) {
-                continue;
-            }
             match &event.kind {
-                TimelineEventKind::Move { token, from, to } => tokens.push(TokenFrame {
-                    instance_id,
-                    token: token.clone(),
-                    position: TokenPosition::Moving {
-                        from: from.clone(),
-                        to: to.clone(),
-                        progress_micros: normalized_progress_micros(
-                            time_ms - event.start_ms,
-                            event.end_ms - event.start_ms,
-                        ),
-                    },
-                }),
-                TimelineEventKind::Highlight {
-                    node,
-                    effect,
-                    origin,
-                } => {
-                    highlighted_nodes.push(node.clone());
-                    let presentation = super::effects::sample(
-                        *effect,
-                        normalized_progress_micros(
-                            time_ms - event.start_ms,
-                            event.end_ms - event.start_ms,
-                        ),
-                    );
-                    highlights.push(HighlightFrame {
-                        instance_id,
-                        node: node.clone(),
-                        effect: *effect,
-                        progress_micros: presentation.progress_micros,
-                        pulse_opacity: presentation.pulse_opacity,
-                        origin: origin.clone(),
-                    });
+                TimelineEventKind::Move { .. } => {
+                    if let Some(token) = sample_move(instance_id, event, time_ms) {
+                        tokens.push(token);
+                    }
+                }
+                TimelineEventKind::Highlight { .. } => {
+                    if let Some(highlight) = sample_highlight(instance_id, event, time_ms) {
+                        highlighted_nodes.push(highlight.node.clone());
+                        highlights.push(highlight);
+                    }
                 }
                 TimelineEventKind::Wait => {}
             }
         }
 
-        tokens.sort_by_key(|token| {
-            let event = &self.events[token.instance_id];
-            (event.start_ms, token.instance_id)
-        });
-        highlights.sort_by_key(|highlight| {
-            let event = &self.events[highlight.instance_id];
-            (event.start_ms, highlight.instance_id)
-        });
-        highlighted_nodes.sort_by(|left, right| left.0.cmp(&right.0));
-        highlighted_nodes.dedup();
+        sort_frame(&mut tokens, &mut highlights, &mut highlighted_nodes, self);
+        TimelineFrame {
+            time_ms,
+            tokens,
+            highlighted_nodes,
+            highlights,
+        }
+    }
+}
+
+/// Reusable event index for sampling an immutable timeline across playback frames.
+pub struct TimelineSampler {
+    timeline: Timeline,
+    move_events: Vec<usize>,
+    highlight_events: Vec<usize>,
+}
+
+impl TimelineSampler {
+    /// Builds an event index from a timeline that will be sampled repeatedly.
+    pub fn new(timeline: Timeline) -> Self {
+        let mut move_events = Vec::new();
+        let mut highlight_events = Vec::new();
+        for (instance_id, event) in timeline.events.iter().enumerate() {
+            match &event.kind {
+                TimelineEventKind::Move { .. } => move_events.push(instance_id),
+                TimelineEventKind::Highlight { .. } => highlight_events.push(instance_id),
+                TimelineEventKind::Wait => {}
+            }
+        }
+        move_events
+            .sort_by_key(|instance_id| (timeline.events[*instance_id].start_ms, *instance_id));
+        highlight_events
+            .sort_by_key(|instance_id| (timeline.events[*instance_id].start_ms, *instance_id));
+
+        Self {
+            timeline,
+            move_events,
+            highlight_events,
+        }
+    }
+
+    /// Returns the timeline's total duration in milliseconds.
+    pub fn duration_ms(&self) -> u64 {
+        self.timeline.duration_ms
+    }
+
+    /// Samples active movements and highlights without rebuilding the event index.
+    pub fn sample(&self, time_ms: u64) -> TimelineFrame {
+        let tokens = self
+            .move_events
+            .iter()
+            .filter_map(|instance_id| {
+                sample_move(*instance_id, &self.timeline.events[*instance_id], time_ms)
+            })
+            .collect::<Vec<_>>();
+        let mut highlighted_nodes = Vec::new();
+        let highlights = self
+            .highlight_events
+            .iter()
+            .filter_map(|instance_id| {
+                sample_highlight(*instance_id, &self.timeline.events[*instance_id], time_ms)
+            })
+            .collect::<Vec<_>>();
+        highlighted_nodes.extend(highlights.iter().map(|highlight| highlight.node.clone()));
+        sort_highlighted_nodes(&mut highlighted_nodes);
 
         TimelineFrame {
             time_ms,
@@ -87,6 +116,79 @@ impl TimelineSampling for Timeline {
             highlights,
         }
     }
+}
+
+fn sample_move(instance_id: usize, event: &TimelineEvent, time_ms: u64) -> Option<TokenFrame> {
+    if !(event.start_ms <= time_ms && time_ms < event.end_ms) {
+        return None;
+    }
+    let TimelineEventKind::Move { token, from, to } = &event.kind else {
+        return None;
+    };
+    Some(TokenFrame {
+        instance_id,
+        token: token.clone(),
+        position: TokenPosition::Moving {
+            from: from.clone(),
+            to: to.clone(),
+            progress_micros: normalized_progress_micros(
+                time_ms - event.start_ms,
+                event.end_ms - event.start_ms,
+            ),
+        },
+    })
+}
+
+fn sample_highlight(
+    instance_id: usize,
+    event: &TimelineEvent,
+    time_ms: u64,
+) -> Option<HighlightFrame> {
+    if !(event.start_ms <= time_ms && time_ms < event.end_ms) {
+        return None;
+    }
+    let TimelineEventKind::Highlight {
+        node,
+        effect,
+        origin,
+    } = &event.kind
+    else {
+        return None;
+    };
+    let presentation = super::effects::sample(
+        *effect,
+        normalized_progress_micros(time_ms - event.start_ms, event.end_ms - event.start_ms),
+    );
+    Some(HighlightFrame {
+        instance_id,
+        node: node.clone(),
+        effect: *effect,
+        progress_micros: presentation.progress_micros,
+        pulse_opacity: presentation.pulse_opacity,
+        origin: origin.clone(),
+    })
+}
+
+fn sort_frame(
+    tokens: &mut [TokenFrame],
+    highlights: &mut [HighlightFrame],
+    highlighted_nodes: &mut Vec<schemra_ir::NodeId>,
+    timeline: &Timeline,
+) {
+    tokens.sort_by_key(|token| {
+        let event = &timeline.events[token.instance_id];
+        (event.start_ms, token.instance_id)
+    });
+    highlights.sort_by_key(|highlight| {
+        let event = &timeline.events[highlight.instance_id];
+        (event.start_ms, highlight.instance_id)
+    });
+    sort_highlighted_nodes(highlighted_nodes);
+}
+
+fn sort_highlighted_nodes(nodes: &mut Vec<schemra_ir::NodeId>) {
+    nodes.sort_by(|left, right| left.0.cmp(&right.0));
+    nodes.dedup();
 }
 
 fn normalized_progress_micros(elapsed_ms: u64, duration_ms: u64) -> u32 {

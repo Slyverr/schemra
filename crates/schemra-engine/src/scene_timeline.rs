@@ -6,7 +6,10 @@ use schemra_ir::{
 };
 use schemra_scene::{Rect, Scene};
 
-use crate::{routing::RouteGeometry, timeline::TimelineSampling};
+use crate::{
+    routing::RouteGeometry,
+    timeline::{TimelineSampler, TimelineSampling},
+};
 
 /// Reusable scene geometry cache for sampling multiple timelines against one scene.
 pub struct SceneGeometrySampler {
@@ -34,6 +37,11 @@ impl SceneGeometrySampler {
         self.resolve_frame(timeline.sample(time_ms))
     }
 
+    /// Resolves a previously sampled frame against the cached scene geometry.
+    pub fn sample_frame(&self, frame: TimelineFrame) -> SceneTimelineFrame {
+        self.resolve_frame(frame)
+    }
+
     fn resolve_frame(&self, frame: TimelineFrame) -> SceneTimelineFrame {
         sample_scene_with_geometry(frame, &self.route_geometry, &self.scene_index)
     }
@@ -41,22 +49,24 @@ impl SceneGeometrySampler {
 
 /// Reusable sampler that caches route lengths and scene lookups for playback.
 pub struct SceneTimelineSampler<'timeline> {
-    timeline: &'timeline Timeline,
+    _timeline: &'timeline Timeline,
     geometry: SceneGeometrySampler,
+    sampler: TimelineSampler,
 }
 
 impl<'timeline> SceneTimelineSampler<'timeline> {
     /// Builds a sampler for a fixed scene and timeline.
     pub fn new(scene: &Scene, timeline: &'timeline Timeline) -> Self {
         Self {
-            timeline,
+            _timeline: timeline,
             geometry: SceneGeometrySampler::new(scene),
+            sampler: TimelineSampler::new(timeline.clone()),
         }
     }
 
     /// Returns the active marker positions, link progress, and highlight effects.
     pub fn sample(&self, time_ms: u64) -> SceneTimelineFrame {
-        self.geometry.sample(self.timeline, time_ms)
+        self.geometry.sample_frame(self.sampler.sample(time_ms))
     }
 }
 
