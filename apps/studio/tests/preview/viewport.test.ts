@@ -4,11 +4,43 @@ import {
 	clampPreviewZoom,
 	clampScenePan,
 	getPreviewConnectionBounds,
+	insetPreviewViewport,
 	MAX_PREVIEW_ZOOM,
+	previewGridTransform,
 	zoomPanAtPoint
 } from '../../src/lib/preview/viewport.js';
 
 describe('preview viewport behavior', () => {
+	test('moves and scales the infinite grid with the canvas camera', () => {
+		expect(previewGridTransform(
+			{ width: 600, height: 400 },
+			{ x: -150, y: 100 },
+			200
+		)).toEqual({ x: -450, y: -100, scale: 2 });
+	});
+
+	test('uses a stable grid transform until the canvas is measured', () => {
+		expect(previewGridTransform(
+			{ width: 0, height: 0 },
+			{ x: 10, y: 20 },
+			150
+		)).toEqual({ x: 0, y: 0, scale: 1 });
+	});
+
+	test('fits content between controls overlaid at the canvas edges', () => {
+		expect(insetPreviewViewport(
+			{ width: 600, height: 400 },
+			{ top: 48, bottom: 64 }
+		)).toEqual({ width: 600, height: 288, centerOffsetY: -8, canvasHeight: 400 });
+	});
+
+	test('bounds measured controls so they cannot consume the whole canvas', () => {
+		expect(insetPreviewViewport(
+			{ width: 600, height: 80 },
+			{ top: 90, bottom: 40 }
+		)).toEqual({ width: 600, height: 1, centerOffsetY: 39.5, canvasHeight: 80 });
+	});
+
 	test('builds connection focus bounds from its endpoints and cubic route', () => {
 		expect(getPreviewConnectionBounds({
 			nodes: [
@@ -51,6 +83,15 @@ describe('preview viewport behavior', () => {
 		expect(transform?.y).toBeCloseTo(75.9);
 	});
 
+	test('centers focused nodes in the clear content area', () => {
+		const transform = calculateSceneFocusTransform(
+			{ width: 600, height: 400, centerOffsetY: -8 },
+			{ width: 1000, height: 500 },
+			{ x: 300, y: 100, width: 300, height: 200 }
+		);
+		expect(transform?.y).toBeCloseTo(67.9);
+	});
+
 	test('keeps focus zoom bounded and rejects invalid geometry', () => {
 		expect(calculateSceneFocusTransform(
 			{ width: 400, height: 500 },
@@ -77,6 +118,16 @@ describe('preview viewport behavior', () => {
 			{ x: 450, y: 100 },
 			{ width: 600, height: 400 }
 		)).toEqual({ x: -150, y: 100 });
+	});
+
+	test('zooms around the clear content center when controls are asymmetric', () => {
+		expect(zoomPanAtPoint(
+			{ x: 0, y: -8 },
+			100,
+			200,
+			{ x: 300, y: 192 },
+			{ width: 600, height: 288, centerOffsetY: -8, canvasHeight: 400 }
+		)).toEqual({ x: 0, y: -8 });
 	});
 
 	test('clamps drag offsets so part of the enlarged diagram remains reachable', () => {

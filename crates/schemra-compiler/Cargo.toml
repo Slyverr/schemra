@@ -9,4 +9,5 @@ publish = false
 [dependencies]
 serde.workspace = true
 schemra-ir.workspace = true
+schemra-project.workspace = true
 schemra-syntax.workspace = true

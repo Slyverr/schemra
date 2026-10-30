@@ -5,21 +5,11 @@ visual traffic_overview "Service traffic" {
     layout: grid
     columns: 2
 
-    node user_1 "User 1" {
-      icon: "user"
-      detail: "Sends requests"
-    }
-    node user_2 "User 2" {
-      icon: "user"
-      detail: "Sends requests"
-    }
-    node user_3 "User 3" {
-      icon: "user"
-      detail: "Sends requests"
-    }
-    node user_4 "User 4" {
-      icon: "user"
-      detail: "Sends requests"
+    repeat 4 as i {
+      node user[i] "User {i}" {
+        icon: "user"
+        detail: "Sends requests"
+      }
     }
   }
 
@@ -37,6 +27,9 @@ visual traffic_overview "Service traffic" {
   }
 
   group data "Data" {
+    layout: grid
+    columns: 1
+
     node audit_worker "Audit worker" {
       icon: "server"
       detail: "Writes audit records"
@@ -47,10 +40,9 @@ visual traffic_overview "Service traffic" {
     }
   }
 
-  user_1 -- reverse_proxy
-  user_2 -- reverse_proxy
-  user_3 -- reverse_proxy
-  user_4 -- reverse_proxy
+  repeat 4 as i {
+    user[i] -- reverse_proxy
+  }
   reverse_proxy -- backend
   backend -- database
   audit_worker -> database

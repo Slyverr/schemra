@@ -56,8 +56,8 @@
 	}
 </script>
 
-<div class="preview-toolbar absolute inset-x-3 top-3 z-10 grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-	<div class="flex h-9 w-fit min-w-0 max-w-full flex-wrap items-center gap-0.5 rounded-md border border-border bg-background px-0.5 py-0 shadow-xs sm:max-w-[min(32rem,calc(100%_-_3rem))]" role="group" aria-label={studioMessage('preview.controls')}>
+<div class="preview-toolbar absolute inset-x-3 top-3 z-10 grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+	<div class="flex h-9 w-fit min-w-0 max-w-full flex-nowrap items-center gap-0.5 rounded-md border border-border bg-background px-0.5 py-0 shadow-xs sm:max-w-[min(32rem,calc(100%_-_3rem))]" role="group" aria-label={studioMessage('preview.controls')}>
 		{#if props.scenarios.length > 0}
 			<Select.Root
 				type="single"
@@ -66,13 +66,15 @@
 				onOpenChange={changeScenarioPickerOpen}
 				onValueChange={selectScenario}
 			>
-				<Select.Trigger size="sm" class="w-fit max-w-[min(16rem,55vw)] min-w-0 justify-start gap-1.5 border-0 px-3 text-xs shadow-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={studioMessage('preview.scenarioLabel')}>
-					{#if props.scenario}
-						<Play size={14} aria-hidden="true" class="shrink-0 text-primary" />
-					{:else}
-						<Eye size={14} aria-hidden="true" class="shrink-0 text-muted-foreground" />
-					{/if}
-					<span class="min-w-0 max-w-[min(12rem,40vw)] truncate text-left" title={selectedScenarioLabel}>{selectedScenarioLabel}</span>
+				<Select.Trigger size="sm" class="w-40 max-w-64 min-w-0 items-center justify-between gap-1.5 border-0 px-3 text-xs shadow-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={studioMessage('preview.scenarioLabel')}>
+					<span class="flex min-w-0 flex-1 items-center gap-1.5">
+						{#if props.scenario}
+							<Play size={14} aria-hidden="true" class="shrink-0 text-primary" />
+						{:else}
+							<Eye size={14} aria-hidden="true" class="shrink-0 text-muted-foreground" />
+						{/if}
+						<span class="min-w-0 max-w-[min(12rem,40vw)] truncate text-left" title={selectedScenarioLabel}>{selectedScenarioLabel}</span>
+					</span>
 				</Select.Trigger>
 				<Select.Content side="bottom" align="start" class="!z-[1000] min-w-48 p-1">
 					<div class="p-1">

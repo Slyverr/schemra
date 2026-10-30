@@ -1,6 +1,22 @@
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
-	import { Command, FileCode2, FolderOpen, Search, Sparkles, X } from '@lucide/svelte';
+	import { fade, scale } from 'svelte/transition';
+	import {
+		AlignLeft,
+		Command,
+		Download,
+		FileCode2,
+		FilePlus2,
+		FolderOpen,
+		FolderPlus,
+		Search,
+		Save,
+		Settings2,
+		Sparkles,
+		Workflow,
+		X
+	} from '@lucide/svelte';
+	import { studioMessage } from '../i18n/messages.js';
 	import {
 		buildCommandPaletteEntries,
 		firstCommandPaletteSelection,
@@ -13,6 +29,21 @@
 	} from './command-palette.js';
 
 	type PaletteProject = CommandPaletteContext['projects'][number];
+	const actionIcons = {
+		reference: FileCode2,
+		'new-project': FolderPlus,
+		'new-visual': FilePlus2,
+		'open-source': FolderOpen,
+		save: Save,
+		format: AlignLeft,
+		'export-diagram': Workflow,
+		'import-project': FolderOpen,
+		'export-project': Download,
+		settings: Settings2,
+		editor: FileCode2,
+		preview: Workflow,
+		default: Sparkles
+	} as const;
 
 	interface Props {
 		open?: boolean;
@@ -64,10 +95,15 @@
 	);
 	const activeEntry = $derived(visibleEntries[activeIndexInResults] ?? null);
 	const groups = $derived.by(() => {
-		const names = ['Open tabs', 'Project files', 'Projects', 'Actions'] as const;
-		return names.flatMap((name) => {
-			const items = visibleEntries.flatMap((entry, index) => entry.group === name ? [{ entry, index }] : []);
-			return items.length ? [{ name, items }] : [];
+		const groups = [
+			{ id: 'openTabs', label: 'command.group.openTabs' },
+			{ id: 'projectFiles', label: 'command.group.projectFiles' },
+			{ id: 'projects', label: 'command.group.projects' },
+			{ id: 'actions', label: 'command.group.actions' }
+		] as const;
+		return groups.flatMap(({ id, label }) => {
+			const items = visibleEntries.flatMap((entry, index) => entry.group === id ? [{ entry, index }] : []);
+			return items.length ? [{ id, label, items }] : [];
 		});
 	});
 
@@ -163,10 +199,11 @@
 </script>
 
 {#if open}
-	<div class="palette-backdrop" role="presentation" onclick={(event) => event.target === event.currentTarget && close()}>
+	<div class="palette-backdrop" role="presentation" transition:fade={{ duration: 150 }} onclick={(event) => event.target === event.currentTarget && close()}>
 		<div
 			id={dialogId}
 			class="palette-dialog"
+			transition:scale={{ duration: 150, start: 0.98 }}
 			role="dialog"
 			tabindex="-1"
 			aria-modal="true"
@@ -177,17 +214,17 @@
 			<header class="palette-heading">
 				<div class="palette-heading-icon" aria-hidden="true"><Command size={18} /></div>
 				<div class="palette-heading-copy">
-					<h2 id={`${instanceId}-title`}>Search files and actions</h2>
-					<p id={`${instanceId}-description`}>Jump to a tab, open a project file, switch projects, or run a Studio action.</p>
+					<h2 id={`${instanceId}-title`}>{studioMessage('command.title')}</h2>
+					<p id={`${instanceId}-description`}>{studioMessage('command.description')}</p>
 				</div>
-				<button bind:this={closeButton} class="palette-close" type="button" aria-label="Close search" onclick={close}>
+				<button bind:this={closeButton} class="palette-close" type="button" aria-label={studioMessage('command.close')} onclick={close}>
 					<X size={17} aria-hidden="true" />
 				</button>
 			</header>
 
 			<div class="palette-search-wrap">
 				<Search size={17} aria-hidden="true" />
-				<label class="sr-only" for={searchId}>Search open tabs, project files, projects, and actions</label>
+				<label class="sr-only" for={searchId}>{studioMessage('command.inputLabel')}</label>
 				<input
 					id={searchId}
 					bind:this={searchInput}
@@ -198,21 +235,22 @@
 					aria-controls={resultsId}
 					aria-activedescendant={activeEntry ? optionId(activeEntry) : undefined}
 					autocomplete="off"
-					placeholder="Search tabs, files, projects, and actions…"
+					placeholder={studioMessage('command.placeholder')}
 					oninput={handleQueryInput}
 				/>
 				<kbd class="keyboard-hint">ESC</kbd>
 			</div>
 
-			<div id={resultsId} class="palette-results" role="listbox" aria-label="Search results">
+			<div id={resultsId} class="palette-results" role="listbox" aria-label={studioMessage('command.results')}>
 				{#if groups.length === 0}
-					<p class="palette-empty" role="status">No matching tabs, files, projects, or actions.</p>
+					<p class="palette-empty" role="status">{studioMessage('command.empty')}</p>
 				{:else}
-					{#each groups as group (group.name)}
-						<div class="palette-group" role="group" aria-label={group.name}>
-							<h3>{group.name}<span>{group.items.length}</span></h3>
+					{#each groups as group (group.id)}
+						<div class="palette-group" role="group" aria-label={studioMessage(group.label)}>
+							<h3>{studioMessage(group.label)}<span>{group.items.length}</span></h3>
 							{#each group.items as item (`${item.entry.key}`)}
 								{@const entry = item.entry}
+								{@const Icon = entry.type === 'action' ? actionIcons[entry.icon] : entry.type === 'project' ? FolderOpen : FileCode2}
 								<button
 									id={optionId(entry)}
 									class="palette-option"
@@ -228,9 +266,7 @@
 									onclick={() => selectEntry(entry)}
 								>
 									<span class="option-icon" aria-hidden="true">
-										{#if entry.type === 'action'}<Sparkles size={16} />
-										{:else if entry.type === 'project'}<FolderOpen size={16} />
-										{:else}<FileCode2 size={16} />{/if}
+										<Icon size={16} />
 									</span>
 									<span class="option-copy">
 										<span class="option-title">{entry.title}</span>
@@ -239,15 +275,15 @@
 										{:else if entry.type === 'action' && entry.description}
 											<span class="option-detail">{entry.description}</span>
 										{:else if entry.type === 'project'}
-											<span class="option-detail">{entry.fileCount} {entry.fileCount === 1 ? 'file' : 'files'}</span>
+							<span class="option-detail">{studioMessage(entry.fileCount === 1 ? 'command.fileCount.one' : 'command.fileCount.other', { count: entry.fileCount })}</span>
 										{/if}
 									</span>
 									{#if entry.type === 'file'}
-										<span class="option-badge">{entry.kind}</span>
-						{#if entry.current}<span class="option-current">Current</span>{/if}
-										{#if entry.unsaved}<span class="option-unsaved">Unsaved</span>{/if}
+											<span class="option-badge">{studioMessage(entry.kind === 'visual' ? 'sidebar.resourceKindVisual' : entry.kind === 'scenario' ? 'sidebar.resourceKindScenario' : 'sidebar.resourceKindSource')}</span>
+											{#if entry.current}<span class="option-current">{studioMessage('command.current')}</span>{/if}
+											{#if entry.unsaved}<span class="option-unsaved">{studioMessage('command.unsaved')}</span>{/if}
 									{:else if entry.type === 'project' && entry.current}
-										<span class="option-current">Current</span>
+											<span class="option-current">{studioMessage('command.current')}</span>
 									{:else if entry.type === 'action' && entry.shortcut}
 										<kbd class="option-shortcut">{entry.shortcut}</kbd>
 									{/if}
@@ -259,8 +295,8 @@
 			</div>
 
 			<footer class="palette-footer">
-				<span><kbd>↑</kbd><kbd>↓</kbd> to navigate</span>
-				<span><kbd>Enter</kbd> to select</span>
+				<span><kbd>↑</kbd><kbd>↓</kbd> {studioMessage('command.footerNavigate')}</span>
+				<span><kbd>Enter</kbd> {studioMessage('command.footerSelect')}</span>
 			</footer>
 		</div>
 	</div>

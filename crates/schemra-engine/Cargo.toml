@@ -8,8 +8,5 @@ publish = false
 
 [dependencies]
 schemra-ir.workspace = true
+schemra-renderer.workspace = true
 schemra-scene.workspace = true
-base64.workspace = true
-cosmic-text.workspace = true
-unicode-script.workspace = true
-unicode-segmentation.workspace = true

@@ -22,22 +22,27 @@ pub(super) fn write_paths(svg: &mut String, scene: &Scene, default_color: &str) 
             .and_then(|peer_index| scene.edges.get(peer_index).map(|peer| (peer_index, peer)))
             .filter(|(_, peer)| peer.reciprocal_edge_index == Some(index));
         let color = edge_color(edge, default_color, &scene.theme);
-        write_edge_path(svg, index, edge, reciprocal, color);
-
-        if edge.arrow_at_start {
-            write_direction_cue(svg, index, edge, color, true);
-        } else if let Some((peer_index, peer)) = reciprocal
-            && peer.arrow_at_end
-        {
-            write_direction_cue(svg, peer_index, peer, color, false);
+        let arrow_at_start =
+            edge.arrow_at_start || reciprocal.is_some_and(|(_, peer)| peer.arrow_at_end);
+        let arrow_at_end =
+            edge.arrow_at_end || reciprocal.is_some_and(|(_, peer)| peer.arrow_at_start);
+        let bidirectional = arrow_at_start && arrow_at_end;
+        let mut cues = Vec::with_capacity(usize::from(arrow_at_start) + usize::from(arrow_at_end));
+        if edge.arrow_at_start || reciprocal.is_some_and(|(_, peer)| peer.arrow_at_end) {
+            cues.extend(geometry::route_direction_cue(
+                &edge.path,
+                true,
+                bidirectional,
+            ));
         }
-        if edge.arrow_at_end {
-            write_direction_cue(svg, index, edge, color, false);
-        } else if let Some((peer_index, peer)) = reciprocal
-            && peer.arrow_at_start
-        {
-            write_direction_cue(svg, peer_index, peer, color, true);
+        if edge.arrow_at_end || reciprocal.is_some_and(|(_, peer)| peer.arrow_at_start) {
+            cues.extend(geometry::route_direction_cue(
+                &edge.path,
+                false,
+                bidirectional,
+            ));
         }
+        write_edge_path(svg, index, edge, reciprocal, color, &cues);
     }
 }
 
@@ -114,10 +119,12 @@ fn write_edge_path(
     edge: &SceneEdge,
     reciprocal: Option<(usize, &SceneEdge)>,
     color: &str,
+    cues: &[(Point, Point)],
 ) {
-    let Some(path) = svg_path_data(&edge.path) else {
+    let Some(mut path) = svg_path_data(&edge.path) else {
         return;
     };
+    append_direction_cues(&mut path, cues);
     let edge_indices =
         reciprocal.map_or_else(|| index.to_string(), |(peer, _)| format!("{index},{peer}"));
     let edge_ids = std::iter::once(edge.id.as_deref())
@@ -166,48 +173,28 @@ fn write_edge_path(
 const DIRECTION_CUE_HALF_LENGTH: f32 = 4.0;
 const DIRECTION_CUE_HALF_WIDTH: f32 = 3.5;
 
-fn write_direction_cue(
-    svg: &mut String,
-    index: usize,
-    edge: &SceneEdge,
-    color: &str,
-    at_start: bool,
-) {
-    let Some((center, tangent)) = geometry::route_direction_cue(&edge.path, at_start) else {
-        return;
-    };
-    let normal = Point {
-        x: -tangent.y,
-        y: tangent.x,
-    };
-    let tip = offset(center, tangent, DIRECTION_CUE_HALF_LENGTH);
-    let back = offset(center, tangent, -DIRECTION_CUE_HALF_LENGTH);
-    let left = offset(back, normal, DIRECTION_CUE_HALF_WIDTH);
-    let right = offset(back, normal, -DIRECTION_CUE_HALF_WIDTH);
-    let path = format!(
-        "M {} {} L {} {} L {} {}",
-        number(left.x),
-        number(left.y),
-        number(tip.x),
-        number(tip.y),
-        number(right.x),
-        number(right.y),
-    );
-    write!(
-        svg,
-        "<path class=\"schemra-edge-direction-cue\" d=\"{path}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\" data-edge-direction-cue=\"true\" data-edge-index=\"{index}\" data-direction-end=\"{}\"",
-        if at_start { "start" } else { "end" },
-    )
-    .expect("writing to a String cannot fail");
-    if let Some(id) = edge.id.as_deref() {
-        svg.push_str(" data-edge-id=\"");
-        write_xml(svg, id);
-        svg.push('"');
+fn append_direction_cues(path: &mut String, cues: &[(Point, Point)]) {
+    for (center, tangent) in cues {
+        let normal = Point {
+            x: -tangent.y,
+            y: tangent.x,
+        };
+        let tip = offset(*center, *tangent, DIRECTION_CUE_HALF_LENGTH);
+        let back = offset(*center, *tangent, -DIRECTION_CUE_HALF_LENGTH);
+        let left = offset(back, normal, DIRECTION_CUE_HALF_WIDTH);
+        let right = offset(back, normal, -DIRECTION_CUE_HALF_WIDTH);
+        write!(
+            path,
+            " M {} {} L {} {} L {} {}",
+            number(left.x),
+            number(left.y),
+            number(tip.x),
+            number(tip.y),
+            number(right.x),
+            number(right.y),
+        )
+        .expect("writing to a String cannot fail");
     }
-    if let Some(opacity) = edge.style.opacity {
-        write!(svg, " opacity=\"{}\"", number(opacity)).expect("writing to a String cannot fail");
-    }
-    svg.push_str("/>");
 }
 
 fn offset(point: Point, direction: Point, distance: f32) -> Point {

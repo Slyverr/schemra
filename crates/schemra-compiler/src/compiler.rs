@@ -7,6 +7,7 @@ use schemra_ir::{
 use schemra_syntax::{Diagnostic, Statement, StatementKind, Token, TokenKind, parse_syntax};
 
 use crate::registry::Registry;
+use crate::visual_repeat::expand_visual_repeats;
 use crate::{BodySpec, ConstructSpec, RegistryError, Scope};
 
 /// A construct after syntax and schema validation, ready for lowering.
@@ -259,6 +260,56 @@ pub fn compile(source: &str) -> Result<ModuleIr, Vec<Diagnostic>> {
     compile_sources(&[source])
 }
 
+pub(super) fn compile_for_analysis(source: &str) -> (ModuleIr, Vec<Diagnostic>) {
+    let registry = match Registry::builtin_shared() {
+        Ok(registry) => registry,
+        Err(error) => return (ModuleIr::default(), registry_diagnostic(error)),
+    };
+    let mut syntax = parse_syntax(source);
+    let mut diagnostics = expand_visual_repeats(&mut syntax, registry);
+    diagnostics.extend(registry.validate(&syntax));
+    let mut module = ModuleIr::default();
+    lower_statements(&syntax.statements, registry, &mut module, &mut diagnostics);
+    validate_module(&module, &mut diagnostics);
+    diagnostics.sort_by(|left, right| {
+        left.span
+            .start
+            .offset
+            .cmp(&right.span.start.offset)
+            .then_with(|| left.code.cmp(&right.code))
+    });
+    diagnostics.dedup_by(|left, right| {
+        left.code == right.code && left.span == right.span && left.message == right.message
+    });
+    (module, diagnostics)
+}
+
+fn lower_statements(
+    statements: &[Statement],
+    registry: &Registry,
+    module: &mut ModuleIr,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let mut context = LoweringContext {
+        registry,
+        scenario_highlight: None,
+    };
+    for statement in statements {
+        match context.lower_child(statement, Scope::File) {
+            Ok(LoweredItem::Visual(visual)) => module.visuals.push(visual),
+            Ok(LoweredItem::Scenario(scenario)) => module.scenarios.push(scenario),
+            Ok(
+                LoweredItem::Group(_, _)
+                | LoweredItem::Node(_)
+                | LoweredItem::Token(_)
+                | LoweredItem::Action(_)
+                | LoweredItem::Ignored,
+            ) => {}
+            Err(diagnostic) => diagnostics.push(diagnostic),
+        }
+    }
+}
+
 pub(super) fn string_property(statements: &[Statement], name: &str) -> Option<String> {
     statements
         .iter()
@@ -407,7 +458,8 @@ pub fn compile_sources_with_registry(
     let mut syntax_files = Vec::with_capacity(sources.len());
     let mut diagnostics = Vec::new();
     for source in sources {
-        let syntax = parse_syntax(source);
+        let mut syntax = parse_syntax(source);
+        diagnostics.extend(expand_visual_repeats(&mut syntax, registry));
         diagnostics.extend(registry.validate(&syntax));
         syntax_files.push(syntax);
     }
@@ -417,24 +469,7 @@ pub fn compile_sources_with_registry(
 
     let mut module = ModuleIr::default();
     for syntax in &syntax_files {
-        let mut context = LoweringContext {
-            registry,
-            scenario_highlight: None,
-        };
-        for statement in &syntax.statements {
-            match context.lower_child(statement, Scope::File) {
-                Ok(LoweredItem::Visual(visual)) => module.visuals.push(visual),
-                Ok(LoweredItem::Scenario(scenario)) => module.scenarios.push(scenario),
-                Ok(
-                    LoweredItem::Group(_, _)
-                    | LoweredItem::Node(_)
-                    | LoweredItem::Token(_)
-                    | LoweredItem::Action(_)
-                    | LoweredItem::Ignored,
-                ) => {}
-                Err(diagnostic) => diagnostics.push(diagnostic),
-            }
-        }
+        lower_statements(&syntax.statements, registry, &mut module, &mut diagnostics);
     }
     validate_module(&module, &mut diagnostics);
     if diagnostics.is_empty() {

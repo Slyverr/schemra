@@ -16,6 +16,7 @@ pub enum TokenKind {
     BareValue(String),
     Arrow,
     Undirected,
+    RangeInclusive,
     Colon,
     LeftBrace,
     RightBrace,
@@ -148,6 +149,12 @@ impl<'a> Lexer<'a> {
                         self.advance();
                         self.token(TokenKind::Undirected, start)
                     }
+                    '.' if self.peek_after(1) == Some('.') && self.peek_after(2) == Some('=') => {
+                        self.advance();
+                        self.advance();
+                        self.advance();
+                        self.token(TokenKind::RangeInclusive, start)
+                    }
                     '"' => match self.string(start) {
                         Ok(token) => token,
                         Err(message) => {
@@ -250,6 +257,15 @@ impl<'a> Lexer<'a> {
                 self.advance();
             }
         }
+        if let Some(suffix) = self.source[self.offset..].strip_prefix('[')
+            && let Some(close) = suffix.find(']')
+            && is_simple_identifier(&suffix[..close])
+        {
+            let end = self.offset + close + 2;
+            while self.offset < end {
+                self.advance();
+            }
+        }
         let raw = self.source[begin..self.offset].to_owned();
         let kind = if raw.contains('-') {
             TokenKind::BareValue(raw.clone())
@@ -318,6 +334,13 @@ fn is_identifier_start(ch: char) -> bool {
 
 fn is_identifier_continue(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || ch == '_'
+}
+
+fn is_simple_identifier(value: &str) -> bool {
+    let mut chars = value.chars();
+    chars
+        .next()
+        .is_some_and(|first| is_identifier_start(first) && chars.all(is_identifier_continue))
 }
 
 struct Parser {
@@ -592,6 +615,7 @@ fn is_header_argument(kind: &TokenKind) -> bool {
             | TokenKind::BareValue(_)
             | TokenKind::Arrow
             | TokenKind::Undirected
+            | TokenKind::RangeInclusive
     )
 }
 

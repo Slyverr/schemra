@@ -1,4 +1,4 @@
-use schemra_engine::{SvgRenderError, render_svg};
+use schemra_renderer::{SvgRenderError, render_svg};
 use schemra_scene::{
     FlowDirection, Rect, Scene, SceneFont, SceneGroup, SceneNode, SceneNodeLayout, SceneNodeShape,
     ScenePalette, SceneStyle, SceneTextAlign, SceneTheme, SceneVariant,
@@ -71,6 +71,19 @@ fn renders_a_static_node_as_the_expected_svg() {
     assert!(svg.contains("data-node-text=\"label\""));
     assert!(svg.contains("font-family=\"'Inter Variable', sans-serif\""));
     assert!(svg.contains("<tspan>Gateway</tspan>"));
+}
+
+#[test]
+fn keeps_node_dimensions_and_tightens_title_to_detail_spacing() {
+    let mut node = node();
+    node.detail = Some("Routes traffic".into());
+    let svg = render_svg(&make_scene("Gateway", node)).unwrap();
+
+    assert!(
+        svg.contains("width=\"160\" height=\"50\" rx=\"16\" fill=\"#ffffff\" stroke=\"#e4e4e7\"")
+    );
+    assert!(svg.contains("data-node-text=\"label\" data-node-text-width=\"124\" data-node-text-line-height=\"22\" x=\"28\" y=\"32\""));
+    assert!(svg.contains("data-node-text=\"detail\" data-node-text-width=\"124\" data-node-text-line-height=\"18\" x=\"28\" y=\"56\""));
 }
 
 #[test]

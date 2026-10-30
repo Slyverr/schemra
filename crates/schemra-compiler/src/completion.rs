@@ -120,6 +120,13 @@ pub fn complete_at_with_nodes(
                     kind: CompletionKind::Keyword,
                 }),
         );
+        if matches!(scope, Scope::Visual | Scope::Group) {
+            candidates.push(item(
+                "repeat",
+                "Repeat nodes or links",
+                CompletionKind::Keyword,
+            ));
+        }
         candidates
     };
 
@@ -165,12 +172,17 @@ fn active_scope(tokens: &[Token], registry: &Registry, cursor: usize) -> Scope {
         match token.kind {
             TokenKind::Newline | TokenKind::Semicolon => statement.clear(),
             TokenKind::LeftBrace => {
-                let scope = if scopes.last() == Some(&Scope::Visual)
+                let parent_scope = scopes.last().copied().unwrap_or(Scope::File);
+                let scope = if parent_scope == Scope::Visual
                     && statement
                         .iter()
                         .any(|token| matches!(token.kind, TokenKind::Arrow | TokenKind::Undirected))
                 {
                     Some(Scope::Edge)
+                } else if matches!(parent_scope, Scope::Visual | Scope::Group)
+                    && statement.first().is_some_and(|name| name.text == "repeat")
+                {
+                    Some(parent_scope)
                 } else {
                     statement
                         .first()

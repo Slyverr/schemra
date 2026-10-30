@@ -3,6 +3,10 @@
   "include": ["src", "*"],
   "exclude": ["src/service-worker"],
   "compilerOptions": {
+    "paths": {
+      "#lib": ["./src/lib/index.js"],
+      "#lib/*": ["./src/lib/*"]
+    },
     "allowJs": true,
     "checkJs": true,
     "esModuleInterop": true,

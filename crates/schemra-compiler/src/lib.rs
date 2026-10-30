@@ -8,6 +8,7 @@ mod project;
 mod registry;
 mod rename;
 mod schema;
+mod visual_repeat;
 
 pub use compiler::{
     ConstructHandler, LoweredItem, LoweringContext, ValidatedConstruct, compile, compile_sources,

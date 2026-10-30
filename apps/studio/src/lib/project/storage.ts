@@ -12,7 +12,7 @@ const OBJECT_STORE = 'workspace';
 const WORKSPACE_KEY = 'current';
 const SNAPSHOT_VERSION = 1;
 export const WORKSPACE_STORAGE_TIMEOUT_MS = 10_000;
-export const BUNDLED_EXAMPLE_PROJECT_REVISION = 11;
+export const BUNDLED_EXAMPLE_PROJECT_REVISION = 13;
 
 /** Serializable source-file fields; browser file-system handles are intentionally omitted. */
 export interface StudioWorkspaceFileSnapshot {

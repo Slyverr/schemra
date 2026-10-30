@@ -2,7 +2,7 @@ import { applySourceTextEdits, removeSourceDeclaration, utf8SpanToEditorSpan } f
 import { studioMessage } from '../i18n/messages.js';
 import type { WorkspaceController, WorkspaceControllerState } from '../project/workspace-controller.js';
 import type { StudioProject } from '../project/session.js';
-import { normalizeResourceTitle, uniqueProjectName, uniqueScenarioId } from '../project/session.js';
+import { MAX_PROJECT_FILES, normalizeResourceTitle, uniqueProjectName, uniqueScenarioId } from '../project/session.js';
 import { renameProject as renameDslSymbol, type CompileResult, type ProjectCompileResult, type ProjectSource, type SourceSpan } from '../schemra.js';
 import { findDeclarationIdentifier, renameVisualTitle } from './resource-source-edits.js';
 import type { ResourceTabKind } from './resource-tab-menu.js';
@@ -85,6 +85,10 @@ export function createResourceActions({ controller, form, getSnapshot, setFileMe
 	function openResourceCreation(kind: 'visual' | 'scenario') {
 		const { activeProject, currentProjectValid, visualId } = getSnapshot();
 		if (!activeProject) return;
+		if (activeProject.files.length >= MAX_PROJECT_FILES) {
+			setFileMessage({ kind: 'error', text: studioMessage('project.sourceFileCountMaximum', { max: MAX_PROJECT_FILES }) });
+			return;
+		}
 		if (kind === 'scenario' && (!visualId || !currentProjectValid)) {
 			setFileMessage({ kind: 'error', text: studioMessage('resource.compileBeforeScenario') });
 			return;

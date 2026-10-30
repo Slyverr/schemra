@@ -12,7 +12,7 @@
 	import AnimationExportDialog, { type AnimationExportSettings } from './AnimationExportDialog.svelte';
 	import { cancelActiveAnimationExport, exportAnimation } from './animation-export.js';
 	import { applyPreviewFrame, createAnimationFrameRenderer, type AnimationFrameRenderer } from './frame-renderer.js';
-	import { calculateSceneFocusTransform, clampPreviewZoom, clampScenePan, getPreviewConnectionBounds, zoomPanAtPoint } from './viewport';
+	import { calculateSceneFocusTransform, clampPreviewZoom, clampScenePan, getPreviewConnectionBounds, insetPreviewViewport, previewGridTransform, zoomPanAtPoint } from './viewport';
 	import PlaybackTimeline from './PlaybackTimeline.svelte';
 	import PreviewToolbar from './PreviewToolbar.svelte';
 	import {
@@ -45,6 +45,7 @@
 	let previewRoot = $state<HTMLElement | undefined>();
 	let svgHost = $state<HTMLDivElement | undefined>();
 	let viewport = $state({ width: 0, height: 0 });
+	let controlInsets = $state({ top: 0, bottom: 0 });
 	let safeSvg = $state('');
 	let playback = $state<ScenarioPlayback | null>(null);
 	let playbackError = $state<string | null>(null);
@@ -52,6 +53,7 @@
 	let playing = $state(false);
 	let timeMs = $state(0);
 	let zoomPercent = $state(100);
+	let pan = $state({ x: 0, y: 0 });
 	let exporting = $state<'svg' | 'png' | null>(null);
 	let exportError = $state<string | null>(null);
 	let animationExportOpen = $state(false);
@@ -63,9 +65,10 @@
 	const scene = $derived(readPreviewScene(props.scene));
 	const scenario = $derived(readPreviewScenario(props.scenario));
 	const durationMs = $derived(playback?.durationMs ?? scenario?.duration_ms ?? 0);
-	const displaySize = $derived(svgDisplaySize(viewport, scene));
+	const contentViewport = $derived(insetPreviewViewport(viewport, controlInsets));
+	const displaySize = $derived(svgDisplaySize(contentViewport, scene));
+	const gridTransform = $derived(previewGridTransform(viewport, pan, zoomPercent));
 	const canExportAnimation = $derived(Boolean(!(props.stale ?? false) && safeSvg && playback && durationMs > 0 && !animationExportBusy));
-	let pan = $state({ x: 0, y: 0 });
 	let dragStart = $state<{ pointerId: number; x: number; y: number; panX: number; panY: number } | null>(null);
 
 	onMount(() => {
@@ -87,15 +90,57 @@
 
 	$effect(() => {
 		const stage = canvas;
-		if (!stage || typeof ResizeObserver === 'undefined') return;
-		const observer = new ResizeObserver(([entry]) => {
-			if (!entry) return;
-			const nextViewport = { width: entry.contentRect.width, height: entry.contentRect.height };
+		const root = previewRoot;
+		const currentScene = scene;
+		if (!stage || !root || typeof ResizeObserver === 'undefined') return;
+
+		let measurementFrame = 0;
+		const measure = () => {
+			const nextViewport = { width: stage.clientWidth, height: stage.clientHeight };
+			const canvasBounds = stage.getBoundingClientRect();
+			const toolbar = root.querySelector<HTMLElement>('.preview-toolbar');
+			const timeline = root.querySelector<HTMLElement>('.timeline');
+			const toolbarBounds = toolbar?.getBoundingClientRect();
+			const timelineBounds = timeline?.getBoundingClientRect();
+			const nextInsets = {
+				top: toolbarBounds ? Math.max(0, toolbarBounds.bottom - canvasBounds.top) : 0,
+				bottom: timelineBounds ? Math.max(0, canvasBounds.bottom - timelineBounds.top) : 0
+			};
+			const previousContent = insetPreviewViewport(viewport, controlInsets);
+			const nextContent = insetPreviewViewport(nextViewport, nextInsets);
+			const centerShift = (nextContent.centerOffsetY ?? 0) - (previousContent.centerOffsetY ?? 0);
+
 			viewport = nextViewport;
-			if (scene) pan = clampScenePan(pan, nextViewport, scene, zoomPercent);
-		});
-		observer.observe(stage);
-		return () => observer.disconnect();
+			controlInsets = nextInsets;
+			if (currentScene) {
+				const nextPan = zoomPercent <= 100
+					? { x: 0, y: nextContent.centerOffsetY ?? 0 }
+					: { x: pan.x, y: pan.y + centerShift };
+				pan = clampScenePan(nextPan, nextContent, currentScene, zoomPercent);
+			}
+		};
+		const scheduleMeasure = () => {
+			cancelAnimationFrame(measurementFrame);
+			measurementFrame = requestAnimationFrame(measure);
+		};
+		const resizeObserver = new ResizeObserver(scheduleMeasure);
+		const observeControls = () => {
+			resizeObserver.observe(stage);
+			resizeObserver.observe(root);
+			for (const control of root.querySelectorAll<HTMLElement>('.preview-toolbar, .timeline')) {
+				resizeObserver.observe(control);
+			}
+			scheduleMeasure();
+		};
+		const mutationObserver = new MutationObserver(observeControls);
+		mutationObserver.observe(root, { childList: true });
+		observeControls();
+
+		return () => {
+			cancelAnimationFrame(measurementFrame);
+			mutationObserver.disconnect();
+			resizeObserver.disconnect();
+		};
 	});
 
 	$effect(() => {
@@ -205,10 +250,10 @@
 		const previousZoom = zoomPercent;
 		zoomPercent = nextZoom;
 		if (nextZoom <= 100) {
-			pan = { x: 0, y: 0 };
+			pan = { x: 0, y: contentViewport.centerOffsetY ?? 0 };
 			return;
 		}
-		if (anchor) pan = zoomPanAtPoint(pan, previousZoom, nextZoom, anchor, viewport);
+		if (anchor) pan = zoomPanAtPoint(pan, previousZoom, nextZoom, anchor, contentViewport);
 		clampPan();
 	}
 
@@ -255,7 +300,7 @@
 
 	function clampPan() {
 		if (!scene) return;
-		pan = clampScenePan(pan, viewport, scene, zoomPercent);
+		pan = clampScenePan(pan, contentViewport, scene, zoomPercent);
 	}
 
 	async function togglePresentationMode() {
@@ -282,7 +327,7 @@
 
 	function fitDiagram() {
 		zoomPercent = 100;
-		pan = { x: 0, y: 0 };
+		pan = { x: 0, y: contentViewport.centerOffsetY ?? 0 };
 	}
 
 	function focusNode(nodeId: string) {
@@ -296,7 +341,7 @@
 		const currentScene = scene;
 		if (!canvas || !currentScene) return;
 		const transform = calculateSceneFocusTransform(
-			{ width: canvas.clientWidth, height: canvas.clientHeight },
+			contentViewport,
 			{ width: currentScene.width, height: currentScene.height },
 			bounds
 		);
@@ -390,7 +435,7 @@
 
 </script>
 
-<section class="preview" bind:this={previewRoot} class:preview-presentation-mode={presentationMode} aria-label={studioMessage('pane.previewPanel')}>
+<section class="preview !min-h-0" bind:this={previewRoot} class:preview-presentation-mode={presentationMode} aria-label={studioMessage('pane.previewPanel')}>
 	{#if safeSvg}
 		<PreviewToolbar
 			scene={scene}
@@ -429,6 +474,20 @@
 		onkeydown={panWithKeyboard}
 		onwheel={zoomOnWheel}
 	>
+		<svg class="pointer-events-none absolute inset-0 size-full text-muted-foreground" aria-hidden="true">
+			<defs>
+				<pattern
+					id={`${componentId}-grid`}
+					width="22"
+					height="22"
+					patternUnits="userSpaceOnUse"
+					patternTransform={`translate(${gridTransform.x} ${gridTransform.y}) scale(${gridTransform.scale})`}
+				>
+					<circle cx="1" cy="1" r="0.75" fill="currentColor" opacity="0.16" />
+				</pattern>
+			</defs>
+			<rect width="100%" height="100%" fill={`url(#${componentId}-grid)`} />
+		</svg>
 		{#if safeSvg}
 			<div
 				class="svg-sheet"
@@ -478,7 +537,7 @@
 </section>
 
 <style>
-	.preview { position: relative; display: flex; min-width: 0; min-height: 15rem; height: 100%; flex: 1 1 auto; overflow: hidden; color: var(--foreground); background-color: var(--muted); background-image: radial-gradient(color-mix(in oklch, var(--muted-foreground) 16%, transparent) .75px, transparent .75px); background-size: 22px 22px; }
+	.preview { position: relative; display: flex; min-width: 0; min-height: 15rem; height: 100%; flex: 1 1 auto; overflow: hidden; color: var(--foreground); background-color: var(--muted); }
 	.preview:fullscreen { width: 100vw; height: 100vh; min-height: 0; background-color: var(--muted); }
 	.canvas { position: absolute; inset: 0; overflow: hidden; outline: none; }
 	.svg-sheet { position: absolute; top: 50%; left: 50%; transform-origin: center; }

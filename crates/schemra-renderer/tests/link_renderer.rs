@@ -1,4 +1,4 @@
-use schemra_engine::{SvgRenderError, render_svg};
+use schemra_renderer::{SvgRenderError, render_svg};
 use schemra_scene::{
     CubicBezier, FlowDirection, Point, Rect, Scene, SceneEdge, SceneNode, SceneNodeLayout,
     SceneNodeShape, SceneStyle, SceneTextAlign, SceneTheme, SceneThemeVariant, SceneVariant,
@@ -92,9 +92,9 @@ fn writes_colored_paths_and_tangent_aligned_direction_cues_behind_nodes() {
     assert!(svg.contains("class=\"schemra-edge-path\""));
     assert!(svg.contains("stroke=\"#71717a\""));
     assert!(svg.contains("data-arrow-start=\"false\" data-arrow-end=\"true\""));
-    assert!(svg.contains("class=\"schemra-edge-direction-cue\""));
-    assert!(svg.contains("data-direction-end=\"end\""));
-    assert!(svg.contains("d=\"M 50.4 23.5 L 58.4 20 L 50.4 16.5\""));
+    assert!(!svg.contains("class=\"schemra-edge-direction-cue\""));
+    assert_eq!(svg.matches("class=\"schemra-edge-path\"").count(), 1);
+    assert!(svg.contains("M 36 23.5 L 44 20 L 36 16.5"));
     assert!(
         svg.find("class=\"schemra-edge-path\"").unwrap()
             < svg.find("data-node-id=\"node\"").unwrap(),
@@ -117,8 +117,9 @@ fn reciprocal_directions_share_one_path_with_cues_at_both_ends() {
     assert!(svg.contains("data-edge-indices=\"0,1\""));
     assert!(svg.contains("data-arrow-start=\"true\" data-arrow-end=\"true\""));
     assert_eq!(
-        svg.matches("class=\"schemra-edge-direction-cue\"").count(),
-        2
+        path_attribute(&svg, "d").matches(" M ").count(),
+        2,
+        "both direction cues are subpaths of the canonical edge path"
     );
 }
 
@@ -137,16 +138,7 @@ fn direction_cue_tracks_the_curve_instead_of_its_endpoint_chord() {
     ));
 
     let svg = render_svg(&scene).unwrap();
-    let cue_data = svg
-        .split("class=\"schemra-edge-direction-cue\"")
-        .nth(1)
-        .unwrap()
-        .split("d=\"")
-        .nth(1)
-        .unwrap()
-        .split('"')
-        .next()
-        .unwrap();
+    let cue_data = path_attribute(&svg, "d").split(" M ").nth(1).unwrap();
     let ordinates = cue_data
         .split_whitespace()
         .filter_map(|part| part.parse::<f32>().ok())
@@ -157,6 +149,17 @@ fn direction_cue_tracks_the_curve_instead_of_its_endpoint_chord() {
     assert_eq!(ordinates.len(), 3);
     let wings_midpoint = (ordinates[0] + ordinates[2]) / 2.0;
     assert!((wings_midpoint - ordinates[1]).abs() > 0.2);
+}
+
+fn path_attribute<'a>(svg: &'a str, name: &str) -> &'a str {
+    let path = svg.split("class=\"schemra-edge-path\"").nth(1).unwrap();
+    let prefix = format!("{name}=\"");
+    path.split_once(&prefix)
+        .unwrap()
+        .1
+        .split_once('"')
+        .unwrap()
+        .0
 }
 
 #[test]
@@ -223,7 +226,15 @@ fn disconnected_segments_start_new_subpaths_instead_of_drawing_a_bridge() {
 
     assert!(path.contains("M 0 20 C"));
     assert!(path.contains("10 20 M 30 20 C"));
-    assert!(!path.contains(" L "));
+    let path_data = path
+        .split("d=\"")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap();
+    let route_segments = path_data.split(" M ").take(2).collect::<Vec<_>>().join(" ");
+    assert!(!route_segments.contains(" L "));
 }
 
 #[test]

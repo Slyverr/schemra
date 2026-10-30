@@ -1,4 +1,4 @@
-use schemra_engine::{SvgRenderError, render_svg};
+use schemra_renderer::{SvgRenderError, render_svg};
 use schemra_scene::{
     FlowDirection, Rect, Scene, SceneFont, SceneIcon, SceneIconPack, SceneImage, SceneImageFit,
     SceneNode, SceneNodeLayout, SceneNodeShape, SceneStyle, SceneText, SceneTextAlign, SceneTheme,

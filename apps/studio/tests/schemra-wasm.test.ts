@@ -41,6 +41,27 @@ describe('Studio compiler bridge', () => {
 		expect(project.visuals[0]?.output.scenarios).toHaveLength(1);
 	});
 
+	test('expands repeated visual nodes and links through the browser binding', async () => {
+		const visual = `visual network {
+  group clients "Clients" {
+    layout: grid
+    columns: 2
+    repeat 2..=3 as i {
+      node user[i] "User {i}" { icon: "user" }
+    }
+  }
+  node proxy "Proxy" {}
+  repeat 2..=3 as i { user[i] -> proxy }
+}`;
+		const project = await compileProject([
+			{ id: 'visual', path: 'visuals/network.schemra', source: visual }
+		]);
+
+		expect(project.error).toBeNull();
+		expect(project.visuals[0]?.output.ok).toBe(true);
+		expect(project.visuals[0]?.output.stats).toMatchObject({ nodes: 3, edges: 2, groups: 1 });
+	});
+
 	test('exposes linked editor symbols at UTF-16 source offsets', async () => {
 		const visual = `// 😀\nvisual network {\n  node client {}\n  node server {}\n  client -> server\n}`;
 		const scenario = `// café\nscenario requests for visual network {\n  token packet {}\n  move packet from client -> server {}\n}`;

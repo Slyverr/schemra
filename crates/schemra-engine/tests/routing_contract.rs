@@ -81,8 +81,15 @@ fn direct_route_is_one_cubic_with_endpoints_on_selected_node_faces() {
         let scene = layout_visual(&model);
 
         let link = &scene.edges[0];
+        let client = scene.nodes.iter().find(|node| node.id == "client").unwrap();
+        let proxy = scene.nodes.iter().find(|node| node.id == "proxy").unwrap();
         assert_eq!(link.path.len(), 1);
         assert!(is_straight(&link.path[0]));
+        assert_eq!(
+            link.path[0].start,
+            centered_port(client.bounds, source_side)
+        );
+        assert_eq!(link.path[0].end, centered_port(proxy.bounds, target_side));
         let diagnostic = link.route_diagnostic.as_ref().unwrap();
         assert_eq!(diagnostic.status, SceneRouteStatus::Routed);
         assert_eq!(diagnostic.source_port, source_side);
@@ -140,6 +147,8 @@ fn grid_fans_share_one_clear_target_port() {
         .collect();
 
     let scene = layout_visual(&model);
+    let proxy = scene.nodes.iter().find(|node| node.id == "proxy").unwrap();
+    let expected_target = (proxy.bounds.x, proxy.bounds.y + proxy.bounds.height * 0.5);
     let mut target_points = scene
         .edges
         .iter()
@@ -149,6 +158,7 @@ fn grid_fans_share_one_clear_target_port() {
             assert_eq!(diagnostic.target_port, "left");
             assert_eq!(edge.path.len(), 1);
             assert!(is_straight(&edge.path[0]));
+            assert_eq!((edge.path[0].end.x, edge.path[0].end.y), expected_target);
             (edge.path[0].end.y, edge.path[0].end.x)
         })
         .collect::<Vec<_>>();
@@ -177,7 +187,115 @@ fn grid_fans_share_one_clear_target_port() {
 }
 
 #[test]
-fn grid_fans_remain_separated_across_group_sizes_and_column_counts() {
+fn mixed_direction_fan_uses_the_natural_centered_face_for_each_edge() {
+    let mut model = visual(Direction::LeftToRight);
+    model.groups.push(GroupIr {
+        id: GroupId("data".into()),
+        id_span: span(),
+        title: "Data".into(),
+        layout: GroupLayout::Grid { columns: Some(1) },
+        span: span(),
+    });
+    model.nodes = vec![node("backend", None)]
+        .into_iter()
+        .chain([
+            node("audit_worker", Some("data")),
+            node("database", Some("data")),
+        ])
+        .collect();
+    model.edges = vec![
+        edge("backend", "database"),
+        edge("audit_worker", "database"),
+    ];
+
+    let scene = layout_visual(&model);
+    let backend_link = scene
+        .edges
+        .iter()
+        .find(|edge| edge.from == "backend")
+        .unwrap();
+    let audit_link = scene
+        .edges
+        .iter()
+        .find(|edge| edge.from == "audit_worker")
+        .unwrap();
+    let audit = scene
+        .nodes
+        .iter()
+        .find(|node| node.id == "audit_worker")
+        .unwrap();
+    let database = scene
+        .nodes
+        .iter()
+        .find(|node| node.id == "database")
+        .unwrap();
+
+    assert_eq!(
+        backend_link.route_diagnostic.as_ref().unwrap().target_port,
+        "left",
+    );
+    assert_eq!(backend_link.path[0].end.x, database.bounds.x);
+    assert_eq!(
+        backend_link.path[0].end.y,
+        database.bounds.y + database.bounds.height * 0.5
+    );
+    assert_eq!(
+        audit_link.route_diagnostic.as_ref().unwrap().source_port,
+        "bottom"
+    );
+    assert_eq!(
+        audit_link.route_diagnostic.as_ref().unwrap().target_port,
+        "top"
+    );
+    assert_eq!(
+        audit_link.path[0].start,
+        schemra_scene::Point {
+            x: audit.bounds.x + audit.bounds.width * 0.5,
+            y: audit.bounds.y + audit.bounds.height,
+        }
+    );
+    assert_eq!(
+        audit_link.path[0].end,
+        schemra_scene::Point {
+            x: database.bounds.x + database.bounds.width * 0.5,
+            y: database.bounds.y,
+        }
+    );
+    assert_ne!(backend_link.path[0].end, audit_link.path[0].end);
+}
+
+#[test]
+fn outgoing_links_from_one_node_share_its_single_face_port() {
+    let mut model = visual(Direction::LeftToRight);
+    model.groups.push(GroupIr {
+        id: GroupId("services".into()),
+        id_span: span(),
+        title: "Services".into(),
+        layout: GroupLayout::Grid { columns: Some(1) },
+        span: span(),
+    });
+    model.nodes = vec![node("proxy", None)]
+        .into_iter()
+        .chain((0..3).map(|index| node(&format!("service-{index}"), Some("services"))))
+        .collect();
+    model.edges = (0..3)
+        .map(|index| edge("proxy", &format!("service-{index}")))
+        .collect();
+
+    let scene = layout_visual(&model);
+    let proxy = scene.nodes.iter().find(|node| node.id == "proxy").unwrap();
+    let expected_port = schemra_scene::Point {
+        x: proxy.bounds.x + proxy.bounds.width,
+        y: proxy.bounds.y + proxy.bounds.height * 0.5,
+    };
+    assert!(scene.edges.iter().all(|edge| {
+        edge.route_diagnostic.as_ref().unwrap().source_port == "right"
+            && edge.path[0].start == expected_port
+    }));
+}
+
+#[test]
+fn grid_fans_use_centered_ports_across_group_sizes_and_column_counts() {
     for count in 1..=12 {
         for columns in 1..=count {
             let mut model = visual(Direction::LeftToRight);
@@ -199,39 +317,32 @@ fn grid_fans_remain_separated_across_group_sizes_and_column_counts() {
                 .collect();
 
             let scene = layout_visual(&model);
-            let mut endpoints = scene
-                .edges
-                .iter()
-                .map(|edge| (edge.path[0].end.x, edge.path[0].end.y))
-                .collect::<Vec<_>>();
-            endpoints
-                .sort_by(|left, right| left.0.total_cmp(&right.0).then(left.1.total_cmp(&right.1)));
-            endpoints.dedup_by(|left, right| {
-                (left.0 - right.0).abs() < f32::EPSILON && (left.1 - right.1).abs() < f32::EPSILON
-            });
-            assert_eq!(
-                endpoints.len(),
-                1,
-                "fan links should share one target port for {count} nodes in {columns} columns"
-            );
-            let conflicts = scene
-                .edges
-                .iter()
-                .filter_map(|edge| {
-                    let diagnostic = edge.route_diagnostic.as_ref()?;
-                    (diagnostic.target_port != "left" || diagnostic.route_conflicts > 0).then_some(
-                        (
-                            &edge.from,
-                            diagnostic.target_port.as_str(),
-                            diagnostic.route_conflicts,
-                        ),
-                    )
-                })
-                .collect::<Vec<_>>();
-            assert!(
-                conflicts.is_empty(),
-                "fan routes should stay conflict-free for {count} nodes in {columns} columns: {conflicts:?}"
-            );
+            let proxy = scene.nodes.iter().find(|node| node.id == "proxy").unwrap();
+            for link in &scene.edges {
+                let diagnostic = link.route_diagnostic.as_ref().unwrap();
+                let source = scene
+                    .nodes
+                    .iter()
+                    .find(|node| node.id == link.from)
+                    .unwrap();
+                assert_eq!(diagnostic.status, SceneRouteStatus::Routed);
+                assert_eq!(diagnostic.target_port, "left");
+                assert_eq!(link.path.len(), 1);
+                assert!(is_straight(&link.path[0]));
+                assert_eq!(
+                    link.path[0].end,
+                    schemra_scene::Point {
+                        x: proxy.bounds.x,
+                        y: proxy.bounds.y + proxy.bounds.height * 0.5,
+                    },
+                    "fan links must share the one centered target port for {count} nodes in {columns} columns"
+                );
+                assert_eq!(
+                    link.path[0].start,
+                    centered_port(source.bounds, diagnostic.source_port.as_str()),
+                    "source ports must be centered for {count} nodes in {columns} columns"
+                );
+            }
         }
     }
 }
@@ -374,7 +485,7 @@ fn six_client_service_diagram_keeps_shared_ports_and_reciprocal_routes_stable() 
 }
 
 #[test]
-fn one_hundred_node_fan_in_is_deterministic_and_keeps_one_target_port() {
+fn one_hundred_node_fan_in_is_deterministic_and_keeps_one_centered_target_port() {
     const SOURCE_COUNT: usize = 100;
     let mut model = visual(Direction::LeftToRight);
     model.groups.push(GroupIr {
@@ -401,9 +512,7 @@ fn one_hundred_node_fan_in_is_deterministic_and_keeps_one_target_port() {
         edge.path.len() == 1
             && is_straight(&edge.path[0])
             && edge.route_diagnostic.as_ref().is_some_and(|diagnostic| {
-                diagnostic.status == SceneRouteStatus::Routed
-                    && diagnostic.target_port == "left"
-                    && diagnostic.route_conflicts == 0
+                diagnostic.status == SceneRouteStatus::Routed && diagnostic.target_port == "left"
             })
     }));
     let target_points = first
@@ -456,4 +565,28 @@ fn is_straight(segment: &schemra_scene::CubicBezier) -> bool {
                 let cross = (point.x - segment.start.x) * dy - (point.y - segment.start.y) * dx;
                 cross.abs() / chord < 0.001
             })
+}
+
+fn centered_port(bounds: schemra_scene::Rect, side: &str) -> schemra_scene::Point {
+    use schemra_scene::Point;
+
+    match side {
+        "left" => Point {
+            x: bounds.x,
+            y: bounds.y + bounds.height * 0.5,
+        },
+        "right" => Point {
+            x: bounds.x + bounds.width,
+            y: bounds.y + bounds.height * 0.5,
+        },
+        "top" => Point {
+            x: bounds.x + bounds.width * 0.5,
+            y: bounds.y,
+        },
+        "bottom" => Point {
+            x: bounds.x + bounds.width * 0.5,
+            y: bounds.y + bounds.height,
+        },
+        unexpected => panic!("unexpected port side: {unexpected}"),
+    }
 }

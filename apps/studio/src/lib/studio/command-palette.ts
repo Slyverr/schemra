@@ -17,8 +17,23 @@ export interface CommandPaletteAction {
 	description?: string;
 	keywords?: readonly string[];
 	shortcut?: string;
+	icon?: CommandPaletteActionIcon;
 	disabled?: boolean;
 }
+
+export type CommandPaletteActionIcon =
+	| 'reference'
+	| 'new-project'
+	| 'new-visual'
+	| 'open-source'
+	| 'save'
+	| 'format'
+	| 'export-diagram'
+	| 'import-project'
+	| 'export-project'
+	| 'settings'
+	| 'editor'
+	| 'preview';
 
 export interface CommandPaletteContext {
 	projects: readonly PaletteProject[];
@@ -37,7 +52,7 @@ interface CommandPaletteEntryBase {
 
 export interface CommandPaletteFileEntry extends CommandPaletteEntryBase {
 	type: 'file';
-	group: 'Open tabs' | 'Project files';
+	group: 'openTabs' | 'projectFiles';
 	projectId: string;
 	projectName: string;
 	fileId: string;
@@ -49,7 +64,7 @@ export interface CommandPaletteFileEntry extends CommandPaletteEntryBase {
 
 export interface CommandPaletteProjectEntry extends CommandPaletteEntryBase {
 	type: 'project';
-	group: 'Projects';
+	group: 'projects';
 	projectId: string;
 	fileCount: number;
 	current: boolean;
@@ -57,10 +72,11 @@ export interface CommandPaletteProjectEntry extends CommandPaletteEntryBase {
 
 export interface CommandPaletteActionEntry extends CommandPaletteEntryBase {
 	type: 'action';
-	group: 'Actions';
+	group: 'actions';
 	actionId: string;
 	description: string;
 	shortcut: string | null;
+	icon: CommandPaletteActionIcon | 'default';
 }
 
 export type CommandPaletteEntry =
@@ -78,13 +94,13 @@ export function buildCommandPaletteEntries(context: CommandPaletteContext): Comm
 	for (const tab of tabs) {
 		const project = projectsById.get(tab.projectId);
 		const file = project?.files.find(({ id }) => id === tab.fileId);
-		if (project && file) entries.push(fileEntry(project, file, context, 'Open tabs'));
+		if (project && file) entries.push(fileEntry(project, file, context, 'openTabs'));
 	}
 
 	for (const project of context.projects) {
 		for (const file of project.files) {
 			if (!openKeys.has(fileKey(project.id, file.id))) {
-				entries.push(fileEntry(project, file, context, 'Project files'));
+				entries.push(fileEntry(project, file, context, 'projectFiles'));
 			}
 		}
 	}
@@ -93,7 +109,7 @@ export function buildCommandPaletteEntries(context: CommandPaletteContext): Comm
 		entries.push({
 			key: `project:${project.id}`,
 			type: 'project',
-			group: 'Projects',
+			group: 'projects',
 			projectId: project.id,
 			title: project.name,
 			fileCount: project.files.length,
@@ -107,11 +123,12 @@ export function buildCommandPaletteEntries(context: CommandPaletteContext): Comm
 		entries.push({
 			key: `action:${action.id}`,
 			type: 'action',
-			group: 'Actions',
+			group: 'actions',
 			actionId: action.id,
 			title: action.label,
 			description: action.description ?? '',
 			shortcut: action.shortcut ?? null,
+			icon: action.icon ?? 'default',
 			disabled: action.disabled ?? false,
 			searchTerms: [action.label, action.description ?? '', ...(action.keywords ?? [])]
 		});
@@ -184,7 +201,7 @@ function fileEntry(
 	const kind = commandPaletteFileKind(file);
 	const title = commandPaletteFileName(file.path);
 	return {
-		key: `${group === 'Open tabs' ? 'tab' : 'file'}:${project.id}:${file.id}`,
+		key: `${group === 'openTabs' ? 'tab' : 'file'}:${project.id}:${file.id}`,
 		type: 'file',
 		group,
 		projectId: project.id,

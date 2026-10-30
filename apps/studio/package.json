@@ -10,7 +10,7 @@
   },
   "packageManager": "bun@1.4.2",
   "scripts": {
-    "build:wasm": "test \"$(wasm-bindgen --version)\" = \"wasm-bindgen 0.2.129\" && cargo build --locked --release --target wasm32-unknown-unknown -p schemra-wasm && wasm-bindgen --target web --out-dir src/lib/generated ../../target/wasm32-unknown-unknown/release/schemra_wasm.wasm && sed -i '1i// @ts-nocheck' src/lib/generated/schemra_wasm.js",
+    "build:wasm": "test \"$(wasm-bindgen --version)\" = \"wasm-bindgen 0.2.129\" && cargo build --locked --release --target wasm32-unknown-unknown -p schemra-wasm && wasm-bindgen --target web --out-dir src/lib/generated \"${CARGO_TARGET_DIR:-../../target}/wasm32-unknown-unknown/release/schemra_wasm.wasm\" && sed -i '1i// @ts-nocheck' src/lib/generated/schemra_wasm.js",
     "dev": "bun run build:wasm && vite --host 127.0.0.1",
     "build": "bun run build:wasm && vite build",
     "check": "bun run build:wasm && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

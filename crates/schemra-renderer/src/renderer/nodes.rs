@@ -12,6 +12,8 @@ use super::{
 };
 use crate::renderer::{number, write_xml};
 
+const DETAIL_GAP: f32 = 2.0;
+
 pub(super) fn write_node(
     svg: &mut String,
     node: &SceneNode,
@@ -82,7 +84,7 @@ pub(super) fn write_node(
         + if detail_lines.is_empty() {
             0.0
         } else {
-            4.0 + detail_lines.len() as f32 * 18.0
+            DETAIL_GAP + detail_lines.len() as f32 * 18.0
         };
     let content_height = if has_icon && !horizontal {
         30.0 + content_gap + text_height
@@ -143,7 +145,7 @@ pub(super) fn write_node(
             &detail_lines,
             TextStyle {
                 x: text_x,
-                y: title_y + title_lines.len() as f32 * 22.0 + 4.0,
+                y: title_y + title_lines.len() as f32 * 22.0 + DETAIL_GAP,
                 line_height: 18.0,
                 font_size: 14.0,
                 font_weight: detail_weight,

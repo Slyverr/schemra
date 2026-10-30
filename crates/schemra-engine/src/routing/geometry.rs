@@ -172,23 +172,20 @@ pub(super) enum Side {
 }
 
 impl Side {
-    pub(super) const ALL: [Self; 4] = [Self::Left, Self::Right, Self::Top, Self::Bottom];
-
-    pub(super) fn index(self) -> usize {
-        match self {
-            Self::Left => 0,
-            Self::Right => 1,
-            Self::Top => 2,
-            Self::Bottom => 3,
-        }
-    }
-
     pub(super) fn name(self) -> &'static str {
         match self {
             Self::Left => "left",
             Self::Right => "right",
             Self::Top => "top",
             Self::Bottom => "bottom",
+        }
+    }
+    pub(super) fn opposite(self) -> Self {
+        match self {
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+            Self::Top => Self::Bottom,
+            Self::Bottom => Self::Top,
         }
     }
 }
@@ -205,64 +202,65 @@ pub(super) fn natural_sides(source: Rect, target: Rect, direction: FlowDirection
     let target_center = center(target);
     let dx = target_center.x - source_center.x;
     let dy = target_center.y - source_center.y;
-    let (primary_delta, secondary_delta, horizontal_flow) = match direction {
-        FlowDirection::LeftToRight | FlowDirection::RightToLeft => (dx, dy, true),
-        FlowDirection::TopToBottom | FlowDirection::BottomToTop => (dy, dx, false),
+    let horizontal_clearance = dx.abs() - (source.width + target.width) * 0.5;
+    let vertical_clearance = dy.abs() - (source.height + target.height) * 0.5;
+    let (flow_x, flow_y) = match direction {
+        FlowDirection::LeftToRight => (1.0, 0.0),
+        FlowDirection::RightToLeft => (-1.0, 0.0),
+        FlowDirection::TopToBottom => (0.0, 1.0),
+        FlowDirection::BottomToTop => (0.0, -1.0),
+    };
+    let horizontal = if (horizontal_clearance - vertical_clearance).abs() > 0.5 {
+        horizontal_clearance > vertical_clearance
+    } else {
+        matches!(
+            direction,
+            FlowDirection::LeftToRight | FlowDirection::RightToLeft
+        )
     };
 
-    if primary_delta.abs() > 0.5 {
-        return if horizontal_flow {
-            if primary_delta > 0.0 {
-                (Side::Right, Side::Left)
-            } else {
-                (Side::Left, Side::Right)
-            }
-        } else if primary_delta > 0.0 {
-            (Side::Bottom, Side::Top)
+    if horizontal {
+        let target_is_right = if dx.abs() > 0.5 {
+            dx > 0.0
         } else {
-            (Side::Top, Side::Bottom)
+            flow_x >= 0.0
         };
-    }
-
-    if secondary_delta.abs() > 0.5 {
-        return if horizontal_flow {
-            if secondary_delta > 0.0 {
-                (Side::Bottom, Side::Top)
-            } else {
-                (Side::Top, Side::Bottom)
-            }
-        } else if secondary_delta > 0.0 {
+        if target_is_right {
             (Side::Right, Side::Left)
         } else {
             (Side::Left, Side::Right)
+        }
+    } else {
+        let target_is_below = if dy.abs() > 0.5 {
+            dy > 0.0
+        } else {
+            flow_y >= 0.0
         };
-    }
-
-    match direction {
-        FlowDirection::LeftToRight => (Side::Right, Side::Left),
-        FlowDirection::RightToLeft => (Side::Left, Side::Right),
-        FlowDirection::TopToBottom => (Side::Bottom, Side::Top),
-        FlowDirection::BottomToTop => (Side::Top, Side::Bottom),
+        if target_is_below {
+            (Side::Bottom, Side::Top)
+        } else {
+            (Side::Top, Side::Bottom)
+        }
     }
 }
 
-pub(super) fn port_anchor(rect: Rect, side: Side, offset: f32) -> Point {
+pub(super) fn side_anchor(rect: Rect, side: Side) -> Point {
     let rect = normalized(rect);
     let point = match side {
         Side::Left => Point {
             x: rect.x,
-            y: rect.y + rect.height * 0.5 + offset,
+            y: rect.y + rect.height * 0.5,
         },
         Side::Right => Point {
             x: rect.x + rect.width,
-            y: rect.y + rect.height * 0.5 + offset,
+            y: rect.y + rect.height * 0.5,
         },
         Side::Top => Point {
-            x: rect.x + rect.width * 0.5 + offset,
+            x: rect.x + rect.width * 0.5,
             y: rect.y,
         },
         Side::Bottom => Point {
-            x: rect.x + rect.width * 0.5 + offset,
+            x: rect.x + rect.width * 0.5,
             y: rect.y + rect.height,
         },
     };

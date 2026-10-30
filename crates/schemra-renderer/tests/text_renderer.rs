@@ -1,5 +1,5 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use schemra_engine::{node_text_width, render_svg, wrap_text_lines};
+use schemra_renderer::{node_text_width, render_svg, wrap_text_lines};
 use schemra_scene::{
     FlowDirection, Rect, Scene, SceneFont, SceneNode, SceneNodeLayout, SceneNodeShape, SceneStyle,
     SceneTextAlign, SceneTheme,

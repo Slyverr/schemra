@@ -62,15 +62,23 @@ pub(super) fn route_label_baseline(
     fallback
 }
 
-/// Places an inline chevron away from a shared endpoint and aligns it to the
-/// local route tangent. The returned tangent points in the direction of travel.
-pub(super) fn route_direction_cue(path: &[CubicBezier], at_start: bool) -> Option<(Point, Point)> {
+/// Places a direction cue along its route and aligns it to the local tangent.
+/// One-way links use the midpoint; two-way links keep their cues on opposite sides.
+pub(super) fn route_direction_cue(
+    path: &[CubicBezier],
+    at_start: bool,
+    bidirectional: bool,
+) -> Option<(Point, Point)> {
     let samples = flatten_route(path);
     let length = samples.last()?.distance;
     if length <= EDGE_GEOMETRY_EPSILON {
         return None;
     }
-    let fraction = if at_start { 0.32 } else { 0.68 };
+    let fraction = if bidirectional {
+        if at_start { 0.32 } else { 0.68 }
+    } else {
+        0.5
+    };
     let sample = point_at_distance(&samples, path, length * fraction);
     let mut tangent = bezier_tangent(path.get(sample.segment).copied()?, sample.t);
     let tangent_length = tangent.x.hypot(tangent.y);

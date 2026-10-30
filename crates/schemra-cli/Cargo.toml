@@ -13,6 +13,7 @@ serde_json.workspace = true
 schemra-compiler.workspace = true
 schemra-engine.workspace = true
 schemra-ir.workspace = true
+schemra-project.workspace = true
 schemra-syntax.workspace = true
 
 [[bin]]

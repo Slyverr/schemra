@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { createInitialProject } from '../../src/lib/project/session.ts';
+import { MAX_PROJECT_FILES, createInitialProject } from '../../src/lib/project/session.ts';
+import { studioMessage } from '../../src/lib/i18n/messages.ts';
 import { createWorkspaceController, type WorkspaceStorageAdapter } from '../../src/lib/project/workspace-controller.ts';
 import { createResourceActions, type ProjectVisual, type ResourceActionSnapshot, type ResourceCompileFile, type ResourceDialogState } from '../../src/lib/studio/resource-actions.ts';
 
-function setup(currentVisual: ProjectVisual | null = null, currentFiles: ResourceCompileFile[] = []) {
+function setup(currentVisual: ProjectVisual | null = null, currentFiles: ResourceCompileFile[] = [], projectFileCount?: number) {
 	const exampleProject = createInitialProject(
 		'visual traffic_overview "Traffic overview" {}',
 		'scenario "Request and response" {}'
@@ -18,7 +19,10 @@ function setup(currentVisual: ProjectVisual | null = null, currentFiles: Resourc
 	let fileMessage = null;
 	const getSnapshot = (): ResourceActionSnapshot => {
 		const workspace = controller.getState();
-		const activeProject = workspace.projects.find(({ id }) => id === workspace.activeProjectId) ?? null;
+		const project = workspace.projects.find(({ id }) => id === workspace.activeProjectId) ?? null;
+		const activeProject = project && projectFileCount !== undefined
+			? { ...project, files: Array.from({ length: projectFileCount }, (_, index) => project.files[index] ?? { ...project.files[0]!, id: `limit-file-${index}` }) }
+			: project;
 		return {
 			workspace,
 			activeProject,
@@ -93,6 +97,22 @@ describe('resource actions', () => {
 		const scenario = app.getSnapshot().activeProject?.files.find(({ path }) => path.startsWith('scenarios/traffic_overview/'));
 		expect(scenario?.source).toContain('scenario operations_flow "Operations flow" for visual traffic_overview');
 		expect(scenario?.source).toContain('move request from client -> proxy');
+		await app.controller.dispose();
+	});
+
+	it('rejects visual and scenario creation when the project file limit is reached', async () => {
+		const app = setup(null, [], MAX_PROJECT_FILES);
+		await app.controller.initialize();
+
+		for (const kind of ['visual', 'scenario'] as const) {
+			app.actions.openResourceCreation(kind);
+			expect(app.form.kind).toBeNull();
+			expect(app.getFileMessage()).toEqual({
+				kind: 'error',
+				text: studioMessage('project.sourceFileCountMaximum', { max: MAX_PROJECT_FILES })
+			});
+		}
+
 		await app.controller.dispose();
 	});
 

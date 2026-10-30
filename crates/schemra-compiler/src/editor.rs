@@ -70,7 +70,9 @@ pub fn highlight_tokens(source: &str) -> Vec<SyntaxToken> {
                     }
                 }
                 TokenKind::Newline => return None,
-                TokenKind::Arrow | TokenKind::Undirected => SyntaxTokenKind::Operator,
+                TokenKind::Arrow | TokenKind::Undirected | TokenKind::RangeInclusive => {
+                    SyntaxTokenKind::Operator
+                }
                 TokenKind::Colon
                 | TokenKind::LeftBrace
                 | TokenKind::RightBrace

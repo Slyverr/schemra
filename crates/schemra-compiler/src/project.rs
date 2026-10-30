@@ -2,20 +2,11 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::compiler::compile_for_analysis;
+use crate::{DeclarationInfo, EditorSymbol, SyntaxToken, editor_metadata, highlight_tokens};
 use schemra_ir::{ScenarioIr, VisualIr};
+pub use schemra_project::ProjectSource;
 use schemra_syntax::{Diagnostic, SourceLocation, SourceSpan};
-use serde::Deserialize;
-
-use crate::{
-    DeclarationInfo, EditorSymbol, SyntaxToken, compile, editor_metadata, highlight_tokens,
-};
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct ProjectSource {
-    pub id: String,
-    pub path: String,
-    pub source: String,
-}
 
 #[derive(Clone, Debug)]
 pub struct ProjectFileAnalysis {
@@ -170,69 +161,56 @@ pub fn analyze_project(sources: &[ProjectSource]) -> ProjectAnalysis {
 
 fn analyze_source(source: &ProjectSource) -> ProjectFileAnalysis {
     let tokens = highlight_tokens(&source.source);
-    let result = compile(&source.source).and_then(|module| {
-        if module.visuals.len() > 1 {
-            return Err(vec![Diagnostic::error(
-                "E_MULTIPLE_VISUALS",
-                "A source file currently accepts one visual declaration.",
-                origin_span(),
-                None::<String>,
-            )]);
-        }
-        Ok(module)
-    });
-
-    match result {
-        Ok(module) => {
-            let (declarations, editor_symbols) = editor_metadata(&module);
-            let scenarios = module.scenarios;
-            let visual = module.visuals.into_iter().next();
-            let visual_id = visual
-                .as_ref()
-                .map(|visual| visual.id.0.clone())
-                .or_else(|| {
-                    let first = &scenarios.first()?.visual.0;
-                    scenarios
-                        .iter()
-                        .all(|scenario| scenario.visual.0 == *first)
-                        .then(|| first.clone())
-                });
-            let kind = if visual.is_some() {
-                "visual"
-            } else if !scenarios.is_empty() {
-                "scenario"
-            } else {
-                "unknown"
-            };
-            ProjectFileAnalysis {
-                id: source.id.clone(),
-                path: source.path.clone(),
-                kind: kind.to_owned(),
-                visual_id,
-                visual,
-                scenarios,
-                resolved_visual_id: None,
-                resolved_scenarios: Vec::new(),
-                declarations,
-                editor_symbols,
-                tokens,
-                diagnostics: Vec::new(),
-            }
-        }
-        Err(diagnostics) => ProjectFileAnalysis {
-            id: source.id.clone(),
-            path: source.path.clone(),
-            kind: "invalid".to_owned(),
-            visual_id: None,
-            visual: None,
-            scenarios: Vec::new(),
-            resolved_visual_id: None,
-            resolved_scenarios: Vec::new(),
-            declarations: Vec::new(),
-            editor_symbols: Vec::new(),
-            tokens,
-            diagnostics,
-        },
+    let (mut module, mut diagnostics) = compile_for_analysis(&source.source);
+    let has_multiple_visuals = module.visuals.len() > 1;
+    if has_multiple_visuals {
+        diagnostics.push(Diagnostic::error(
+            "E_MULTIPLE_VISUALS",
+            "A source file currently accepts one visual declaration.",
+            origin_span(),
+            None::<String>,
+        ));
+    }
+    let (declarations, editor_symbols) = editor_metadata(&module);
+    let scenarios = std::mem::take(&mut module.scenarios);
+    let visual = module.visuals.into_iter().next();
+    let visual_id = visual
+        .as_ref()
+        .map(|visual| visual.id.0.clone())
+        .or_else(|| {
+            let first = &scenarios.first()?.visual.0;
+            scenarios
+                .iter()
+                .all(|scenario| scenario.visual.0 == *first)
+                .then(|| first.clone())
+        });
+    let (visual, visual_id) = if has_multiple_visuals {
+        (None, None)
+    } else {
+        (visual, visual_id)
+    };
+    let kind = if has_multiple_visuals {
+        "invalid"
+    } else if visual.is_some() {
+        "visual"
+    } else if !scenarios.is_empty() {
+        "scenario"
+    } else {
+        "unknown"
+    };
+    ProjectFileAnalysis {
+        id: source.id.clone(),
+        path: source.path.clone(),
+        kind: kind.to_owned(),
+        visual_id,
+        visual,
+        scenarios,
+        resolved_visual_id: None,
+        resolved_scenarios: Vec::new(),
+        declarations,
+        editor_symbols,
+        tokens,
+        diagnostics,
     }
 }
 

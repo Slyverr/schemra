@@ -121,6 +121,53 @@ fn configured_group_grid_places_members_and_contains_them() {
 }
 
 #[test]
+fn independent_blocks_do_not_overlap_multiline_groups_in_any_direction() {
+    for direction in [
+        Direction::LeftToRight,
+        Direction::RightToLeft,
+        Direction::TopToBottom,
+        Direction::BottomToTop,
+    ] {
+        let mut model = visual(direction);
+        model.groups.push(GroupIr {
+            id: GroupId("clients".into()),
+            id_span: span(),
+            title: "Clients".into(),
+            layout: GroupLayout::Grid { columns: Some(2) },
+            span: span(),
+        });
+        model.nodes = (1..=4)
+            .map(|number| {
+                node(
+                    &format!("user-{number}"),
+                    &format!("User {number}"),
+                    None,
+                    Some("clients"),
+                )
+            })
+            .collect();
+        model
+            .nodes
+            .push(node("audit-worker", "Audit worker", None, None));
+
+        let scene = layout_visual(&model);
+        for (index, left) in scene.nodes.iter().enumerate() {
+            for right in &scene.nodes[index + 1..] {
+                let overlaps = left.bounds.x < right.bounds.x + right.bounds.width
+                    && right.bounds.x < left.bounds.x + left.bounds.width
+                    && left.bounds.y < right.bounds.y + right.bounds.height
+                    && right.bounds.y < left.bounds.y + left.bounds.height;
+                assert!(
+                    !overlaps,
+                    "nodes {} and {} overlap in {direction:?}",
+                    left.id, right.id
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn node_height_grows_when_glyph_aware_wrapping_adds_lines() {
     let mut model = visual(Direction::TopToBottom);
     model.nodes = vec![

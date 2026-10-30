@@ -168,7 +168,21 @@ pub(super) fn compile_source_json(source: &str) -> String {
             limits,
         );
         if let Some(visual) = project.visuals.into_iter().next() {
-            visual.output
+            let mut output = visual.output;
+            if let Some(file) = project.files.into_iter().next().filter(|file| {
+                file.diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.severity == Severity::Error)
+            }) {
+                output.ok = false;
+                output.svg = None;
+                output.diagnostics = file.diagnostics;
+                output.tokens = file.tokens;
+                output.declarations = file.declarations;
+                output.scenarios.clear();
+                output.scene = None;
+            }
+            output
         } else {
             let file = project.files.first();
             CompileOutput {

@@ -5,8 +5,27 @@ import {
 	readPreviewFrame,
 	readPreviewScenario,
 	readPreviewScene,
-	searchPreviewScene
+	searchPreviewScene,
+	sanitizeSvgMarkup
 } from '../../src/lib/preview/model';
+
+class FakeSvgElement {
+	readonly localName: string;
+	readonly namespaceURI = 'http://www.w3.org/2000/svg';
+	readonly attributes: { name: string; value: string }[];
+
+	constructor(localName: string, attributes: Record<string, string>) {
+		this.localName = localName;
+		this.attributes = Object.entries(attributes).map(([name, value]) => ({ name, value }));
+	}
+
+	removeAttribute(name: string) {
+		const index = this.attributes.findIndex((attribute) => attribute.name === name);
+		if (index !== -1) this.attributes.splice(index, 1);
+	}
+
+	remove() {}
+}
 
 describe('diagram preview model', () => {
 	test('bounds sampled playback values and preserves movement direction', () => {
@@ -124,6 +143,38 @@ describe('diagram preview model', () => {
 		expect(routePathData(segments, true)).toBe('M 1 2 C 3 4 5 6 7 8');
 		expect(routePathData(segments, false)).toBe('M 7 8 C 5 6 3 4 1 2');
 		expect(routePathData([], true)).toBe('');
+	});
+
+	test('keeps group-label paint order so canvas-colored outlines cannot cover the text', () => {
+		const label = new FakeSvgElement('text', {
+			'data-group-id': 'clients',
+			fill: '#52525b',
+			stroke: '#ffffff',
+			'stroke-width': '4',
+			'paint-order': 'stroke',
+			'letter-spacing': '1.1'
+		});
+		const root = {
+			localName: 'svg',
+			namespaceURI: 'http://www.w3.org/2000/svg',
+			querySelectorAll: () => [label],
+			setAttribute: () => {}
+		};
+		const parser = {
+			parseFromString: () => ({ documentElement: root, querySelector: () => null })
+		};
+		const serializer = {
+			serializeToString: () => label.attributes.map(({ name, value }) => `${name}="${value}"`).join(' ')
+		};
+
+		const markup = sanitizeSvgMarkup(
+			'<svg></svg>',
+			parser as unknown as DOMParser,
+			serializer as unknown as XMLSerializer
+		);
+
+		expect(markup).toContain('paint-order="stroke"');
+		expect(markup).toContain('letter-spacing="1.1"');
 	});
 
 	test('clamps playback time and handles invalid durations', () => {

@@ -2,8 +2,8 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::renderer::{node_text_width, wrap_text_lines};
 use schemra_ir::{Direction, EdgeDirectionality, GroupLayout, VisualIr};
+use schemra_renderer::{node_text_width, wrap_text_lines};
 use schemra_scene::{
     FlowDirection, Rect, Scene, SceneEdge, SceneGroup, SceneNode, SceneNodeLayout, SceneNodeShape,
     SceneStyle, SceneTextAlign,
@@ -175,7 +175,7 @@ pub fn layout_visual(visual: &VisualIr) -> Scene {
                 }
                 row_offset += row_height + block.gap;
             }
-            secondary += secondary_gap(level, position);
+            secondary += cross_extent(block, horizontal) + secondary_gap(level, position);
         }
     }
     positioned_nodes.sort_by_key(|(index, _)| *index);

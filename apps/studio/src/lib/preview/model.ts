@@ -297,7 +297,7 @@ export function sanitizeSvgMarkup(
 		'xmlns', 'role', 'aria-labelledby', 'width', 'height', 'viewBox', 'fill', 'fill-opacity', 'stroke',
 		'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-dasharray', 'stroke-dashoffset', 'opacity',
 		'id', 'x', 'y', 'd', 'transform', 'font-family', 'font-size', 'font-weight', 'text-anchor', 'rx', 'ry',
-		'filter', 'dx', 'dy', 'stdDeviation', 'flood-color', 'flood-opacity', 'preserveAspectRatio', 'href',
+		'filter', 'dx', 'dy', 'stdDeviation', 'flood-color', 'flood-opacity', 'paint-order', 'letter-spacing', 'preserveAspectRatio', 'href',
 		'pathLength', 'cx', 'cy', 'r'
 	]);
 	for (const element of [...root.querySelectorAll('*')].reverse()) {

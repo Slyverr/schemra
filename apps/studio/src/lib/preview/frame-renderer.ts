@@ -41,6 +41,7 @@ export function applyPreviewFrame(
 	const { progressPaths, markerGroups, highlightGroups } = cache;
 	const linkLayer = ensureLayer(root, 'schemra-preview-links');
 	const markerLayer = ensureLayer(root, 'schemra-preview-markers');
+	const portMarkerLayer = ensureLayer(root, 'schemra-preview-port-markers', true);
 	const highlightLayer = ensureLayer(root, 'schemra-preview-highlights', true);
 	const activeEdges = new Set<number>();
 	const activeTokens = new Set<number>();
@@ -117,6 +118,10 @@ export function applyPreviewFrame(
 	const icons = new Map((scenario?.tokens ?? []).map(({ token, icon }) => [token, icon ?? '']));
 	for (const token of frame?.tokens ?? []) {
 		activeTokens.add(token.instanceId);
+		const activeEdge = frame?.edges.find((edge) => edge.instanceId === token.instanceId);
+		const markerLayerForToken = shouldShowDepartureMarkerAboveNode(token, activeEdge, scene)
+			? portMarkerLayer
+			: markerLayer;
 		let marker = markerGroups.get(token.instanceId);
 		if (!marker) {
 			marker = root.ownerDocument.createElementNS(SVG_NS, 'g');
@@ -131,7 +136,6 @@ export function applyPreviewFrame(
 			appendMarkerIcon(marker, icons.get(token.token) ?? '', token.token);
 			markerGroups.set(token.instanceId, marker);
 			marker.setAttribute('data-token-artwork', JSON.stringify([token.token, icons.get(token.token) ?? '']));
-			markerLayer.append(marker);
 		} else {
 			const artwork = JSON.stringify([token.token, icons.get(token.token) ?? '']);
 			if (marker.getAttribute('data-token-artwork') !== artwork) {
@@ -141,12 +145,30 @@ export function applyPreviewFrame(
 				marker.setAttribute('data-token-artwork', artwork);
 			}
 		}
+		if (marker.parentNode !== markerLayerForToken) markerLayerForToken.append(marker);
 		marker.setAttribute('transform', `translate(${token.x} ${token.y})`);
 	}
 
 	removeInactive(progressPaths, activeEdges);
 	removeInactive(markerGroups, activeTokens);
 	removeInactive(highlightGroups, activeHighlights);
+}
+
+function shouldShowDepartureMarkerAboveNode(
+	token: PreviewFrame['tokens'][number],
+	edge: PreviewFrame['edges'][number] | undefined,
+	scene: PreviewScene | null
+) {
+	if (!edge || !scene) return false;
+	const connection = scene.edges[edge.edgeIndex];
+	if (!connection) return false;
+	const sourceId = edge.forward ? connection.from : connection.to;
+	const source = scene.nodes.find((node) => node.id === sourceId);
+	if (!source) return false;
+
+	const dx = Math.max(source.bounds.x - token.x, 0, token.x - (source.bounds.x + source.bounds.width));
+	const dy = Math.max(source.bounds.y - token.y, 0, token.y - (source.bounds.y + source.bounds.height));
+	return Math.hypot(dx, dy) <= 11;
 }
 
 export function createAnimationFrameRenderer(

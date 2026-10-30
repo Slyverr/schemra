@@ -49,10 +49,35 @@ describe('command palette entries', () => {
 			'tab:project-demo:visual-main'
 		]);
 		expect(entries.filter((entry) => entry.type === 'file' && entry.fileId === 'scenario-response')).toHaveLength(1);
-		expect(entries.filter((entry) => entry.type === 'file' && entry.group === 'Project files').map((entry) => entry.type === 'file' ? entry.fileId : '')).toEqual([
+		expect(entries.filter((entry) => entry.type === 'file' && entry.group === 'projectFiles').map((entry) => entry.type === 'file' ? entry.fileId : '')).toEqual([
 			'source-notes',
 			'visual-payments'
 		]);
+	});
+
+	it('preserves action icons, shortcuts, and searchable aliases', () => {
+		const entries = buildCommandPaletteEntries({
+			projects: [],
+			activeProjectId: null,
+			activeFileId: null,
+			actions: [{
+				id: 'format-source',
+				label: 'Format source',
+				description: 'Format the current document',
+				keywords: ['prettify'],
+				shortcut: 'Alt+Shift+F',
+				icon: 'format'
+			}]
+		});
+
+		expect(entries).toContainEqual(expect.objectContaining({
+			key: 'action:format-source',
+			icon: 'format',
+			shortcut: 'Alt+Shift+F'
+		}));
+		expect(searchCommandPalette(entries, 'prettify')).toContainEqual(expect.objectContaining({
+			key: 'action:format-source'
+		}));
 	});
 
 	it('marks the selected tab and unsaved source while classifying visual resources', () => {

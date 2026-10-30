@@ -1,27 +1,15 @@
 use std::{
-    fs::{self, File},
-    io::Read,
+    fs,
     path::{Path, PathBuf},
 };
 
-use schemra_compiler::{ProjectSource, analyze_project, validate_scenario_for_visual};
+use schemra_compiler::{analyze_project, validate_scenario_for_visual};
+use schemra_project::{
+    ProjectSource, read_sources as discover_sources,
+    resolve_entry_path as resolve_project_entry_path,
+};
 use schemra_syntax::{Diagnostic, Severity};
 use serde::Serialize;
-
-const IGNORED_DIRECTORIES: [&str; 6] = [
-    ".git",
-    ".direnv",
-    ".schemra",
-    "node_modules",
-    "target",
-    ".svelte-kit",
-];
-
-const MAX_PROJECT_FILES: usize = 512;
-const MAX_PROJECT_SOURCE_BYTES: usize = 16 * 1024 * 1024;
-const MAX_PROJECT_DEPTH: usize = 32;
-const MAX_DIRECTORY_ENTRIES: usize = 8192;
-const MAX_PATH_BYTES: usize = 4096;
 
 #[derive(Debug, Serialize)]
 pub(super) struct CheckReport {
@@ -275,153 +263,9 @@ fn canonical_root(root: &Path) -> Result<PathBuf, String> {
 }
 
 fn resolve_entry_path(input: &Path, root: &Path) -> Result<String, String> {
-    let input = if input.is_absolute() {
-        input.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map_err(|error| format!("could not determine the current directory: {error}"))?
-            .join(input)
-    };
-    let input = fs::canonicalize(&input)
-        .map_err(|error| format!("could not read source file {}: {error}", input.display()))?;
-    let relative = input.strip_prefix(root).map_err(|_| {
-        format!(
-            "{} is outside project root {}",
-            input.display(),
-            root.display()
-        )
-    })?;
-    if !relative
-        .extension()
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("schemra"))
-    {
-        return Err(format!("{} is not a .schemra source file", input.display()));
-    }
-    relative_path(relative).ok_or_else(|| {
-        format!(
-            "{} cannot be represented as a project-relative UTF-8 path",
-            input.display()
-        )
-    })
+    resolve_project_entry_path(input, root).map_err(|error| error.to_string())
 }
 
 fn read_sources(root: &Path) -> Result<Vec<ProjectSource>, String> {
-    let mut sources = Vec::new();
-    let mut total_bytes = 0usize;
-    collect_sources(root, root, 0, &mut sources, &mut total_bytes)?;
-    sources.sort_by(|left, right| left.path.cmp(&right.path));
-    Ok(sources)
-}
-
-fn collect_sources(
-    root: &Path,
-    directory: &Path,
-    depth: usize,
-    sources: &mut Vec<ProjectSource>,
-    total_bytes: &mut usize,
-) -> Result<(), String> {
-    if depth > MAX_PROJECT_DEPTH {
-        return Err(format!(
-            "project directory nesting exceeds the configured depth limit of {MAX_PROJECT_DEPTH}"
-        ));
-    }
-
-    let directory_entries = fs::read_dir(directory).map_err(|error| {
-        format!(
-            "could not read project directory {}: {error}",
-            directory.display()
-        )
-    })?;
-    let mut entries = Vec::new();
-    for entry in directory_entries {
-        if entries.len() == MAX_DIRECTORY_ENTRIES {
-            return Err(format!(
-                "project directory {} exceeds the configured entry limit of {MAX_DIRECTORY_ENTRIES}",
-                directory.display()
-            ));
-        }
-        entries.push(entry.map_err(|error| {
-            format!(
-                "could not read an entry in {}: {error}",
-                directory.display()
-            )
-        })?);
-    }
-    entries.sort_by_key(|entry| entry.file_name());
-
-    for entry in entries {
-        let path = entry.path();
-        let file_type = entry
-            .file_type()
-            .map_err(|error| format!("could not inspect {}: {error}", path.display()))?;
-        if file_type.is_dir() {
-            if entry
-                .file_name()
-                .to_str()
-                .is_some_and(|name| IGNORED_DIRECTORIES.contains(&name))
-            {
-                continue;
-            }
-            collect_sources(root, &path, depth + 1, sources, total_bytes)?;
-            continue;
-        }
-        if !file_type.is_file()
-            || !path
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("schemra"))
-        {
-            continue;
-        }
-
-        let relative = path
-            .strip_prefix(root)
-            .expect("project walk stays under the canonical root");
-        let relative = relative_path(relative).ok_or_else(|| {
-            format!(
-                "{} cannot be represented as a project-relative UTF-8 path",
-                path.display()
-            )
-        })?;
-        if relative.len() > MAX_PATH_BYTES {
-            return Err(format!(
-                "project source path exceeds the configured {MAX_PATH_BYTES}-byte limit"
-            ));
-        }
-        if sources.len() >= MAX_PROJECT_FILES {
-            return Err(format!(
-                "project contains more than the configured {MAX_PROJECT_FILES} source files"
-            ));
-        }
-
-        let file = File::open(&path)
-            .map_err(|error| format!("could not read {}: {error}", path.display()))?;
-        let mut source = String::new();
-        file.take(super::MAX_SOURCE_BYTES.saturating_add(1) as u64)
-            .read_to_string(&mut source)
-            .map_err(|error| format!("could not read {}: {error}", path.display()))?;
-        if source.len() > super::MAX_SOURCE_BYTES {
-            return Err(format!(
-                "source {relative} exceeds the configured per-source limit of {} bytes",
-                super::MAX_SOURCE_BYTES
-            ));
-        }
-        *total_bytes = total_bytes.checked_add(source.len()).ok_or_else(|| {
-            "the total project source size overflowed the supported range".to_owned()
-        })?;
-        if *total_bytes > MAX_PROJECT_SOURCE_BYTES {
-            return Err(format!(
-                "project source text exceeds the configured {MAX_PROJECT_SOURCE_BYTES}-byte aggregate limit"
-            ));
-        }
-        sources.push(ProjectSource {
-            id: relative.clone(),
-            path: relative,
-            source,
-        });
-    }
-    Ok(())
-}
-
-fn relative_path(path: &Path) -> Option<String> {
-    path.to_str().map(|path| path.replace('\\', "/"))
+    discover_sources(root).map_err(|error| error.to_string())
 }

@@ -1,0 +1,20 @@
+[package]
+name = "schemra-lsp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "schemra-lsp"
+path = "src/main.rs"
+
+[dependencies]
+lsp-server.workspace = true
+lsp-types.workspace = true
+schemra-compiler.workspace = true
+schemra-project.workspace = true
+schemra-syntax.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+url.workspace = true

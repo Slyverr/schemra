@@ -55,6 +55,16 @@ impl Registry {
         diagnostics
     }
 
+    pub(crate) fn validate_statements_in_scope(
+        &self,
+        statements: &[Statement],
+        scope: Scope,
+    ) -> Vec<Diagnostic> {
+        let mut diagnostics = Vec::new();
+        validate_scope(statements, scope, self, &mut diagnostics);
+        diagnostics
+    }
+
     pub fn constructs_in_scope(
         &self,
         scope: Scope,

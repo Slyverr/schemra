@@ -48,6 +48,43 @@ fn project_analysis_links_scenario_sources_to_visuals() {
 }
 
 #[test]
+fn project_analysis_keeps_visual_symbols_when_an_edge_is_invalid() {
+    let analysis = analyze_project(&[source(
+        "visual",
+        "visuals/network.schemra",
+        r#"visual network "Network" {
+  node client "Client" {}
+  node backend "Backend" {}
+  client -> backned
+}"#,
+    )]);
+
+    let file = &analysis.files[0];
+    let visual = file
+        .visual
+        .as_ref()
+        .expect("recoverable visual declarations remain available");
+    assert_eq!(file.kind, "visual");
+    assert_eq!(file.visual_id.as_deref(), Some("network"));
+    assert_eq!(
+        visual
+            .nodes
+            .iter()
+            .map(|node| node.id.0.as_str())
+            .collect::<Vec<_>>(),
+        ["client", "backend"]
+    );
+    assert!(file.editor_symbols.iter().any(|symbol| {
+        symbol.name == "client" && symbol.role == schemra_compiler::EditorSymbolRole::Definition
+    }));
+    assert!(
+        file.diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "E_UNKNOWN_EDGE_NODE")
+    );
+}
+
+#[test]
 fn duplicate_visual_ids_and_unknown_scenario_targets_are_diagnosed() {
     let analysis = analyze_project(&[
         source(

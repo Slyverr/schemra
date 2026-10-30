@@ -96,3 +96,31 @@ fn reports_excessive_nesting_and_recovers_to_following_statements() {
         Some(StatementKind::Invocation { name, .. }) if name.text == "visual"
     ));
 }
+
+#[test]
+fn parses_indexed_identifiers_and_inclusive_repeat_ranges() {
+    let file = parse_syntax(
+        "visual map {\n  repeat 2..=4 as i {\n    node user[i] \"User {i}\" {}\n    user[i] -> api\n  }\n}",
+    );
+
+    assert!(file.diagnostics.is_empty(), "{:?}", file.diagnostics);
+    let StatementKind::Invocation {
+        body: Some(visual), ..
+    } = &file.statements[0].kind
+    else {
+        panic!("expected visual body");
+    };
+    let StatementKind::Invocation {
+        arguments,
+        body: Some(repeated),
+        ..
+    } = &visual[0].kind
+    else {
+        panic!("expected repeat body");
+    };
+    assert!(matches!(&arguments[1].kind, TokenKind::RangeInclusive));
+    let StatementKind::Invocation { arguments, .. } = &repeated[0].kind else {
+        panic!("expected node declaration");
+    };
+    assert_eq!(arguments[0].text, "user[i]");
+}

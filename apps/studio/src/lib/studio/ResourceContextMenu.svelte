@@ -1,9 +1,12 @@
 <script lang="ts">
 	import { tick, type Snippet } from 'svelte';
+	import { Portal } from 'bits-ui';
 	import { Pencil, Trash2 } from '@lucide/svelte';
+	import { studioMessage } from '../i18n/messages.js';
 
 	interface Props {
 		children: Snippet;
+		wrapperClass?: string;
 		onRename?: () => void;
 		onRemove: () => void;
 		renameDisabled?: boolean;
@@ -58,7 +61,8 @@
 	}
 
 	function handleDocumentPointerDown(event: PointerEvent) {
-		if (open && !root?.contains(event.target as Node)) closeMenu();
+		const target = event.target as Node;
+		if (open && !root?.contains(target) && !menu?.contains(target)) closeMenu();
 	}
 
 	function handleDocumentKeydown(event: KeyboardEvent) {
@@ -102,15 +106,16 @@
 
 <!-- Keyboard and context-menu events are delegated from the contained tab button. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div bind:this={root} class="resource-context-root" role="presentation" oncontextmenu={handleContextMenu} onkeydown={handleTriggerKeydown}>
-	{@render props.children()}
+<div bind:this={root} class={`resource-context-root ${props.wrapperClass ?? ''}`} role="presentation" oncontextmenu={handleContextMenu} onkeydown={handleTriggerKeydown}>
+		{@render props.children()}
 	{#if open}
+	<Portal to="body">
 		<div
 			bind:this={menu}
 			class="resource-context-menu"
 			role="menu"
 			tabindex="-1"
-			aria-label="Resource actions"
+			aria-label={studioMessage('resource.contextActions')}
 			style:left={`${position.left}px`}
 			style:top={`${position.top}px`}
 			onkeydown={handleMenuKeydown}
@@ -118,15 +123,16 @@
 			{#if props.onRename}
 				<button type="button" role="menuitem" disabled={props.renameDisabled} onclick={selectRename}>
 					<Pencil size={15} aria-hidden="true" />
-					<span>Rename</span>
+					<span>{studioMessage('resource.rename')}</span>
 				</button>
 				<div class="menu-separator" role="separator"></div>
 			{/if}
 			<button class="remove-action" type="button" role="menuitem" disabled={props.removeDisabled} onclick={selectRemove}>
 				<Trash2 size={15} aria-hidden="true" />
-				<span>Remove from project</span>
+				<span>{studioMessage('resource.removeFromProject')}</span>
 			</button>
 		</div>
+	</Portal>
 	{/if}
 </div>
 
