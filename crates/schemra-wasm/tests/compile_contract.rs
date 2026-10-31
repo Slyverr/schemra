@@ -10,6 +10,7 @@ const VISUAL: &str = r#"visual network "Network" {
 
 const SCENARIO: &str = r#"scenario requests for visual network {
   token packet { icon: "mail" }
+  token acknowledgment { char: "✓" }
   move packet from client -> server { duration: 100ms }
   wait 25ms
   highlight server 50ms trace
@@ -36,6 +37,7 @@ fn compile_schemra_returns_scene_svg_and_scheduled_scenario() {
     );
     assert_eq!(output["scenarios"][0]["duration_ms"], 175);
     assert_eq!(output["scenarios"][0]["tokens"][0]["icon"], "mail");
+    assert_eq!(output["scenarios"][0]["tokens"][1]["char"], "✓");
     assert_eq!(output["scenarios"][0]["effects"][0]["kind"], "move");
     assert_eq!(output["scenarios"][0]["effects"][0]["start_ms"], 0);
     assert_eq!(output["scenarios"][0]["effects"][0]["end_ms"], 100);

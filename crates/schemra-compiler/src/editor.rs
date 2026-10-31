@@ -74,9 +74,9 @@ pub fn highlight_tokens(source: &str) -> Vec<SyntaxToken> {
                     SyntaxTokenKind::Operator
                 }
                 TokenKind::Colon
+                | TokenKind::Semicolon
                 | TokenKind::LeftBrace
                 | TokenKind::RightBrace
-                | TokenKind::Semicolon
                 | TokenKind::Error(_) => SyntaxTokenKind::Punctuation,
             };
             Some(SyntaxToken {

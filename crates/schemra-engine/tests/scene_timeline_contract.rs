@@ -151,6 +151,81 @@ fn forward_marker_samples_the_resolved_link_and_is_consumed_at_arrival() {
 }
 
 #[test]
+fn simultaneous_same_direction_markers_separate_smoothly_on_the_link() {
+    let span = span();
+    let input = SamplingInput {
+        scene: scene(line()),
+        timeline: compile_timeline(&scenario(vec![ActionIr::Parallel {
+            actions: vec![
+                movement("a", "b", Some(1_000)),
+                movement("a", "b", Some(1_000)),
+            ],
+            span,
+        }]))
+        .unwrap(),
+    };
+    let frame = input.sampler().sample(500);
+
+    assert_eq!(frame.tokens.len(), 2);
+    assert_eq!(frame.active_edges.len(), 2);
+    assert!((frame.tokens[0].x - frame.tokens[1].x).abs() < 0.1);
+    assert!((frame.tokens[0].y - frame.tokens[1].y).abs() > 20.0);
+    assert!(((frame.tokens[0].y + frame.tokens[1].y) / 2.0 - 20.0).abs() < 0.1);
+}
+
+#[test]
+fn opposing_markers_use_opposite_lanes_on_the_shared_link() {
+    let span = span();
+    let input = SamplingInput {
+        scene: scene(line()),
+        timeline: compile_timeline(&scenario(vec![ActionIr::Parallel {
+            actions: vec![
+                movement("a", "b", Some(1_000)),
+                movement("b", "a", Some(1_000)),
+            ],
+            span,
+        }]))
+        .unwrap(),
+    };
+    let frame = input.sampler().sample(500);
+
+    assert_eq!(frame.tokens.len(), 2);
+    assert!((frame.tokens[0].x - frame.tokens[1].x).abs() < 0.1);
+    assert!((frame.tokens[0].y - frame.tokens[1].y).abs() > 20.0);
+    assert!(((frame.tokens[0].y + frame.tokens[1].y) / 2.0 - 20.0).abs() < 0.1);
+}
+
+#[test]
+fn crowded_markers_follow_the_curve_normal() {
+    let span = span();
+    let scene = scene(vec![CubicBezier {
+        start: point(20.0, 20.0),
+        control1: point(20.0, 60.0),
+        control2: point(100.0, 60.0),
+        end: point(100.0, 20.0),
+    }]);
+    let timeline = compile_timeline(&scenario(vec![ActionIr::Parallel {
+        actions: vec![
+            movement("a", "b", Some(1_000)),
+            movement("a", "b", Some(1_000)),
+        ],
+        span,
+    }]))
+    .unwrap();
+    let frame = SceneTimelineSampler::new(&scene, &timeline).sample(500);
+
+    assert_eq!(frame.tokens.len(), 2);
+    let midpoint_x = (frame.tokens[0].x + frame.tokens[1].x) / 2.0;
+    let midpoint_y = (frame.tokens[0].y + frame.tokens[1].y) / 2.0;
+    let separation =
+        (frame.tokens[0].x - frame.tokens[1].x).hypot(frame.tokens[0].y - frame.tokens[1].y);
+
+    assert!((midpoint_x - 60.0).abs() < 0.2);
+    assert!((midpoint_y - 50.0).abs() < 0.2);
+    assert!(separation > 20.0);
+}
+
+#[test]
 fn cached_scene_geometry_can_sample_multiple_timelines() {
     let scene = scene(line());
     let forward = compile_timeline(&scenario(vec![movement("a", "b", Some(1_000))])).unwrap();

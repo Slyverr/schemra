@@ -35,8 +35,7 @@ visual traffic_overview "Service traffic" {
       detail: "Writes audit records"
     }
     node database "Database" {
-      icon: "database"
-      detail: "Stores application data"
+      icon: "database"; detail: "Stores application data"
     }
   }
 

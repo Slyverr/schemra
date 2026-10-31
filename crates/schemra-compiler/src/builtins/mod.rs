@@ -65,10 +65,16 @@ pub(super) const NODE_PROPERTIES: &[crate::PropertySpec] = &[
     },
 ];
 
-pub(super) const TOKEN_PROPERTIES: &[crate::PropertySpec] = &[crate::PropertySpec {
-    name: "icon",
-    kind: crate::PropertyKind::String,
-}];
+pub(super) const TOKEN_PROPERTIES: &[crate::PropertySpec] = &[
+    crate::PropertySpec {
+        name: "icon",
+        kind: crate::PropertyKind::String,
+    },
+    crate::PropertySpec {
+        name: "char",
+        kind: crate::PropertyKind::String,
+    },
+];
 
 pub(super) const SCENARIO_PROPERTIES: &[crate::PropertySpec] = &[crate::PropertySpec {
     name: "highlight",

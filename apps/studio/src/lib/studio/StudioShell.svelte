@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
-import { AlertCircle, Download, Plus, Save, X } from '@lucide/svelte';
-import { Button } from '../components/ui/button/index.js';
+	import { AlertCircle, Download, Plus, Save, X } from '@lucide/svelte';
+	import { Button } from '../components/ui/button/index.js';
 	import { editorOffsetAtPosition, readEditorDiagnostics, readEditorSyntaxTokens } from '../editor/source-model.js';
 	import { studioMessage } from '../i18n/messages.js';
 	import {
@@ -22,9 +22,9 @@ import { Button } from '../components/ui/button/index.js';
 	import { createExampleProject } from '../project/example-project.js';
 	import { MAX_PROJECT_FILES } from '../project/session.js';
 	import {
-	DEFAULT_EDITOR_PREFERENCES,
+		DEFAULT_EDITOR_PREFERENCES,
 		readEditorPreferences,
-	stepEditorZoom,
+		stepEditorZoom,
 		writeEditorPreferences,
 		type EditorPreferences
 	} from '../settings/editor.js';
@@ -38,7 +38,7 @@ import { Button } from '../components/ui/button/index.js';
 		type ThemePreferences
 	} from '../settings/appearance.js';
 	import CommandPalette from './CommandPalette.svelte';
-import LanguageReferenceDialog from './LanguageReferenceDialog.svelte';
+	import LanguageReferenceDialog from './LanguageReferenceDialog.svelte';
 	import type { CommandPaletteAction } from './command-palette.js';
 	import ProjectSidebar from './ProjectSidebar.svelte';
 	import ResourceDialog from './ResourceDialog.svelte';
@@ -49,8 +49,13 @@ import LanguageReferenceDialog from './LanguageReferenceDialog.svelte';
 	import WorkspacePanels from './WorkspacePanels.svelte';
 	import StudioSettingsDialog from './StudioSettingsDialog.svelte';
 	import { buildProjectSidebarModel, sourceLabel } from './project-sidebar.js';
-	import { compareSourceFiles, isErrorDiagnostic, isValidProjectCompilation, makeSourcesKey, stabilizeFileIdentity } from './project-view.js';
-	import { buildWorkspaceTabIds, type WorkspaceTabView } from './workspace-tabs.js';
+	import {
+		compareSourceFiles,
+		isValidProjectCompilation,
+		makeSourcesKey,
+		stabilizeFileIdentity
+	} from './project-view.js';
+	import { buildWorkspaceTabIds, buildWorkspaceTabViews } from './workspace-tabs.js';
 	import { isInitialWorkspaceViewReady } from './initial-workspace-view.js';
 	import { resourceTabMenuPolicy, type ResourceTabKind } from './resource-tab-menu.js';
 	import { createEditorSymbolRenameActions, type EditorRenameState } from './editor-symbol-rename.js';
@@ -156,40 +161,6 @@ import LanguageReferenceDialog from './LanguageReferenceDialog.svelte';
 		(lastValidForProject ? (lastValidForProject.result.visuals as ProjectVisual[])[0]?.id : null) ?? null
 	);
 	const workspaceTabIds = $derived(buildWorkspaceTabIds(orderedFiles, currentFileViews, visualId, activeFileId));
-	const workspaceTabs = $derived(workspaceTabIds.flatMap((id) => {
-		const file = activeProject?.files.find((candidate) => candidate.id === id);
-		return file ? [file] : [];
-	}));
-	const workspaceTabViews = $derived(workspaceTabs.map((file): WorkspaceTabView => {
-		const fileCompilation = currentFileViews.find((item) => item.id === file.id);
-		const resourceKind: ResourceTabKind = file.path.startsWith('visuals/') ? 'visual' : file.path.startsWith('scenarios/') ? 'scenario' : 'source';
-		const displayKind = fileCompilation?.kind === 'visual' ? 'visual' : fileCompilation?.kind === 'scenario' ? 'scenario' : file.path.startsWith('components/') ? 'component' : 'source';
-		const declarations = fileCompilation?.declarations.filter((item) => item.kind === resourceKind) ?? [];
-		const declaration = file.id === activeFileId && currentResourceDeclaration?.kind === resourceKind
-			? currentResourceDeclaration
-			: declarations[0] ?? fileCompilation?.declarations[0] ?? null;
-		const policy = resourceTabMenuPolicy({
-			kind: resourceKind,
-			declarationCount: declarations.length,
-			projectFileCount: activeProject?.files.length ?? 0,
-			initialized: workspace.initialized,
-			compiling: compilePending,
-			projectValid: currentProjectValid
-		});
-		return {
-			id: file.id,
-			path: file.path,
-			title: declaration?.title ?? sourceLabel(file.path),
-			resourceKind,
-			displayKind,
-			hasErrors: fileCompilation?.diagnostics.some(isErrorDiagnostic) ?? false,
-			unsaved: file.source !== file.savedSource,
-			rename: policy.showRename && declaration ? () => resourceActions.openResourceRenameForFile(file.id, declaration) : undefined,
-			remove: () => resourceActions.openResourceRemovalForFile(file.id, resourceKind, declaration),
-			renameDisabled: policy.renameDisabled,
-			removeDisabled: policy.removeDisabled
-		};
-	}));
 	function sidebarDeclaration(fileId: string, kind: ResourceTabKind, resourceId: string | null) {
 		const file = currentFiles.find(({ id }) => id === fileId);
 		return file?.declarations.find((declaration) =>
@@ -282,6 +253,19 @@ import LanguageReferenceDialog from './LanguageReferenceDialog.svelte';
 			? declarations.find(({ id }) => id === selectedScenario?.id) ?? declarations[0] ?? null
 			: declarations[0] ?? null;
 	});
+	const workspaceTabViews = $derived(buildWorkspaceTabViews({
+		files: activeProject?.files ?? [],
+		compilation: currentFileViews,
+		tabIds: workspaceTabIds,
+		activeFileId,
+		currentDeclaration: currentResourceDeclaration,
+		projectFileCount: activeProject?.files.length ?? 0,
+		initialized: workspace.initialized,
+		compiling: compilePending,
+		projectValid: currentProjectValid,
+		onRename: (fileId, declaration) => resourceActions.openResourceRenameForFile(fileId, declaration),
+		onRemove: (fileId, kind, declaration) => resourceActions.openResourceRemovalForFile(fileId, kind, declaration)
+	}));
 	const fileDiagnostics = $derived(
 		latestActiveFileCompilation ? readEditorDiagnostics(latestActiveFileCompilation.diagnostics) : []
 	);
@@ -783,6 +767,7 @@ import LanguageReferenceDialog from './LanguageReferenceDialog.svelte';
 				controller.updateSource(projectId, fileId, source);
 			}
 			const saved = await controller.flush();
+			if (saved.ok) controller.markWorkspaceSourceSaved(projectId, fileId, source);
 			if (workspace.activeProjectId === projectId) {
 				fileMessage = saved.ok ? null : { kind: 'error', text: saved.error.message };
 			}

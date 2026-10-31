@@ -1,10 +1,10 @@
-import { applySourceTextEdits, removeSourceDeclaration, utf8SpanToEditorSpan } from '../editor/source-edits.js';
+import { applySourceTextEdits, removeSourceDeclaration } from '../editor/source-edits.js';
 import { studioMessage } from '../i18n/messages.js';
 import type { WorkspaceController, WorkspaceControllerState } from '../project/workspace-controller.js';
 import type { StudioProject } from '../project/session.js';
 import { MAX_PROJECT_FILES, normalizeResourceTitle, uniqueProjectName, uniqueScenarioId } from '../project/session.js';
-import { renameProject as renameDslSymbol, type CompileResult, type ProjectCompileResult, type ProjectSource, type SourceSpan } from '../schemra.js';
-import { findDeclarationIdentifier, renameVisualTitle } from './resource-source-edits.js';
+import { type CompileResult, type ProjectCompileResult, type ProjectSource, type SourceSpan } from '../schemra.js';
+import { renameDeclarationTitle } from './resource-source-edits.js';
 import type { ResourceTabKind } from './resource-tab-menu.js';
 
 export type ResourceDialogKind = 'create-project' | 'create-visual' | 'create-scenario' | 'rename-project' | 'rename-resource' | 'remove-resource' | null;
@@ -176,7 +176,7 @@ export function createResourceActions({ controller, form, getSnapshot, setFileMe
 		close();
 	}
 
-	async function renameResource(title: string) {
+	function renameResource(title: string) {
 		const snapshot = getSnapshot();
 		const target = form.target;
 		const document = target && snapshot.activeProject?.files.find(({ id }) => id === target.fileId);
@@ -185,39 +185,23 @@ export function createResourceActions({ controller, form, getSnapshot, setFileMe
 			throw new Error(studioMessage('project.sourceChangedDialog'));
 		}
 		const declaration = liveDeclaration(current, target.kind, target.declaration);
-		if (target.kind === 'visual') {
-			const source = renameVisualTitle(document.source, current.tokens, declaration.span, declaration.id, title);
-			if (!source) throw new Error(studioMessage('project.visualIdNotFound'));
-			const result = controller.updateSource(snapshot.activeProject!.id, document.id, source);
-			if (!result.ok) throw new Error(result.error.message);
-		} else {
-			await renameScenario(snapshot, document, current, declaration, title);
+		if (target.kind === 'scenario') validateScenarioTitle(snapshot, declaration, title);
+		const source = renameDeclarationTitle(document.source, current.tokens, declaration.span, declaration.id, title);
+		if (!source) {
+			const message = target.kind === 'visual' ? 'project.visualIdNotFound' : 'resource.scenarioTitleNotFound';
+			throw new Error(studioMessage(message));
 		}
+		const result = controller.updateSource(snapshot.activeProject!.id, document.id, source);
+		if (!result.ok) throw new Error(result.error.message);
 		setFileMessage(null);
 		close();
 	}
 
-	async function renameScenario(
-		snapshot: ResourceActionSnapshot,
-		document: StudioProject['files'][number],
-		current: ResourceCompileFile,
-		declaration: ProjectDeclaration,
-		title: string
-	) {
-		const scenarioId = declaration.id;
-		if (!scenarioId || !snapshot.activeProject) throw new Error(studioMessage('project.scenarioIdUnavailable'));
-		const targetVisual = snapshot.currentCompilation?.visuals.find(({ id }) => id === declaration.visual_id);
-		const otherScenarioIds = (targetVisual?.output.scenarios as { id: string }[] | undefined)?.map(({ id }) => id).filter((id) => id !== scenarioId) ?? [];
-		const replacementId = uniqueScenarioId(title, otherScenarioIds);
-		const token = findDeclarationIdentifier(document.source, current.tokens, declaration.span, scenarioId);
-		if (!token) throw new Error(studioMessage('resource.scenarioIdNotFound'));
-		const renamed = await renameDslSymbol(snapshot.sourceFiles, document.path, utf8SpanToEditorSpan(document.source, token.span).start.offset, replacementId);
-		if (renamed.error) throw new Error(renamed.error);
-		for (const edit of renamed.edits) {
-			const editedFile = snapshot.activeProject.files.find(({ path }) => path === edit.path);
-			if (!editedFile) throw new Error(studioMessage('resource.linkedScenarioMissing'));
-			const result = controller.updateSource(snapshot.activeProject.id, editedFile.id, applySourceTextEdits(editedFile.source, [edit]));
-			if (!result.ok) throw new Error(result.error.message);
+	function validateScenarioTitle(snapshot: ResourceActionSnapshot, declaration: ProjectDeclaration, title: string) {
+		if (!declaration.visual_id) return;
+		const scenarios = snapshot.currentCompilation?.visuals.find(({ id }) => id === declaration.visual_id)?.output.scenarios as CompiledScenario[] | undefined;
+		if (scenarios?.some((scenario) => scenario.id !== declaration.id && scenario.title === title)) {
+			throw new Error(studioMessage('resource.duplicateScenarioTitle', { title }));
 		}
 	}
 

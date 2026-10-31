@@ -35,6 +35,64 @@ scenario request_response for visual network {
 }
 
 #[test]
+fn compiles_a_single_character_marker_style() {
+    let module = compile(
+        r#"
+visual network {
+  node client {}
+  node server {}
+  client -> server
+}
+scenario requests for visual network {
+  token acknowledgment { char: "✓" }
+  move acknowledgment from client -> server { duration: 1ms }
+}
+"#,
+    )
+    .expect("single-character marker style compiles");
+
+    assert_eq!(module.scenarios[0].tokens[0].char.as_deref(), Some("✓"));
+}
+
+#[test]
+fn rejects_invalid_character_marker_styles() {
+    let too_long = diagnostic_codes(
+        r#"visual network {
+  node client {}
+  node server {}
+  client -> server
+}
+scenario requests for visual network {
+  token packet { char: "AB" }
+  move packet from client -> server { duration: 1ms }
+}"#,
+    );
+    assert!(
+        too_long.contains(&"E_SCENARIO_TOKEN_CHAR".into()),
+        "{too_long:?}"
+    );
+
+    let both_styles = diagnostic_codes(
+        r#"visual network {
+  node client {}
+  node server {}
+  client -> server
+}
+scenario requests for visual network {
+  token packet {
+    icon: "mail"
+    char: "R"
+  }
+  move packet from client -> server { duration: 1ms }
+}"#,
+    );
+    assert!(
+        both_styles.contains(&"E_SCENARIO_TOKEN_STYLE".into()),
+        "{both_styles:?}"
+    );
+}
+
+#[test]
 fn resolves_scenario_visuals_across_separate_sources() {
     let module = compile_sources(&[
         "visual network { node client {} }",

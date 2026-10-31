@@ -42,7 +42,7 @@ fn syntax_coloring_uses_construct_and_property_schemas() {
 
 #[test]
 fn scenario_action_keywords_and_highlight_values_are_colored() {
-    let source = "scenario flow for visual app {\n highlight: 200ms trace from left\n move packet from client -> api {\n  duration: 1s\n  highlight: off\n }\n}";
+    let source = "scenario flow for visual app {\n token packet { char: \"R\" }\n highlight: 200ms trace from left\n move packet from client -> api {\n  duration: 1s\n  highlight: off\n }\n}";
     let tokens = token_kinds(source);
 
     for (text, kind) in [
@@ -55,6 +55,7 @@ fn scenario_action_keywords_and_highlight_values_are_colored() {
         ("from", SyntaxTokenKind::Keyword),
         ("left", SyntaxTokenKind::Value),
         ("move", SyntaxTokenKind::Keyword),
+        ("char", SyntaxTokenKind::Property),
         ("1s", SyntaxTokenKind::Number),
         ("off", SyntaxTokenKind::Value),
     ] {
@@ -63,6 +64,14 @@ fn scenario_action_keywords_and_highlight_values_are_colored() {
             "missing {text:?} as {kind:?}: {tokens:?}"
         );
     }
+}
+
+#[test]
+fn semicolons_compile_and_are_colored_as_punctuation() {
+    let source = "visual app { node api {} }; scenario flow for visual app { wait 1s; }";
+
+    assert!(compile(source).is_ok());
+    assert!(token_kinds(source).contains(&(";", SyntaxTokenKind::Punctuation)));
 }
 
 #[test]

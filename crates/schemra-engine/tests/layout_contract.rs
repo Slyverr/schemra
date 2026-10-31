@@ -117,6 +117,43 @@ fn configured_group_grid_places_members_and_contains_them() {
 }
 
 #[test]
+fn grid_rows_center_nodes_with_different_heights() {
+    for direction in [
+        Direction::LeftToRight,
+        Direction::RightToLeft,
+        Direction::TopToBottom,
+        Direction::BottomToTop,
+    ] {
+        let mut model = visual(direction);
+        model.groups.push(GroupIr {
+            id: GroupId("clients".into()),
+            id_span: span(),
+            title: "Clients".into(),
+            layout: GroupLayout::Grid { columns: Some(2) },
+            span: span(),
+        });
+        model.nodes = vec![
+            node("short", "Short", None, Some("clients")),
+            node(
+                "tall",
+                "Tall",
+                Some("A longer description that wraps across several lines in the card."),
+                Some("clients"),
+            ),
+        ];
+
+        let scene = layout_visual(&model);
+        let short = &scene.nodes[0].bounds;
+        let tall = &scene.nodes[1].bounds;
+        assert!(tall.height > short.height, "expected varied node heights");
+        assert!(
+            ((short.y + short.height / 2.0) - (tall.y + tall.height / 2.0)).abs() < 0.01,
+            "grid row nodes should share their vertical center in {direction:?}"
+        );
+    }
+}
+
+#[test]
 fn independent_blocks_do_not_overlap_multiline_groups_in_any_direction() {
     for direction in [
         Direction::LeftToRight,

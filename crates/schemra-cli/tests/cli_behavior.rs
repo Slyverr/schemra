@@ -27,6 +27,7 @@ fn help_option_describes_the_cli() {
     assert!(help.contains("fmt"));
     assert!(help.contains("scenario-check"));
     assert!(help.contains("render"));
+    assert!(help.contains("lsp"));
 }
 
 #[test]

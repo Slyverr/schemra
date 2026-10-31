@@ -215,6 +215,11 @@ test('navigates the searchable Studio themes from the keyboard', async ({ page }
 	await trigger.click();
 	const popover = settings.locator('#studio-theme-options');
 	await expect(popover).toBeVisible();
+	const triggerSwatch = trigger.locator('svg').first();
+	const optionSwatch = popover.getByRole('option').first().locator('svg');
+	await expect.poll(async () => (await triggerSwatch.boundingBox())?.width ?? 0).toBe(48);
+	await expect.poll(async () => (await optionSwatch.boundingBox())?.width ?? 0).toBe(48);
+	await expect(optionSwatch.locator('rect[stroke]')).toHaveCount(0);
 	expect(await settings.evaluate((element) => element.contains(element.querySelector('#studio-theme-options')))).toBe(true);
 	expect(await popover.evaluate((element) => getComputedStyle(element.parentElement!).zIndex)).toBe('1000');
 	const popoverBounds = await popover.boundingBox();

@@ -59,6 +59,7 @@ struct CompileStats {
 struct CompiledTokenStyle {
     token: String,
     icon: Option<String>,
+    char: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -562,6 +563,7 @@ fn compile_scenario(scenario: &ScenarioIr) -> Result<CompiledScenario, schemra_i
             .map(|token| CompiledTokenStyle {
                 token: token.id.0.clone(),
                 icon: token.icon.clone(),
+                char: token.char.clone(),
             })
             .collect(),
         effects,

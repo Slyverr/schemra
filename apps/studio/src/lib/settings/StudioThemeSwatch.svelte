@@ -8,12 +8,11 @@
 	const palette = $derived(studioThemePreviewPalettes[theme]);
 </script>
 
-<svg class={cn('h-10 w-12 shrink-0', className)} viewBox="0 0 48 40" aria-hidden="true">
-	<rect x=".5" y=".5" width="47" height="39" rx="6" fill={palette.background} />
+<svg class={cn('size-12 shrink-0', className)} viewBox="0 0 48 40" aria-hidden="true">
+	<rect x=".5" y=".5" width="47" height="39" rx="6" fill={palette.background} stroke="var(--border)" stroke-width=".6" />
 	{#if palette.backgroundDark}
 		<path d="M25 1H47.5V39H19Z" fill={palette.backgroundDark} />
 	{/if}
-	<rect x=".5" y=".5" width="47" height="39" rx="6" fill="none" stroke={palette.border} />
 	<rect x="4.5" y="4.5" width="39" height="31" rx="4" fill={palette.card} />
 	{#if palette.cardDark}
 		<path d="M26 5H43.5V35H21Z" fill={palette.cardDark} />

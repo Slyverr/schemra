@@ -333,7 +333,7 @@
 		{/if}
 	</div>
 
-	<footer class="shrink-0 p-2">
+	<footer class="mt-auto shrink-0 p-2">
 		<Button variant="ghost" class={[
 			'w-full min-h-9 justify-start gap-[.55rem] rounded-[.42rem] px-[.55rem] text-left text-[.78rem] text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0',
 			collapsed ? 'size-9 justify-center px-0' : ''

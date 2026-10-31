@@ -9,6 +9,7 @@ use schemra_scene::{Rect, Scene};
 use crate::{
     routing::RouteGeometry,
     timeline::{TimelineSampler, TimelineSampling},
+    token_separation::separate_crowded_tokens,
 };
 
 /// Reusable scene geometry cache for sampling multiple timelines against one scene.
@@ -143,6 +144,8 @@ fn sample_scene_with_geometry(
             traversal_direction: if forward { 1 } else { -1 },
         });
     }
+
+    separate_crowded_tokens(&mut tokens, &active_edges, route_geometry);
 
     let highlights = frame
         .highlights

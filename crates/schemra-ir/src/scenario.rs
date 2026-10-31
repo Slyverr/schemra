@@ -46,6 +46,7 @@ pub struct TokenIr {
     pub id: TokenId,
     pub id_span: SourceSpan,
     pub icon: Option<String>,
+    pub char: Option<String>,
     pub span: SourceSpan,
 }
 

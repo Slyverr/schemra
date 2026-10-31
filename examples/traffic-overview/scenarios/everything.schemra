@@ -7,6 +7,9 @@ scenario everything for visual traffic_overview {
   token response {
     icon: "lucide/package"
   }
+  token acknowledgment {
+    char: "✓"
+  }
 
   parallel {
     move request from user_1 -> reverse_proxy {
@@ -16,6 +19,9 @@ scenario everything for visual traffic_overview {
     move response from user_2 -> reverse_proxy {
       duration: 600ms
       highlight: off
+    }
+    move acknowledgment from user_3 -> reverse_proxy {
+      duration: 550ms
     }
   }
 

@@ -18,10 +18,10 @@ pub enum TokenKind {
     Undirected,
     RangeInclusive,
     Colon,
+    Semicolon,
     LeftBrace,
     RightBrace,
     Newline,
-    Semicolon,
     Comment(String),
     Error(String),
 }

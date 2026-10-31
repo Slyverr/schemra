@@ -17,7 +17,7 @@
 		presentationMode: boolean;
 		canExportAnimation: boolean;
 		animationExportBusy: boolean;
-		onScenarioSelect: (scenarioId: string | null) => void;
+		onScenarioSelect?: (scenarioId: string | null) => void;
 		onFocusTarget: (bounds: PreviewNodeBounds) => void;
 		onFocusNode: (nodeId: string) => void;
 		onFocusConnection: (edgeIndex: number) => void;
@@ -45,7 +45,7 @@
 	const hasSceneContent = $derived(Boolean(props.scene && (props.scene.groups.length > 0 || props.scene.nodes.length > 0 || props.scene.edges.length > 0)));
 
 	function selectScenario(value: string) {
-		props.onScenarioSelect(value === STATIC_VISUAL_VALUE ? null : value);
+		props.onScenarioSelect?.(value === STATIC_VISUAL_VALUE ? null : value);
 		scenarioSearch = '';
 	}
 

@@ -68,6 +68,8 @@ enum Commands {
         #[arg(long)]
         root: Option<PathBuf>,
     },
+    /// Start the language server over standard input and output.
+    Lsp,
 }
 
 fn main() -> ExitCode {
@@ -177,6 +179,13 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some(Commands::Lsp) => match schemra_lsp::run_stdio() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("Schemra language server stopped: {error}");
+                ExitCode::FAILURE
+            }
+        },
     }
 }
 

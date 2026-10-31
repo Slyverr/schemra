@@ -117,13 +117,18 @@ export function applyPreviewFrame(
 		);
 	}
 
-	const icons = new Map((scenario?.tokens ?? []).map(({ token, icon }) => [token, icon ?? '']));
+	const artworkByToken = new Map((scenario?.tokens ?? []).map(({ token, icon, char }) => [
+		token,
+		{ icon: icon ?? '', char: char ?? '' }
+	]));
 	for (const token of frame?.tokens ?? []) {
 		activeTokens.add(token.instanceId);
 		const activeEdge = frame?.edges.find((edge) => edge.instanceId === token.instanceId);
 		const markerLayerForToken = shouldShowDepartureMarkerAboveNode(token, activeEdge, scene)
 			? portMarkerLayer
 			: markerLayer;
+		const artwork = artworkByToken.get(token.token) ?? { icon: '', char: '' };
+		const artworkKey = JSON.stringify([token.token, artwork.icon, artwork.char]);
 		let marker = markerGroups.get(token.instanceId);
 		if (!marker) {
 			marker = root.ownerDocument.createElementNS(SVG_NS, 'g');
@@ -135,16 +140,15 @@ export function applyPreviewFrame(
 			circle.setAttribute('stroke', 'var(--background)');
 			circle.setAttribute('stroke-width', '2');
 			marker.append(circle);
-			appendMarkerIcon(marker, icons.get(token.token) ?? '', token.token);
+			appendMarkerArtwork(marker, artwork.icon, artwork.char, token.token);
 			markerGroups.set(token.instanceId, marker);
-			marker.setAttribute('data-token-artwork', JSON.stringify([token.token, icons.get(token.token) ?? '']));
+			marker.setAttribute('data-token-artwork', artworkKey);
 		} else {
-			const artwork = JSON.stringify([token.token, icons.get(token.token) ?? '']);
-			if (marker.getAttribute('data-token-artwork') !== artwork) {
+			if (marker.getAttribute('data-token-artwork') !== artworkKey) {
 				const circle = marker.firstElementChild;
 				if (circle) marker.replaceChildren(circle);
-				appendMarkerIcon(marker, icons.get(token.token) ?? '', token.token);
-				marker.setAttribute('data-token-artwork', artwork);
+				appendMarkerArtwork(marker, artwork.icon, artwork.char, token.token);
+				marker.setAttribute('data-token-artwork', artworkKey);
 			}
 		}
 		if (marker.parentNode !== markerLayerForToken) markerLayerForToken.append(marker);
@@ -307,7 +311,7 @@ function ensureLayer(root: SVGSVGElement, name: string, aboveNodes = false) {
 	return layer;
 }
 
-function appendMarkerIcon(marker: SVGGElement, icon: string, token: string) {
+function appendMarkerArtwork(marker: SVGGElement, icon: string, char: string, token: string) {
 	const paths = TOKEN_ICONS[icon.toLowerCase().replace(/^lucide\//, '')];
 	if (paths) {
 		const iconGroup = marker.ownerDocument.createElementNS(SVG_NS, 'g');
@@ -326,7 +330,7 @@ function appendMarkerIcon(marker: SVGGElement, icon: string, token: string) {
 		return;
 	}
 	const text = marker.ownerDocument.createElementNS(SVG_NS, 'text');
-	const label = Array.from(token.trim() || '?').slice(0, 2).join('').toUpperCase();
+	const label = char || Array.from(token.trim() || '?').slice(0, 2).join('').toUpperCase();
 	text.textContent = label;
 	text.setAttribute('y', '3');
 	text.setAttribute('text-anchor', 'middle');

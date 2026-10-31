@@ -41,7 +41,6 @@
 	}
 
 	const props: Props = $props();
-	const ignoreScenarioSelection = () => {};
 	onDestroy(() => cancelActiveAnimationExport());
 	const componentId = $props.id();
 	const previewCanvasId = `${componentId}-canvas`;
@@ -467,7 +466,7 @@
 			{presentationMode}
 			canExportAnimation={canExportAnimation}
 			{animationExportBusy}
-			onScenarioSelect={props.onScenarioSelect ?? ignoreScenarioSelection}
+			onScenarioSelect={props.onScenarioSelect}
 			onFocusTarget={handleTargetFocus}
 			onFocusNode={focusNode}
 			onFocusConnection={handleConnectionFocus}

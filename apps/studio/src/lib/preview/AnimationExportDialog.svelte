@@ -8,6 +8,7 @@
 	import { Tabs } from 'bits-ui';
 	import {
 		cancelActiveAnimationExport,
+		animationFormatOptions,
 		getAnimationExportStoragePlan,
 		isValidAnimationExportBitrate,
 		isValidAnimationExportDimensions,
@@ -59,10 +60,6 @@
 		{ value: 20_000_000, labelKey: 'export.bitrate.higherQuality' },
 		{ value: -1, labelKey: 'export.customBitrate' }
 	] as const;
-	const formatOptions = [
-		{ value: 'mp4', labelKey: 'export.format.mp4' },
-		{ value: 'webm', labelKey: 'export.format.webm' }
-	] as const satisfies ReadonlyArray<{ value: AnimationFormat; labelKey: string }>;
 	const backgroundOptions = [
 		{ value: 'visual', labelKey: 'export.background.matchDiagram' },
 		{ value: 'dark', labelKey: 'export.background.dark' },
@@ -97,7 +94,7 @@
 	const validDimensions = $derived(isValidAnimationExportDimensions(dimensions.width, dimensions.height));
 	const validBitrate = $derived(isValidAnimationExportBitrate(outputBitrate));
 	const validFrameRate = $derived(isValidAnimationExportFps(frameRate));
-	const formatLabel = $derived(studioMessage(format === 'mp4' ? 'export.format.mp4' : 'export.format.webm'));
+	const formatLabel = $derived(studioMessage(animationFormatOptions.find((option) => option.value === format)?.labelKey ?? 'export.format.mp4'));
 	const bitrateLabel = $derived(studioMessage(bitrateOptions.find(({ value }) => value === bitrate)?.labelKey ?? 'export.customBitrate'));
 	const directSaveAvailable = $derived(supportsDirectAnimationFileSave());
 	const storagePlan = $derived(getAnimationExportStoragePlan(durationMs, validBitrate ? outputBitrate : 12_000_000, directSaveAvailable));
@@ -173,7 +170,7 @@
 			const stored = localStorage.getItem(`schemra.animation-export.v1.${key}`);
 			if (!stored) return;
 			const value = JSON.parse(stored) as Record<string, unknown>;
-			if (value.format === 'mp4' || value.format === 'webm') format = value.format;
+			if (value.format === 'mp4' || value.format === 'webm' || value.format === 'mov') format = value.format;
 			if (value.background === 'visual' || value.background === 'dark' || value.background === 'custom') background = value.background;
 			if (typeof value.customColor === 'string') customColor = normalizeColor(value.customColor);
 			if (frameRateOptions.includes(value.frameRate as (typeof frameRateOptions)[number])) frameRate = value.frameRate as number;
@@ -274,13 +271,13 @@
 			<Tabs.Content value="video" class="grid grid-cols-1 gap-4 pt-4 min-[521px]:grid-cols-2">
 				<div class="grid min-w-0 content-start gap-2">
 					<Label for="animation-export-format" class="text-xs font-semibold">{studioMessage('export.format')}</Label>
-					<Select.Root type="single" value={format} onValueChange={(value) => { if (value === 'mp4' || value === 'webm') format = value; }} disabled={props.busy}>
+					<Select.Root type="single" value={format} onValueChange={(value) => { if (value === 'mp4' || value === 'webm' || value === 'mov') format = value; }} disabled={props.busy}>
 						<Select.Trigger id="animation-export-format" class="w-full" aria-label={studioMessage('export.format')}>
 							<span data-slot="select-value" class="min-w-0 flex-1 truncate">{formatLabel}</span>
 						</Select.Trigger>
 						<Select.Content class="!z-[1000] w-[var(--bits-select-anchor-width)]">
 							<Select.Group>
-								{#each formatOptions as option (option.value)}
+								{#each animationFormatOptions as option (option.value)}
 									<Select.Item value={option.value} label={studioMessage(option.labelKey)}>{studioMessage(option.labelKey)}</Select.Item>
 								{/each}
 							</Select.Group>

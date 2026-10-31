@@ -1,4 +1,7 @@
 import type { ResourceTabKind } from './resource-tab-menu.js';
+import { resourceTabMenuPolicy } from './resource-tab-menu.js';
+import { isErrorDiagnostic } from './project-view.js';
+import { sourceLabel } from './project-sidebar.js';
 
 export type WorkspaceTabDocument = {
 	id: string;
@@ -27,6 +30,27 @@ export type WorkspaceTabView = {
 	removeDisabled: boolean;
 };
 
+type WorkspaceTabDeclaration = { kind: string; id: string | null; title: string };
+
+type WorkspaceTabViewInput<Declaration extends WorkspaceTabDeclaration> = {
+	files: readonly { id: string; path: string; source: string; savedSource: string }[];
+	compilation: readonly {
+		id: string;
+		kind: string;
+		diagnostics: readonly unknown[];
+		declarations: readonly Declaration[];
+	}[];
+	tabIds: readonly string[];
+	activeFileId: string | null;
+	currentDeclaration: Declaration | null;
+	projectFileCount: number;
+	initialized: boolean;
+	compiling: boolean;
+	projectValid: boolean;
+	onRename: (fileId: string, declaration: Declaration) => void;
+	onRemove: (fileId: string, kind: ResourceTabKind, declaration: Declaration | null) => void;
+};
+
 /** Returns the active visual's documents first, followed by an independently selected source if needed. */
 export function buildWorkspaceTabIds(
 	documents: readonly WorkspaceTabDocument[],
@@ -50,6 +74,64 @@ export function buildWorkspaceTabIds(
 		tabs.push(activeFileId);
 	}
 	return tabs;
+}
+
+/** Build tab display and menu data from project files and their latest compilation. */
+export function buildWorkspaceTabViews<Declaration extends WorkspaceTabDeclaration>({
+	files,
+	compilation,
+	tabIds,
+	activeFileId,
+	currentDeclaration,
+	projectFileCount,
+	initialized,
+	compiling,
+	projectValid,
+	onRename,
+	onRemove
+}: WorkspaceTabViewInput<Declaration>): WorkspaceTabView[] {
+	const filesById = new Map(files.map((file) => [file.id, file]));
+	const compilationById = new Map(compilation.map((file) => [file.id, file]));
+
+	return tabIds.flatMap((id) => {
+		const file = filesById.get(id);
+		if (!file) return [];
+		const fileCompilation = compilationById.get(id);
+		const resourceKind: ResourceTabKind = file.path.startsWith('visuals/')
+			? 'visual'
+			: file.path.startsWith('scenarios/') ? 'scenario' : 'source';
+		const displayKind = fileCompilation?.kind === 'visual'
+			? 'visual'
+			: fileCompilation?.kind === 'scenario'
+				? 'scenario'
+				: file.path.startsWith('components/') ? 'component' : 'source';
+		const declarations = fileCompilation?.declarations.filter(({ kind }) => kind === resourceKind) ?? [];
+		const declaration = id === activeFileId && currentDeclaration?.kind === resourceKind
+			? currentDeclaration
+			: declarations[0] ?? fileCompilation?.declarations[0] ?? null;
+		const policy = resourceTabMenuPolicy({
+			kind: resourceKind,
+			declarationCount: declarations.length,
+			projectFileCount,
+			initialized,
+			compiling,
+			projectValid
+		});
+
+		return [{
+			id: file.id,
+			path: file.path,
+			title: declaration?.title ?? sourceLabel(file.path),
+			resourceKind,
+			displayKind,
+			hasErrors: fileCompilation?.diagnostics.some(isErrorDiagnostic) ?? false,
+			unsaved: file.source !== file.savedSource,
+			rename: policy.showRename && declaration ? () => onRename(file.id, declaration) : undefined,
+			remove: () => onRemove(file.id, resourceKind, declaration),
+			renameDisabled: policy.renameDisabled,
+			removeDisabled: policy.removeDisabled
+		}];
+	});
 }
 
 export function nextWorkspaceTabIndex(

@@ -63,6 +63,33 @@ fn recovers_after_invalid_characters_and_malformed_statements() {
 }
 
 #[test]
+fn parses_semicolons_between_statements_at_each_scope() {
+    let file = parse_syntax(
+        "visual graph { direction: left-to-right; node api {}; api -> db }; scenario flow for visual graph { wait 2s; }",
+    );
+
+    assert!(file.diagnostics.is_empty(), "{:?}", file.diagnostics);
+    assert_eq!(file.statements.len(), 2);
+
+    let StatementKind::Invocation {
+        body: Some(visual), ..
+    } = &file.statements[0].kind
+    else {
+        panic!("expected a visual invocation");
+    };
+    assert_eq!(visual.len(), 3);
+
+    let StatementKind::Invocation {
+        body: Some(scenario),
+        ..
+    } = &file.statements[1].kind
+    else {
+        panic!("expected a scenario invocation");
+    };
+    assert_eq!(scenario.len(), 1);
+}
+
+#[test]
 fn diagnoses_missing_separators_between_sibling_statements() {
     let file = parse_syntax("visual graph { direction: left-to-right columns: 2 }");
 

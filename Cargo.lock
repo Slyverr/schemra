@@ -555,6 +555,7 @@ dependencies = [
  "schemra-compiler",
  "schemra-engine",
  "schemra-ir",
+ "schemra-lsp",
  "schemra-project",
  "schemra-syntax",
  "serde",

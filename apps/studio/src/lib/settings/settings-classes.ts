@@ -44,13 +44,13 @@ export const settingsClasses = {
 } as const;
 
 export const themePickerClasses = {
-	trigger: 'grid h-auto min-h-12 w-full grid-cols-[3rem_minmax(0,1fr)_auto] justify-items-stretch gap-3 rounded-[.45rem] px-2 py-1 text-left text-xs font-normal whitespace-normal text-foreground shadow-none hover:border-ring hover:bg-accent hover:text-foreground aria-expanded:border-ring aria-expanded:bg-accent',
+	trigger: 'grid h-auto min-h-12 w-full grid-cols-[3rem_minmax(0,1fr)_auto] justify-start justify-items-stretch gap-3 rounded-[.45rem] px-2 py-1 text-left text-xs font-normal whitespace-normal text-foreground shadow-none hover:border-ring hover:bg-accent hover:text-foreground aria-expanded:border-ring aria-expanded:bg-accent',
 	triggerCopy: 'grid min-w-0 gap-px text-left',
 	popover: 'z-[1] grid max-h-[min(22rem,60vh,var(--bits-floating-available-height,60vh))] w-[min(24rem,var(--bits-floating-available-width,24rem))] gap-1.5 overflow-hidden rounded-[.55rem] border border-border bg-popover p-2 text-popover-foreground shadow-[0_.65rem_1.8rem_rgb(7_21_41_/_16%)]',
 	popoverContent: 'grid min-w-0 gap-1.5',
 	search: 'h-[2.1rem] text-xs',
 	list: 'grid min-h-0 gap-[.15rem] overflow-auto p-0',
-	option: 'grid min-h-12 w-full grid-cols-[3rem_minmax(0,1fr)] justify-items-stretch gap-3 rounded-[.35rem] px-[.4rem] py-1 text-left text-xs font-normal text-foreground hover:bg-accent hover:text-foreground',
+	option: 'grid min-h-12 w-full grid-cols-[3rem_minmax(0,1fr)] justify-start justify-items-stretch gap-3 rounded-[.35rem] px-[.4rem] py-1 text-left text-xs font-normal text-foreground hover:bg-accent hover:text-foreground',
 	activeOption: 'bg-accent',
 	empty: 'm-0 p-2.5 text-xs text-muted-foreground'
 } as const;

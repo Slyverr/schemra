@@ -109,6 +109,44 @@ describe('workspace controller initialization', () => {
 });
 
 describe('workspace controller actions', () => {
+	it('clears browser-backed source changes only after the same source is persisted', async () => {
+		const controller = createWorkspaceController({ exampleProject: exampleProject(), storage: memoryStorage().adapter, autosaveDelayMs: 60_000 });
+		await controller.initialize();
+		const fileId = 'file-traffic-overview';
+		const editedSource = 'visual traffic_overview "Edited" {}';
+		controller.updateSource('project-example', fileId, editedSource);
+		await controller.flush();
+
+		const marked = controller.markWorkspaceSourceSaved('project-example', fileId, editedSource);
+		expect(marked).toEqual({ ok: true, value: true });
+		expect(controller.getState().projects[0]?.files[0]).toMatchObject({ source: editedSource, savedSource: editedSource });
+
+		controller.updateSource('project-example', fileId, 'newer source');
+		const staleMark = controller.markWorkspaceSourceSaved('project-example', fileId, editedSource);
+		expect(staleMark).toEqual({ ok: true, value: false });
+		expect(controller.getState().projects[0]?.files[0]).toMatchObject({ source: 'newer source', savedSource: editedSource });
+	});
+
+	it('keeps local source files dirty until their file handle is written', async () => {
+		const controller = createWorkspaceController({ exampleProject: exampleProject(), storage: memoryStorage().adapter, autosaveDelayMs: 60_000 });
+		await controller.initialize();
+		const added = controller.addDocument('project-example', {
+			path: 'visuals/local.schemra', source: 'visual local {}', mode: 'local'
+		});
+		expect(added.ok).toBe(true);
+		if (!added.ok) return;
+		const editedSource = 'visual local { direction: left-to-right }';
+		controller.updateSource('project-example', added.value.id, editedSource);
+		await controller.flush();
+
+		const marked = controller.markWorkspaceSourceSaved('project-example', added.value.id, editedSource);
+		expect(marked).toEqual({ ok: true, value: false });
+		expect(controller.getState().projects[0]?.files.find(({ id }) => id === added.value.id)).toMatchObject({
+			source: editedSource,
+			savedSource: 'visual local {}'
+		});
+	});
+
 	it('renames projects and resolves case-insensitive name collisions', async () => {
 		const storage = memoryStorage();
 		const controller = createWorkspaceController({ exampleProject: exampleProject(), storage: storage.adapter, autosaveDelayMs: 60_000 });

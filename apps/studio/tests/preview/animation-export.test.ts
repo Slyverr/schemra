@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+	animationFormatOptions,
 	getAnimationExportStoragePlan,
 	isBufferedAnimationOutputWithinLimit,
 	isValidAnimationExportBitrate,
@@ -13,6 +14,28 @@ import {
 	supportsAnimationFormat,
 	supportsAnimationMp4
 } from '../../src/lib/preview/animation-export.js';
+import { studioMessage } from '../../src/lib/i18n/messages.js';
+
+describe('animation export choices', () => {
+	test('offers each implemented video container with a readable localized label', () => {
+		expect(animationFormatOptions.map(({ value }) => value)).toEqual(['mp4', 'webm', 'mov']);
+		expect(animationFormatOptions.map(({ labelKey }) => studioMessage(labelKey))).toEqual([
+			'MP4',
+			'WebM',
+			'QuickTime MOV'
+		]);
+	});
+
+	test('shows bitrate choices in Mbps instead of raw bits-per-second values', () => {
+		const labels = [
+			studioMessage('export.bitrate.smaller'),
+			studioMessage('export.bitrate.balanced'),
+			studioMessage('export.bitrate.higherQuality')
+		];
+		expect(labels).toEqual(['Smaller · 8 Mbps', 'Balanced · 12 Mbps', 'Higher quality · 20 Mbps']);
+		expect(labels).not.toContain('8000000');
+	});
+});
 
 describe('animation export settings', () => {
 	test('accepts supported duration, frame-rate, and dimension boundaries', () => {
@@ -73,6 +96,8 @@ describe('animation export output limits', () => {
 		expect(safeAnimationFileName('   ')).toBe('schemra-animation.mp4');
 		expect(safeAnimationFileName('service-flow.mp4', 'webm')).toBe('service-flow.webm');
 		expect(safeAnimationFileName('service-flow', 'webm')).toBe('service-flow.webm');
+		expect(safeAnimationFileName('service-flow.mp4', 'mov')).toBe('service-flow.mov');
+		expect(safeAnimationFileName('service-flow.mov', 'mov')).toBe('service-flow.mov');
 	});
 
 	test('returns unsupported for invalid encoder requests without probing codecs', async () => {
@@ -80,5 +105,7 @@ describe('animation export output limits', () => {
 		expect(await supportsAnimationMp4({ width: 1280, height: 720, fps: 25 as unknown as 24, videoBitsPerSecond: 8_000_000 })).toBe(false);
 		expect(await supportsAnimationFormat({ format: 'webm', width: 100, height: 100, fps: 30, videoBitsPerSecond: 8_000_000 })).toBe(false);
 		expect(await supportsAnimationFormat({ format: 'webm', width: 1280, height: 720, fps: 25 as unknown as 24, videoBitsPerSecond: 8_000_000 })).toBe(false);
+		expect(await supportsAnimationFormat({ format: 'mov', width: 100, height: 100, fps: 30, videoBitsPerSecond: 8_000_000 })).toBe(false);
+		expect(await supportsAnimationFormat({ format: 'mov', width: 1280, height: 720, fps: 25 as unknown as 24, videoBitsPerSecond: 8_000_000 })).toBe(false);
 	});
 });

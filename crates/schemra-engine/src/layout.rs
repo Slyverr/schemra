@@ -139,11 +139,13 @@ pub fn layout_visual(visual: &VisualIr) -> Scene {
                         .iter()
                         .map(|width| width + block.gap)
                         .sum::<f32>();
-                    let (x, y) = if horizontal {
-                        (primary + cross_offset, secondary + row_offset)
+                    let row_y = if horizontal { secondary } else { primary };
+                    let x = if horizontal {
+                        primary + cross_offset
                     } else {
-                        (secondary + cross_offset, primary + row_offset)
+                        secondary + cross_offset
                     };
+                    let y = row_y + row_offset + (row_height - heights[index]) / 2.0;
                     let node = &visual.nodes[index];
                     let bounds = Rect {
                         x,

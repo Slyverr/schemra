@@ -245,10 +245,10 @@ fn definition_resolves_a_node_reference_to_its_declaration() {
 }
 
 #[test]
-fn definition_positions_count_utf16_units_after_non_bmp_text() {
+fn definition_positions_are_line_relative() {
     let workspace = temporary_workspace();
     let mut server = TestServer::start(&workspace);
-    let source = "visual flow \"🌐\" { node client \"Client\" {}; node server \"Server\" {}; client -> server }";
+    let source = "visual flow \"🌐\" {\n  node client \"Client\" {}\n  node server \"Server\" {}\n  client -> server\n}";
     let (uri, diagnostics) = server.open_document(&workspace, "flow.schemra", source);
     assert!(
         diagnostics["params"]["diagnostics"]
@@ -258,21 +258,29 @@ fn definition_positions_count_utf16_units_after_non_bmp_text() {
     );
     let declaration_start = source.find("server").unwrap();
     let reference_start = source.rfind("server").unwrap();
+    let line_start = source[..reference_start]
+        .rfind('\n')
+        .map_or(0, |offset| offset + 1);
+    let declaration_line_start = source[..declaration_start]
+        .rfind('\n')
+        .map_or(0, |offset| offset + 1);
 
     let response = server.request(
         "textDocument/definition",
         json!({
             "textDocument": {"uri": uri},
             "position": {
-                "line": 0,
-                "character": source[..reference_start].encode_utf16().count()
+                "line": source[..reference_start].matches('\n').count(),
+                "character": reference_start - line_start
             }
         }),
     );
 
     assert_eq!(
         response["result"]["range"]["start"]["character"],
-        source[..declaration_start].encode_utf16().count()
+        source[declaration_line_start..declaration_start]
+            .encode_utf16()
+            .count()
     );
     server.stop();
     fs::remove_dir_all(workspace).expect("the temporary workspace should be removed");

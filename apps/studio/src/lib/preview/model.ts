@@ -55,6 +55,7 @@ export interface PreviewSceneSearchResults {
 export interface PreviewTokenStyle {
 	token: string;
 	icon?: string | null;
+	char?: string | null;
 }
 
 export interface PreviewScenario {
@@ -92,6 +93,10 @@ export interface PreviewFrame {
 	edges: SampledEdge[];
 	highlights: SampledHighlight[];
 }
+
+const ROUTE_CONTINUITY_EPSILON = Math.fround(0.001);
+const SVG_COORDINATE_DECIMALS = 3;
+const SVG_COORDINATE_SCALE = 10 ** SVG_COORDINATE_DECIMALS;
 
 export function readPreviewScene(value: unknown): PreviewScene | null {
 	if (!isRecord(value) || !isFiniteNumber(value.width) || !isFiniteNumber(value.height)) return null;
@@ -214,7 +219,11 @@ export function readPreviewScenario(value: unknown): PreviewScenario | null {
 	const tokens = Array.isArray(value.tokens)
 		? value.tokens.flatMap((item) => {
 			if (!isRecord(item) || typeof item.token !== 'string') return [];
-			return [{ token: item.token, icon: typeof item.icon === 'string' ? item.icon : null }];
+			return [{
+				token: item.token,
+				icon: typeof item.icon === 'string' ? item.icon : null,
+				char: typeof item.char === 'string' ? item.char : null
+			}];
 		})
 		: [];
 	return { id: value.id, title: value.title, duration_ms: value.duration_ms, tokens };
@@ -268,11 +277,17 @@ export function routePathData(segments: PreviewRouteSegment[], forward = true): 
 		control2: control1,
 		end: start
 	}));
-	const first = route[0];
-	if (!first) return '';
-	return `M ${pointData(first.start)} ${route.map(({ control1, control2, end }) =>
-		`C ${pointData(control1)} ${pointData(control2)} ${pointData(end)}`
-	).join(' ')}`;
+	let data = '';
+	let previousEnd: PreviewPoint | undefined;
+	for (const segment of route) {
+		if (isDegenerateRouteSegment(segment)) continue;
+		if (!previousEnd || !routePointsConnect(previousEnd, segment.start)) {
+			data += `${data ? ' ' : ''}M ${pointData(segment.start)}`;
+		}
+		data += ` C ${pointData(segment.control1)} ${pointData(segment.control2)} ${pointData(segment.end)}`;
+		previousEnd = segment.end;
+	}
+	return data;
 }
 
 export function sanitizeSvgMarkup(
@@ -394,5 +409,27 @@ function clamp(value: number): number {
 }
 
 function pointData(point: PreviewPoint): string {
-	return `${point.x} ${point.y}`;
+	return `${rendererNumber(point.x)} ${rendererNumber(point.y)}`;
+}
+
+function routePointsConnect(previous: PreviewPoint, next: PreviewPoint): boolean {
+	const dx = Math.fround(previous.x - next.x);
+	const dy = Math.fround(previous.y - next.y);
+	return Math.fround(Math.hypot(dx, dy)) <= ROUTE_CONTINUITY_EPSILON;
+}
+
+function isDegenerateRouteSegment(segment: PreviewRouteSegment): boolean {
+	return segment.start.x === segment.control1.x && segment.start.y === segment.control1.y &&
+		segment.start.x === segment.control2.x && segment.start.y === segment.control2.y &&
+		segment.start.x === segment.end.x && segment.start.y === segment.end.y;
+}
+
+function rendererNumber(value: number): string {
+	const scaled = Math.fround(value * SVG_COORDINATE_SCALE);
+	const roundedInteger = scaled < 0
+		? -Math.floor(-scaled + 0.5)
+		: Math.floor(scaled + 0.5);
+	const rounded = Math.fround(roundedInteger / SVG_COORDINATE_SCALE);
+	if (rounded === 0) return '0';
+	return rounded.toFixed(SVG_COORDINATE_DECIMALS).replace(/0+$/, '').replace(/\.$/, '');
 }

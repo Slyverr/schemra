@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { applyPreviewFrame } from '../../src/lib/preview/frame-renderer';
-import type { PreviewFrame, PreviewScene } from '../../src/lib/preview/model';
+import type { PreviewFrame, PreviewScenario, PreviewScene } from '../../src/lib/preview/model';
 
 class FakeSvgDocument {
 	createElementNS() {
@@ -13,6 +13,7 @@ class FakeSvgElement {
 	readonly attributes = new Map<string, string>();
 	readonly children: FakeSvgElement[] = [];
 	parentElement: FakeSvgElement | null = null;
+	textContent: string | null = null;
 
 	constructor(ownerDocument: FakeSvgDocument) {
 		this.ownerDocument = ownerDocument;
@@ -98,6 +99,28 @@ function createTraceRoot() {
 }
 
 describe('animated diagram layers', () => {
+	test('renders an explicitly declared character on the moving marker', () => {
+		const document = new FakeSvgDocument();
+		const root = new FakeSvgElement(document);
+		const scene: PreviewScene = { width: 100, height: 100, groups: [], edges: [], nodes: [] };
+		const scenario: PreviewScenario = {
+			id: 'requests',
+			title: 'Requests',
+			duration_ms: 1,
+			tokens: [{ token: 'ack', char: '✓' }]
+		};
+		const frame: PreviewFrame = {
+			tokens: [{ instanceId: 1, token: 'ack', x: 20, y: 30 }],
+			edges: [],
+			highlights: []
+		};
+
+		applyPreviewFrame(root as unknown as SVGSVGElement, frame, scene, scenario);
+
+		const markerLayer = root.children.find((child) => child.attributes.has('data-schemra-preview-markers'));
+		expect(markerLayer?.children[0]?.children[1]?.textContent).toBe('✓');
+	});
+
 	test('keeps a departure marker above its node port and under other nodes in transit', () => {
 		const document = new FakeSvgDocument();
 		const root = new FakeSvgElement(document);

@@ -14,7 +14,13 @@ import { studioMessage } from '../i18n/messages.js';
 
 export type AnimationFrameRenderer = (timeMs: number, background: string) => string;
 
-export type AnimationFormat = 'mp4' | 'webm';
+export const animationFormatOptions = [
+	{ value: 'mp4', labelKey: 'export.format.mp4' },
+	{ value: 'webm', labelKey: 'export.format.webm' },
+	{ value: 'mov', labelKey: 'export.format.mov' }
+] as const;
+
+export type AnimationFormat = (typeof animationFormatOptions)[number]['value'];
 
 export type AnimationExportCapabilitySettings = Pick<
 	AnimationExportOptions,
@@ -97,17 +103,31 @@ function capabilityKey(settings: AnimationExportCapabilitySettings) {
 }
 
 function codecCandidates(format: AnimationFormat): VideoCodec[] {
-	return format === 'mp4' ? ['avc'] : ['vp9', 'vp8', 'av1'];
+	return format === 'webm' ? ['vp9', 'vp8', 'av1'] : ['avc'];
 }
 
 function createOutputFormat(mediabunny: typeof import('mediabunny'), format: AnimationFormat) {
-	return format === 'mp4'
-		? new mediabunny.Mp4OutputFormat({ fastStart: false })
-		: new mediabunny.WebMOutputFormat();
+	switch (format) {
+		case 'mp4': return new mediabunny.Mp4OutputFormat({ fastStart: false });
+		case 'webm': return new mediabunny.WebMOutputFormat();
+		case 'mov': return new mediabunny.MovOutputFormat({ fastStart: false });
+	}
 }
 
 function formatMimeType(format: AnimationFormat): string {
-	return format === 'mp4' ? 'video/mp4' : 'video/webm';
+	switch (format) {
+		case 'mp4': return 'video/mp4';
+		case 'webm': return 'video/webm';
+		case 'mov': return 'video/quicktime';
+	}
+}
+
+function formatLabelKey(format: AnimationFormat) {
+	return animationFormatOptions.find((option) => option.value === format)?.labelKey ?? 'export.format.mp4';
+}
+
+function formatExtension(format: AnimationFormat) {
+	return `.${format}`;
 }
 
 async function findVideoCodec(
@@ -342,10 +362,10 @@ async function createTransferableSvgImage(
 }
 
 export function safeAnimationFileName(fileName: string, format: AnimationFormat = 'mp4') {
-	const extension = format === 'mp4' ? '.mp4' : '.webm';
+	const extension = formatExtension(format);
 	const stem = fileName
 		.trim()
-		.replace(/\.(?:mp4|webm)$/i, '')
+		.replace(/\.(?:mp4|webm|mov)$/i, '')
 		.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
 		.replace(/\s+/g, '-')
 		.slice(0, 100);
@@ -363,11 +383,11 @@ function outputTooLargeError(): Error {
 }
 
 function savePickerOptions(options: AnimationExportOptions): SavePickerOptionsLike {
-	const extension = options.format === 'mp4' ? '.mp4' : '.webm';
+	const extension = formatExtension(options.format);
 	const mimeType = formatMimeType(options.format);
 	return {
 		suggestedName: safeAnimationFileName(options.fileName, options.format),
-		types: [{ description: studioMessage(options.format === 'mp4' ? 'export.format.mp4' : 'export.format.webm'), accept: { [mimeType]: [extension] } }]
+		types: [{ description: studioMessage(formatLabelKey(options.format)), accept: { [mimeType]: [extension] } }]
 	};
 }
 
@@ -585,7 +605,7 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 		};
 		const codec = await findVideoCodec({ ...settings, format: options.format });
 		if (!codec) {
-			const unavailable = new Error(studioMessage('export.encoderUnavailable', { format: studioMessage(options.format === 'mp4' ? 'export.format.mp4' : 'export.format.webm') }));
+			const unavailable = new Error(studioMessage('export.encoderUnavailable', { format: studioMessage(formatLabelKey(options.format)) }));
 			unavailable.name = 'AnimationFormatUnavailableError';
 			throw unavailable;
 		}

@@ -37,6 +37,18 @@ cargo run -p schemra-cli -- scenario-check path/to/flow.schemra --visual path/to
 cargo run -p schemra-cli -- render path/to/network.schemra --out network.svg
 ```
 
+## Language server
+
+Build the Schemra Language Server Protocol executable:
+
+```sh
+cargo build --release -p schemra-lsp
+```
+
+Configure an LSP-compatible editor to launch `target/release/schemra-lsp` for
+files with the `schemra` language ID. The `schemra lsp` CLI subcommand can also
+start the server directly over standard input and output.
+
 ## Verify the browser compiler API
 
 The `schemra-wasm` crate exposes `compile_schemra` for one source document and

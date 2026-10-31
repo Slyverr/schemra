@@ -56,7 +56,7 @@
 		<Slider.Range class="top-1/2 h-1 -translate-y-1/2 rounded-full bg-primary" />
 		<Slider.Thumb
 			index={0}
-			class="top-1/2 size-3.5 rounded-full border-2 border-background bg-primary shadow-[0_0_0_1px_var(--border)] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+			class="top-1/2 size-3.5 rounded-full border-2 border-background bg-primary [transform:translateY(-50%)] shadow-[0_0_0_1px_var(--border)] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
 			aria-label={studioMessage('preview.scenarioTimeline')}
 		/>
 	</Slider.Root>

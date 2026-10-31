@@ -2,12 +2,19 @@ import { describe, expect, it } from 'bun:test';
 import { MAX_PROJECT_FILES, createInitialProject } from '../../src/lib/project/session.ts';
 import { studioMessage } from '../../src/lib/i18n/messages.ts';
 import { createWorkspaceController, type WorkspaceStorageAdapter } from '../../src/lib/project/workspace-controller.ts';
+import type { SourceSpan } from '../../src/lib/schemra.ts';
 import { createResourceActions, type ProjectVisual, type ResourceActionSnapshot, type ResourceCompileFile, type ResourceDialogState } from '../../src/lib/studio/resource-actions.ts';
 
-function setup(currentVisual: ProjectVisual | null = null, currentFiles: ResourceCompileFile[] = [], projectFileCount?: number) {
+function setup(
+	currentVisual: ProjectVisual | null = null,
+	currentFiles: ResourceCompileFile[] = [],
+	projectFileCount?: number,
+	currentCompilation: ResourceActionSnapshot['currentCompilation'] = null,
+	scenarioSource = 'scenario "Request and response" {}'
+) {
 	const exampleProject = createInitialProject(
 		'visual traffic_overview "Traffic overview" {}',
-		'scenario "Request and response" {}'
+		scenarioSource
 	);
 	const storage: WorkspaceStorageAdapter = {
 		async loadStudioWorkspace() { return null; },
@@ -27,7 +34,7 @@ function setup(currentVisual: ProjectVisual | null = null, currentFiles: Resourc
 			workspace,
 			activeProject,
 			currentFiles,
-			currentCompilation: null,
+			currentCompilation,
 			currentVisual,
 			selectedScenario: null,
 			sourceFiles: activeProject?.files.map(({ id, path, source }) => ({ id, path, source })) ?? [],
@@ -44,6 +51,18 @@ function setup(currentVisual: ProjectVisual | null = null, currentFiles: Resourc
 		setFocusedPane: (next) => { focusedPane = next; }
 	});
 	return { controller, form, actions, getSnapshot, getFocusedPane: () => focusedPane, getFileMessage: () => fileMessage };
+}
+
+function sourceSpan(source: string, start: number, end: number): SourceSpan {
+	const location = (offset: number) => {
+		const before = source.slice(0, offset);
+		return {
+			offset: new TextEncoder().encode(before).length,
+			line: before.split('\n').length,
+			column: before.length - before.lastIndexOf('\n')
+		};
+	};
+	return { start: location(start), end: location(end) };
 }
 
 describe('resource actions', () => {
@@ -97,6 +116,81 @@ describe('resource actions', () => {
 		const scenario = app.getSnapshot().activeProject?.files.find(({ path }) => path.startsWith('scenarios/traffic_overview/'));
 		expect(scenario?.source).toContain('scenario operations_flow "Operations flow" for visual traffic_overview');
 		expect(scenario?.source).toContain('move request from client -> proxy');
+		await app.controller.dispose();
+	});
+
+	it('renames a scenario title without changing its identifier, visual link, or source path', async () => {
+		const source = 'scenario request_response "Request and response" for visual traffic_overview {\n  wait 1s\n}\n';
+		const title = '"Request and response"';
+		const declarationSpan = sourceSpan(source, 0, source.length);
+		const titleStart = source.indexOf(title);
+		const declaration: ResourceCompileFile['declarations'][number] = {
+			kind: 'scenario',
+			id: 'request_response',
+			title: 'Request and response',
+			visual_id: 'traffic_overview',
+			span: declarationSpan
+		};
+		const currentFile = {
+			id: 'file-request-response',
+			kind: 'scenario',
+			visual_id: 'traffic_overview',
+			tokens: [{ kind: 'string', span: sourceSpan(source, titleStart, titleStart + title.length) }],
+			declarations: [declaration]
+		} as unknown as ResourceCompileFile;
+		const currentCompilation = {
+			visuals: [{ id: 'traffic_overview', output: { scenarios: [{ id: 'request_response', title: 'Request and response' }] } }]
+		} as unknown as ResourceActionSnapshot['currentCompilation'];
+		const app = setup(null, [currentFile], undefined, currentCompilation, source);
+		await app.controller.initialize();
+
+		app.actions.openResourceRenameForFile(currentFile.id, declaration);
+		app.form.nameDraft = 'Updated flow';
+		await app.actions.save();
+
+		const project = app.getSnapshot().activeProject!;
+		const renamed = project.files.find(({ id }) => id === currentFile.id)!;
+		expect(renamed.source).toBe(source.replace(title, '"Updated flow"'));
+		expect(renamed.path).toBe('scenarios/request-response.schemra');
+		expect(renamed.source).toContain('scenario request_response');
+		expect(renamed.source).toContain('for visual traffic_overview');
+		expect(app.form.kind).toBeNull();
+		await app.controller.dispose();
+	});
+
+	it('rejects a duplicate scenario title without changing its source', async () => {
+		const source = 'scenario request_response "Request and response" for visual traffic_overview {}';
+		const title = '"Request and response"';
+		const declaration: ResourceCompileFile['declarations'][number] = {
+			kind: 'scenario',
+			id: 'request_response',
+			title: 'Request and response',
+			visual_id: 'traffic_overview',
+			span: sourceSpan(source, 0, source.length)
+		};
+		const currentFile = {
+			id: 'file-request-response',
+			kind: 'scenario',
+			visual_id: 'traffic_overview',
+			tokens: [{ kind: 'string', span: sourceSpan(source, source.indexOf(title), source.indexOf(title) + title.length) }],
+			declarations: [declaration]
+		} as unknown as ResourceCompileFile;
+		const currentCompilation = {
+			visuals: [{ id: 'traffic_overview', output: { scenarios: [
+				{ id: 'request_response', title: 'Request and response' },
+				{ id: 'other_scenario', title: 'Taken' }
+			] } }]
+		} as unknown as ResourceActionSnapshot['currentCompilation'];
+		const app = setup(null, [currentFile], undefined, currentCompilation, source);
+		await app.controller.initialize();
+
+		app.actions.openResourceRenameForFile(currentFile.id, declaration);
+		app.form.nameDraft = 'Taken';
+		await app.actions.save();
+
+		expect(app.getSnapshot().activeProject?.files.find(({ id }) => id === currentFile.id)?.source).toBe(source);
+		expect(app.form.error).toBe(studioMessage('resource.duplicateScenarioTitle', { title: 'Taken' }));
+		expect(app.form.kind).toBe('rename-resource');
 		await app.controller.dispose();
 	});
 

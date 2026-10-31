@@ -37,6 +37,15 @@ fn automatic_completion_is_limited_to_action_scope() {
 }
 
 #[test]
+fn semicolons_reset_completion_context_before_the_next_statement() {
+    let source = "visual app { group clients \"Clients\" { node first {} }; node second {\n ";
+    let choices = labels(source, source.len(), true);
+
+    assert!(choices.contains(&"icon".to_owned()));
+    assert!(choices.contains(&"detail".to_owned()));
+}
+
+#[test]
 fn enum_values_and_highlight_origins_are_filtered_by_prefix() {
     let source = "visual app {\n direction: ";
     let choices = complete_at(source, source.len(), true).expect("direction choices");

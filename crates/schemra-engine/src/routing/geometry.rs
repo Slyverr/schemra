@@ -121,6 +121,37 @@ impl RouteGeometry {
             .get(after.segment)
             .map(|segment| evaluate_cubic(*segment, parameter).to_point())
     }
+
+    pub(crate) fn length(&self) -> f32 {
+        self.length as f32
+    }
+
+    pub(crate) fn normal_at_progress(&self, progress: f32) -> Option<Point> {
+        self.samples.first()?;
+        if self.samples.len() == 1 || self.length <= f64::EPSILON {
+            return None;
+        }
+
+        let target = self.length * f64::from(progress.clamp(0.0, 1.0));
+        let sample_index = self
+            .samples
+            .partition_point(|sample| sample.distance < target);
+        let sample = self
+            .samples
+            .get(sample_index)
+            .or_else(|| self.samples.last())?;
+        let segment = self.segments.get(sample.segment)?;
+        let tangent = cubic_tangent(*segment, sample.parameter);
+        let length = tangent.x.hypot(tangent.y);
+        if length <= f64::EPSILON {
+            return None;
+        }
+
+        Some(Point {
+            x: (-tangent.y / length) as f32,
+            y: (tangent.x / length) as f32,
+        })
+    }
 }
 
 impl Default for RouteGeometry {
@@ -160,6 +191,24 @@ fn evaluate_cubic(cubic: CubicBezier, parameter: f64) -> DPoint {
             + control1.y * control1_weight
             + control2.y * control2_weight
             + end.y * end_weight,
+    }
+}
+
+fn cubic_tangent(cubic: CubicBezier, parameter: f64) -> DPoint {
+    let [start, control1, control2, end]: [DPoint; 4] = [
+        cubic.start.into(),
+        cubic.control1.into(),
+        cubic.control2.into(),
+        cubic.end.into(),
+    ];
+    let inverse = 1.0 - parameter;
+    DPoint {
+        x: 3.0 * inverse.powi(2) * (control1.x - start.x)
+            + 6.0 * inverse * parameter * (control2.x - control1.x)
+            + 3.0 * parameter.powi(2) * (end.x - control2.x),
+        y: 3.0 * inverse.powi(2) * (control1.y - start.y)
+            + 6.0 * inverse * parameter * (control2.y - control1.y)
+            + 3.0 * parameter.powi(2) * (end.y - control2.y),
     }
 }
 

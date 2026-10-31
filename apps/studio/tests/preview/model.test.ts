@@ -71,7 +71,7 @@ describe('diagram preview model', () => {
 			id: 'requests',
 			title: 'Requests',
 			duration_ms: 1000,
-			tokens: [{ token: 'packet', icon: 'mail' }]
+			tokens: [{ token: 'packet', icon: 'mail' }, { token: 'ack', char: '✓' }]
 		});
 
 		expect(scene?.edges[0]?.path).toHaveLength(1);
@@ -82,7 +82,10 @@ describe('diagram preview model', () => {
 		expect(scene?.nodes[0]?.detail).toBe('Handles requests');
 		expect(scene?.nodes[1]?.label).toBe('cache');
 		expect(readPreviewScene({ width: 'wide', height: 10, edges: [], nodes: [] })).toBeNull();
-		expect(scenario?.tokens).toEqual([{ token: 'packet', icon: 'mail' }]);
+		expect(scenario?.tokens).toEqual([
+			{ token: 'packet', icon: 'mail', char: null },
+			{ token: 'ack', icon: null, char: '✓' }
+		]);
 		expect(readPreviewScenario({ id: 'x', title: 'bad', duration_ms: -1 })).toBeNull();
 	});
 
@@ -143,6 +146,49 @@ describe('diagram preview model', () => {
 		expect(routePathData(segments, true)).toBe('M 1 2 C 3 4 5 6 7 8');
 		expect(routePathData(segments, false)).toBe('M 7 8 C 5 6 3 4 1 2');
 		expect(routePathData([], true)).toBe('');
+	});
+
+	test('keeps disconnected route segments separate in either direction', () => {
+		const segments = [
+			{
+				start: { x: 1, y: 2 },
+				control1: { x: 3, y: 4 },
+				control2: { x: 5, y: 6 },
+				end: { x: 7, y: 8 }
+			},
+			{
+				start: { x: 20, y: 21 },
+				control1: { x: 22, y: 23 },
+				control2: { x: 24, y: 25 },
+				end: { x: 26, y: 27 }
+			}
+		];
+
+		expect(routePathData(segments)).toBe('M 1 2 C 3 4 5 6 7 8 M 20 21 C 22 23 24 25 26 27');
+		expect(routePathData(segments, false)).toBe('M 26 27 C 24 25 22 23 20 21 M 7 8 C 5 6 3 4 1 2');
+		expect(routePathData([
+			segments[0],
+			{ ...segments[1], start: { x: 7.0005, y: 8 } }
+		])).toBe('M 1 2 C 3 4 5 6 7 8 C 22 23 24 25 26 27');
+	});
+
+	test('formats overlay coordinates at renderer precision and omits degenerate segments', () => {
+		const segments = [
+			{
+				start: { x: 3, y: 4 },
+				control1: { x: 3, y: 4 },
+				control2: { x: 3, y: 4 },
+				end: { x: 3, y: 4 }
+			},
+			{
+				start: { x: 1.23456, y: -0.0004 },
+				control1: { x: 2, y: 3 },
+				control2: { x: 4, y: 5 },
+				end: { x: 6, y: 7 }
+			}
+		];
+
+		expect(routePathData(segments)).toBe('M 1.235 0 C 2 3 4 5 6 7');
 	});
 
 	test('keeps group-label paint order so canvas-colored outlines cannot cover the text', () => {

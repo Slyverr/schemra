@@ -25,6 +25,7 @@ fn lower(
         id: TokenId(id.text.clone()),
         id_span: id.span,
         icon: crate::compiler::string_property(construct.body().unwrap_or_default(), "icon"),
+        char: crate::compiler::string_property(construct.body().unwrap_or_default(), "char"),
         span: construct.statement.span,
     }))
 }

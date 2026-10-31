@@ -29,6 +29,7 @@ fn module_models_scenarios_and_reusable_token_styles() {
             id: TokenId("request".into()),
             id_span: span(64, 71),
             icon: Some("mail".into()),
+            char: None,
             span: span(58, 81),
         }],
         actions: Vec::new(),

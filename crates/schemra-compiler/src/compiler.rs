@@ -669,6 +669,15 @@ pub fn validate_scenario_for_visual(scenario: &ScenarioIr, visual: &VisualIr) ->
         .collect::<HashSet<_>>();
 
     for token in &scenario.tokens {
+        if token.icon.is_some() && token.char.is_some() {
+            diagnostics.push(Diagnostic::error(
+                "E_SCENARIO_TOKEN_STYLE",
+                "Choose either an icon or a single character for a token marker.",
+                token.span,
+                Some("Use either icon: \"mail\" or char: \"R\"."),
+            ));
+        }
+
         if token.icon.as_deref().is_some_and(|icon| {
             let icon = icon.strip_prefix("lucide/").unwrap_or(icon);
             let icon = if icon == "send" { "mail" } else { icon };
@@ -682,6 +691,19 @@ pub fn validate_scenario_for_visual(scenario: &ScenarioIr, visual: &VisualIr) ->
                 ),
                 token.span,
                 Some("Choose one of the built-in marker icons."),
+            ));
+        }
+
+        if token
+            .char
+            .as_deref()
+            .is_some_and(|character| character.chars().count() != 1)
+        {
+            diagnostics.push(Diagnostic::error(
+                "E_SCENARIO_TOKEN_CHAR",
+                "A token char must contain exactly one Unicode character.",
+                token.span,
+                Some("For example, write char: \"R\"."),
             ));
         }
     }

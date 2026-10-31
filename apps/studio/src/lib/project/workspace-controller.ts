@@ -85,6 +85,7 @@ export interface WorkspaceController {
 	subscribe(listener: (state: WorkspaceControllerState) => void): () => void;
 	initialize(): Promise<WorkspaceActionResult<WorkspaceControllerState>>;
 	updateSource(projectId: string, fileId: string, source: string): WorkspaceActionResult<void>;
+	markWorkspaceSourceSaved(projectId: string, fileId: string, savedSource: string): WorkspaceActionResult<boolean>;
 	selectProject(projectId: string): WorkspaceActionResult<void>;
 	selectFile(projectId: string, fileId: string): WorkspaceActionResult<void>;
 	selectScenario(projectId: string, visualId: string, scenarioId: string | null): WorkspaceActionResult<void>;
@@ -293,6 +294,33 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 		publish({ ...state, projects, saveStatus: 'dirty', error: null });
 		scheduleSave();
 		return { ok: true, value: undefined };
+	}
+
+	function markWorkspaceSourceSaved(
+		projectId: string,
+		fileId: string,
+		savedSource: string
+	): WorkspaceActionResult<boolean> {
+		const unavailable = requireInitialized();
+		if (unavailable) return { ok: false, error: unavailable };
+		const projectIndex = state.projects.findIndex((project) => project.id === projectId);
+		const project = state.projects[projectIndex];
+		const fileIndex = project?.files.findIndex((file) => file.id === fileId) ?? -1;
+		if (!project || fileIndex < 0) return notFound(studioMessage('project.selectedDocumentMissing'));
+
+		const current = project.files[fileIndex]!;
+		if (current.mode === 'local' || current.mode === 'download' || current.source !== savedSource) {
+			return { ok: true, value: false };
+		}
+		if (current.savedSource === savedSource) return { ok: true, value: false };
+
+		const projects = state.projects.slice();
+		projects[projectIndex] = {
+			...project,
+			files: project.files.map((file, index) => index === fileIndex ? { ...file, savedSource } : file)
+		};
+		publish({ ...state, projects });
+		return { ok: true, value: true };
 	}
 
 	function selectProject(projectId: string): WorkspaceActionResult<void> {
@@ -631,6 +659,7 @@ export function createWorkspaceController(options: WorkspaceControllerOptions): 
 		subscribe,
 		initialize,
 		updateSource,
+		markWorkspaceSourceSaved,
 		selectProject,
 		selectFile,
 		selectScenario,
