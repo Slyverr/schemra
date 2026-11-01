@@ -133,13 +133,35 @@ fn group_layout_defaults_to_auto_and_columns_require_grid_layout() {
 
 #[test]
 fn rejects_duplicate_visual_and_element_ids() {
+    let duplicate_visuals = compile_sources(&[
+        "visual network { node api {} }",
+        "visual network { node database {} }",
+    ])
+    .expect_err("visual IDs must be unique across source files");
     assert!(
-        diagnostic_codes("visual network { node api {} }\nvisual network { node database {} }")
-            .contains(&"E_DUPLICATE_VISUAL".into())
+        duplicate_visuals
+            .iter()
+            .any(|diagnostic| diagnostic.code == "E_DUPLICATE_VISUAL")
     );
     assert!(
         diagnostic_codes("visual network {\n group clients {}\n node clients {}\n}")
             .contains(&"E_DUPLICATE_VISUAL_ELEMENT".into())
+    );
+}
+
+#[test]
+fn rejects_multiple_visuals_in_one_source() {
+    let source = "visual first { node a {} }\nvisual second { node b {} }";
+    let diagnostics = compile(source).expect_err("each source can declare one visual");
+    let diagnostic = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == "E_MULTIPLE_VISUALS")
+        .expect("multiple visual diagnostic");
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(
+        diagnostic.span.start.offset,
+        source.find("visual second").unwrap()
     );
 }
 

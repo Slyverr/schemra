@@ -13,7 +13,7 @@
 		type DiagramExportFormat
 	} from './export';
 	import { printDiagramPdf } from './pdf-export.js';
-	import AnimationExportDialog, { type AnimationExportSettings } from './AnimationExportDialog.svelte';
+	import type { AnimationExportSettings } from './AnimationExportDialog.svelte';
 	import { cancelActiveAnimationExport, exportAnimation } from './animation-export.js';
 	import { applyPreviewFrame, createAnimationFrameRenderer, type AnimationFrameRenderer } from './frame-renderer.js';
 	import { calculateSceneFocusTransform, clampPreviewZoom, clampScenePan, getPreviewConnectionBounds, insetPreviewViewport, previewGridTransform, zoomPanAtPoint } from './viewport';
@@ -60,6 +60,9 @@
 	let exporting = $state<DiagramExportFormat | null>(null);
 	let exportError = $state<string | null>(null);
 	let animationExportOpen = $state(false);
+	let AnimationExportDialog = $state<typeof import('./AnimationExportDialog.svelte').default | null>(null);
+	let animationExportLoading = $state(false);
+	let animationExportLoadError = $state<string | null>(null);
 	let animationExportBusy = $state(false);
 	let animationExportProgress = $state(0);
 	let presentationMode = $state(false);
@@ -76,7 +79,7 @@
 		'rounded-[.4rem] border border-destructive bg-background px-3 py-2 text-xs text-destructive',
 		'[overflow-wrap:anywhere]'
 	);
-	const canExportAnimation = $derived(Boolean(!(props.stale ?? false) && safeSvg && playback && durationMs > 0 && !animationExportBusy));
+	const canExportAnimation = $derived(Boolean(!(props.stale ?? false) && safeSvg && playback && durationMs > 0 && !animationExportBusy && !animationExportLoading));
 	let dragStart = $state<{ pointerId: number; x: number; y: number; panX: number; panY: number } | null>(null);
 
 	onMount(() => {
@@ -364,10 +367,22 @@
 		clampPan();
 	}
 
-	function openAnimationExport() {
-		if (!canExportAnimation) return;
+	async function openAnimationExport() {
+		if (!canExportAnimation || animationExportLoading) return;
 		animationExportProgress = 0;
-		animationExportOpen = true;
+		animationExportLoadError = null;
+		if (!AnimationExportDialog) {
+			animationExportLoading = true;
+			try {
+				AnimationExportDialog = (await import('./AnimationExportDialog.svelte')).default;
+			} catch {
+				animationExportLoadError = studioMessage('preview.animationExportLoadFailed');
+				return;
+			} finally {
+				animationExportLoading = false;
+			}
+		}
+		if (canExportAnimation) animationExportOpen = true;
 	}
 
 	export async function exportDiagram(format: DiagramExportFormat) {
@@ -465,6 +480,7 @@
 			{zoomPercent}
 			{presentationMode}
 			canExportAnimation={canExportAnimation}
+			{animationExportLoading}
 			{animationExportBusy}
 			onScenarioSelect={props.onScenarioSelect}
 			onFocusTarget={handleTargetFocus}
@@ -553,10 +569,13 @@
 			{studioMessage('preview.exportFailed', { message: exportError })}
 		</p>
 	{/if}
+	{#if animationExportLoadError}
+		<p class={errorOverlayClasses} role="alert">{animationExportLoadError}</p>
+	{/if}
 	{#if presentationError}
 		<p class={errorOverlayClasses} role="alert">{presentationError}</p>
 	{/if}
-	{#if scenario}
+	{#if scenario && AnimationExportDialog}
 		<AnimationExportDialog
 			open={animationExportOpen}
 			busy={animationExportBusy}

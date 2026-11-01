@@ -1,0 +1,14 @@
+scenario ddos_test for visual traffic_overview {
+  token request {
+    icon: "lucide/mail"
+  }
+
+  repeat 20 {
+    parallel {
+      move request from user_1 -> reverse_proxy { duration: 500ms }
+      move request from user_2 -> reverse_proxy { duration: 500ms }
+      move request from user_3 -> reverse_proxy { duration: 500ms }
+      move request from user_4 -> reverse_proxy { duration: 500ms }
+    }
+  }
+}

@@ -208,5 +208,6 @@ fn source_with_multiple_visual_declarations_is_reported_as_invalid() {
             .iter()
             .any(|diagnostic| diagnostic.code == "E_MULTIPLE_VISUALS")
     );
+    assert_eq!(analysis.files[0].diagnostics.len(), 1);
     assert!(analysis.visuals.is_empty());
 }

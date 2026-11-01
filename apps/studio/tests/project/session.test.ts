@@ -104,8 +104,9 @@ describe('scenario identifiers', () => {
 });
 
 describe('canonical project structure', () => {
-	it('places one visual and all five example scenarios under stable project-relative paths', () => {
+	it('places one visual and all six example scenarios under stable project-relative paths', () => {
 		const project = createInitialProject('visual traffic_overview {}', 'scenario request_response {}', [
+			{ id: 'file-ddos-test', path: 'scenarios/ddos-test.schemra', source: 'scenario ddos_test {}' },
 			{ id: 'file-everything', path: 'scenarios/everything.schemra', source: 'scenario everything {}' },
 			{ id: 'file-data-lifecycle', path: 'scenarios/data-lifecycle.schemra', source: 'scenario data_lifecycle {}' },
 			{ id: 'file-markers', path: 'scenarios/markers.schemra', source: 'scenario markers {}' },
@@ -115,6 +116,7 @@ describe('canonical project structure', () => {
 		expect(project.files.map(({ id, path }) => [id, path])).toEqual([
 			['file-traffic-overview', 'visuals/traffic-overview.schemra'],
 			['file-request-response', 'scenarios/request-response.schemra'],
+			['file-ddos-test', 'scenarios/ddos-test.schemra'],
 			['file-everything', 'scenarios/everything.schemra'],
 			['file-data-lifecycle', 'scenarios/data-lifecycle.schemra'],
 			['file-markers', 'scenarios/markers.schemra'],

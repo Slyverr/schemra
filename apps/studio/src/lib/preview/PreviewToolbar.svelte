@@ -16,6 +16,7 @@
 		zoomPercent: number;
 		presentationMode: boolean;
 		canExportAnimation: boolean;
+		animationExportLoading: boolean;
 		animationExportBusy: boolean;
 		onScenarioSelect?: (scenarioId: string | null) => void;
 		onFocusTarget: (bounds: PreviewNodeBounds) => void;
@@ -119,7 +120,8 @@
 				variant="ghost"
 				size="icon-sm"
 				aria-label={studioMessage('preview.exportScenarioAnimation')}
-				title={props.animationExportBusy ? studioMessage('export.renderingVideo') : studioMessage('preview.exportScenarioAnimation')}
+				aria-busy={props.animationExportLoading}
+				title={studioMessage(props.animationExportLoading ? 'export.loadingOptions' : props.animationExportBusy ? 'export.renderingVideo' : 'preview.exportScenarioAnimation')}
 				disabled={!props.canExportAnimation}
 				onclick={props.onExportAnimation}
 			>

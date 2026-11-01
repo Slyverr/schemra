@@ -12,7 +12,7 @@
 	import EditorCompletions from './EditorCompletions.svelte';
 	import { getDelimiterEdit } from './delimiters.js';
 	import { formatSourceForSave } from './format-on-save.js';
-	import { getIndentationEdit } from './indentation.js';
+	import { getIndentedNewlineEdit, getIndentationEdit } from './indentation.js';
 	import {
 		diagnosticQuickFixOptions,
 		type RefactorDiagnostic,
@@ -484,38 +484,14 @@
 
 	function insertIndentedNewline() {
 		if (!input) return;
-		const text = input.value;
-		const start = input.selectionStart;
-		const end = input.selectionEnd;
-		const before = text.slice(0, start);
-		const after = text.slice(end);
-		const lineStart = before.lastIndexOf('\n') + 1;
-		const prefix = before.slice(lineStart);
-		const indent = prefix.match(/^[\t ]*/)?.[0] ?? '';
-		const nextLineBreak = after.search(/[\r\n]/);
-		const nextText = after.slice(0, nextLineBreak < 0 ? after.length : nextLineBreak);
-		const opensBlock = prefix.trimEnd().endsWith('{');
-		const beforeClosingBrace = prefix.trim().length === 0 && /^\s*}/.test(nextText);
-		let inserted: string;
-		let caret: number | null = null;
-
-		if (opensBlock && /^\s*}/.test(nextText)) {
-			const indentationUnit = ' '.repeat(preferences.indentSize);
-			inserted = `\n${indent}${indentationUnit}\n${indent}`;
-			caret = start + 1 + indent.length + preferences.indentSize;
-		} else {
-			const indentationUnit = ' '.repeat(preferences.indentSize);
-			const nextIndent = beforeClosingBrace
-				? indent.slice(0, Math.max(0, indent.length - preferences.indentSize))
-				: `${indent}${opensBlock ? indentationUnit : ''}`;
-			inserted = `\n${nextIndent}`;
-		}
+		const edit = getIndentedNewlineEdit(
+			input.value,
+			input.selectionStart,
+			input.selectionEnd,
+			preferences.indentSize
+		);
 		dismissCompletions();
-		if (caret === null) {
-			applyInputEdit(inserted, start, end, start + inserted.length, start + inserted.length);
-		} else {
-			applyInputEdit(inserted, start, end, caret, caret);
-		}
+		applyInputEdit(edit.text, edit.rangeStart, edit.rangeEnd, edit.selectionStart, edit.selectionEnd);
 	}
 
 	function handleKeydown(event: KeyboardEvent) {

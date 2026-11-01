@@ -378,13 +378,6 @@ pub(super) fn direct_connector(start: Point, end: Point) -> CubicBezier {
     }
 }
 
-pub(super) fn polyline_connectors(points: &[Point]) -> Vec<CubicBezier> {
-    points
-        .windows(2)
-        .map(|pair| direct_connector(pair[0], pair[1]))
-        .collect()
-}
-
 /// Measure a cubic path by adaptively flattening its segments. Invalid paths
 /// return a finite sentinel so diagnostics never contain NaN or infinity.
 pub(super) fn path_length(path: &[CubicBezier]) -> f32 {

@@ -1,4 +1,5 @@
 import dataLifecycleScenario from '../../../../../examples/traffic-overview/scenarios/data-lifecycle.schemra?raw';
+import ddosTestScenario from '../../../../../examples/traffic-overview/scenarios/ddos-test.schemra?raw';
 import everythingScenario from '../../../../../examples/traffic-overview/scenarios/everything.schemra?raw';
 import markerStylesScenario from '../../../../../examples/traffic-overview/scenarios/markers.schemra?raw';
 import requestResponseScenario from '../../../../../examples/traffic-overview/scenarios/request-response.schemra?raw';
@@ -9,6 +10,11 @@ import { createInitialProject } from './session';
 /** Creates the built-in example project from the same checked-in sources as the CLI fixture. */
 export function createExampleProject() {
 	return createInitialProject(trafficOverviewVisual, requestResponseScenario, [
+		{
+			id: 'file-ddos-test',
+			path: 'scenarios/ddos-test.schemra',
+			source: ddosTestScenario
+		},
 		{
 			id: 'file-everything',
 			path: 'scenarios/everything.schemra',

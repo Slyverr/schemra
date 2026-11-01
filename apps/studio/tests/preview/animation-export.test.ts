@@ -15,6 +15,7 @@ import {
 	supportsAnimationMp4
 } from '../../src/lib/preview/animation-export.js';
 import { studioMessage } from '../../src/lib/i18n/messages.js';
+import { findRecorderMimeType, supportsRecorderFormat } from '../../src/lib/preview/animation-export-recorder.js';
 
 describe('animation export choices', () => {
 	test('offers each implemented video container with a readable localized label', () => {
@@ -24,6 +25,23 @@ describe('animation export choices', () => {
 			'WebM',
 			'QuickTime MOV'
 		]);
+	});
+
+	test('selects the first browser-supported recorder MIME type for each container', () => {
+		const supported = new Set(['video/webm;codecs=vp8', 'video/mp4;codecs=avc1']);
+		const isTypeSupported = (mimeType: string) => supported.has(mimeType);
+
+		expect(findRecorderMimeType('webm', isTypeSupported)).toBe('video/webm;codecs=vp8');
+		expect(findRecorderMimeType('mp4', isTypeSupported)).toBe('video/mp4;codecs=avc1');
+		expect(findRecorderMimeType('mov', isTypeSupported)).toBeNull();
+	});
+
+	test('requires both canvas capture and a supported recorder MIME type', () => {
+		const isTypeSupported = (mimeType: string) => mimeType === 'video/webm';
+
+		expect(supportsRecorderFormat('webm', true, isTypeSupported)).toBe(true);
+		expect(supportsRecorderFormat('webm', false, isTypeSupported)).toBe(false);
+		expect(supportsRecorderFormat('mp4', true, isTypeSupported)).toBe(false);
 	});
 
 	test('shows bitrate choices in Mbps instead of raw bits-per-second values', () => {

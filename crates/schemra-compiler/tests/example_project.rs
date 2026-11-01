@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use schemra_compiler::{ProjectSource, analyze_project};
-use schemra_ir::EdgeDirectionality;
+use schemra_ir::{ActionIr, EdgeDirectionality};
 
 fn example_sources() -> Vec<ProjectSource> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/traffic-overview");
@@ -44,7 +44,7 @@ fn example_project_keeps_one_visual_and_links_all_scenarios() {
     assert_eq!(analysis.visuals.len(), 1, "keep one canonical visual");
     let visual = &analysis.visuals[0];
     assert_eq!(visual.id, "traffic_overview");
-    assert_eq!(visual.scenarios.len(), 5);
+    assert_eq!(visual.scenarios.len(), 6);
     assert!(
         analysis
             .files
@@ -78,10 +78,39 @@ fn example_project_keeps_one_visual_and_links_all_scenarios() {
         scenario_ids,
         [
             "data_lifecycle",
+            "ddos_test",
             "everything",
             "marker_styles",
             "request_response",
             "service_flow"
         ]
     );
+
+    let ddos_test = visual
+        .scenarios
+        .iter()
+        .find(|scenario| scenario.id.0 == "ddos_test")
+        .expect("the sustained request example is linked to the canonical visual");
+    let [ActionIr::Repeat { times, body, .. }] = ddos_test.actions.as_slice() else {
+        panic!("the attack example should repeat its request wave");
+    };
+    assert_eq!(*times, 20);
+    let [ActionIr::Parallel { actions, .. }] = body.as_slice() else {
+        panic!("each request wave should run in parallel");
+    };
+    assert_eq!(actions.len(), 4);
+    for (user, action) in ["user_1", "user_2", "user_3", "user_4"]
+        .into_iter()
+        .zip(actions)
+    {
+        assert!(matches!(
+            action,
+            ActionIr::Move {
+                from,
+                to,
+                duration_ms: Some(500),
+                ..
+            } if from.0 == user && to.0 == "reverse_proxy"
+        ));
+    }
 }

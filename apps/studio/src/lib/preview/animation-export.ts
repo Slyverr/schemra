@@ -1,4 +1,4 @@
-import type { StreamTargetChunk, VideoCodec } from 'mediabunny';
+import type { StreamTargetChunk } from 'mediabunny';
 import type {
 	ExportSettings as AnimationWorkerSettings,
 	ExportWorkerPayload,
@@ -10,66 +10,30 @@ import {
 	getAnimationExportFrameTime,
 	getAnimationExportRenderTimeMs
 } from './animation-frame-timing.js';
+import { createOutputFormat, findVideoCodec, getSupportedAnimationFormats, loadMediabunny } from './animation-export-capabilities.js';
+import { recordCanvasAnimation, recorderMimeType } from './animation-export-recorder.js';
 import { studioMessage } from '../i18n/messages.js';
 
-export type AnimationFrameRenderer = (timeMs: number, background: string) => string;
+import {
+	animationFormatOptions,
+	formatExtension,
+	getAnimationExportStoragePlan,
+	isBufferedAnimationOutputWithinLimit,
+	isValidAnimationExportBitrate,
+	isValidAnimationExportDimensions,
+	isValidAnimationExportDuration,
+	isValidAnimationExportFps,
+	MAX_BUFFERED_ANIMATION_OUTPUT_BYTES,
+	safeAnimationFileName,
+	type AnimationExportOptions,
+	type AnimationFormat
+} from './animation-export-settings.js';
 
-export const animationFormatOptions = [
-	{ value: 'mp4', labelKey: 'export.format.mp4' },
-	{ value: 'webm', labelKey: 'export.format.webm' },
-	{ value: 'mov', labelKey: 'export.format.mov' }
-] as const;
-
-export type AnimationFormat = (typeof animationFormatOptions)[number]['value'];
-
-export type AnimationExportCapabilitySettings = Pick<
-	AnimationExportOptions,
-	'format' | 'width' | 'height' | 'fps' | 'videoBitsPerSecond'
->;
-
-export interface AnimationExportOptions {
-	format: AnimationFormat;
-	durationMs: number;
-	width: number;
-	height: number;
-	fps: 24 | 30 | 60;
-	videoBitsPerSecond: number;
-	background: string;
-	fileName: string;
-	renderFrame: AnimationFrameRenderer;
-	onProgress?: (progress: number) => void;
-	signal?: AbortSignal;
-}
-
-export const MAX_ANIMATION_EXPORT_DURATION_MS = 120_000;
-export const MAX_ANIMATION_EXPORT_SIDE = 3840;
-export const MAX_ANIMATION_EXPORT_PIXELS = 3840 * 2160;
-
-export function isValidAnimationExportDuration(durationMs: number): boolean {
-	return Number.isFinite(durationMs) && durationMs > 0 && durationMs <= MAX_ANIMATION_EXPORT_DURATION_MS;
-}
-
-export function isValidAnimationExportDimensions(width: number, height: number): boolean {
-	return Number.isInteger(width) && Number.isInteger(height) &&
-		width >= 320 && height >= 180 &&
-		width <= MAX_ANIMATION_EXPORT_SIDE && height <= MAX_ANIMATION_EXPORT_SIDE &&
-		width * height <= MAX_ANIMATION_EXPORT_PIXELS;
-}
-
-export function isValidAnimationExportBitrate(bitrate: number): boolean {
-	return Number.isInteger(bitrate) && bitrate >= 100_000 && bitrate <= 50_000_000;
-}
-
-export function isValidAnimationExportFps(fps: number): fps is 24 | 30 | 60 {
-	return fps === 24 || fps === 30 || fps === 60;
-}
+export * from './animation-export-settings.js';
+export { getSupportedAnimationFormats, supportsAnimationFormat, supportsAnimationMp4 } from './animation-export-capabilities.js';
 
 const FRAME_LOAD_TIMEOUT_MS = 10_000;
-export const MAX_BUFFERED_ANIMATION_OUTPUT_BYTES = 32 * 1024 * 1024;
-const BUFFER_ESTIMATE_HEADROOM = 1.5;
 const activeExportControllers = new Set<AbortController>();
-const codecCache = new Map<string, Promise<VideoCodec | null>>();
-let mediaBunnyPromise: Promise<typeof import('mediabunny')> | null = null;
 
 type FileWritableLike = {
 	write: (chunk: Blob | { type: 'write'; position: number; data: Uint8Array }) => Promise<void>;
@@ -93,27 +57,6 @@ type SavePickerWindow = Window & {
 	showSaveFilePicker?: (options: SavePickerOptionsLike) => Promise<SaveFileHandleLike>;
 };
 
-function loadMediabunny() {
-	mediaBunnyPromise ??= import('mediabunny');
-	return mediaBunnyPromise;
-}
-
-function capabilityKey(settings: AnimationExportCapabilitySettings) {
-	return [settings.format, settings.width, settings.height, settings.fps, settings.videoBitsPerSecond].join(':');
-}
-
-function codecCandidates(format: AnimationFormat): VideoCodec[] {
-	return format === 'webm' ? ['vp9', 'vp8', 'av1'] : ['avc'];
-}
-
-function createOutputFormat(mediabunny: typeof import('mediabunny'), format: AnimationFormat) {
-	switch (format) {
-		case 'mp4': return new mediabunny.Mp4OutputFormat({ fastStart: false });
-		case 'webm': return new mediabunny.WebMOutputFormat();
-		case 'mov': return new mediabunny.MovOutputFormat({ fastStart: false });
-	}
-}
-
 function formatMimeType(format: AnimationFormat): string {
 	switch (format) {
 		case 'mp4': return 'video/mp4';
@@ -124,103 +67,6 @@ function formatMimeType(format: AnimationFormat): string {
 
 function formatLabelKey(format: AnimationFormat) {
 	return animationFormatOptions.find((option) => option.value === format)?.labelKey ?? 'export.format.mp4';
-}
-
-function formatExtension(format: AnimationFormat) {
-	return `.${format}`;
-}
-
-async function findVideoCodec(
-	settings: AnimationExportCapabilitySettings
-): Promise<VideoCodec | null> {
-	const key = capabilityKey(settings);
-	let result = codecCache.get(key);
-	if (!result) {
-		result = (async () => {
-			if (typeof VideoEncoder === 'undefined' ||
-				!isValidAnimationExportDimensions(settings.width, settings.height) ||
-				!isValidAnimationExportBitrate(settings.videoBitsPerSecond) ||
-				!isValidAnimationExportFps(settings.fps)) return null;
-
-			try {
-				const mediabunny = await loadMediabunny();
-				const outputFormat = createOutputFormat(mediabunny, settings.format);
-				const containerCodecs = outputFormat.getSupportedVideoCodecs();
-
-				for (const codec of codecCandidates(settings.format)) {
-					if (!containerCodecs.includes(codec)) continue;
-					try {
-						const supported = await mediabunny.canEncodeVideo(codec, {
-							width: settings.width,
-							height: settings.height,
-							quality: new mediabunny.Quality({ bitrate: settings.videoBitsPerSecond }),
-							frameRate: settings.fps,
-							latencyMode: 'quality'
-						});
-						if (supported) return codec;
-					} catch {
-						// A browser may reject the specific codec, size, or bitrate combination.
-					}
-				}
-			} catch {
-				// Some browsers cannot encode the selected format at these settings.
-			}
-			return null;
-		})();
-		codecCache.set(key, result);
-		if (codecCache.size > 32) {
-			const oldestKey = codecCache.keys().next().value;
-			if (oldestKey) codecCache.delete(oldestKey);
-		}
-	}
-	return result;
-}
-
-/** Returns whether the selected container can be encoded with the exact settings. */
-export async function supportsAnimationFormat(
-	settings: AnimationExportCapabilitySettings
-): Promise<boolean> {
-	if (!isValidAnimationExportDimensions(settings.width, settings.height) ||
-		!isValidAnimationExportFps(settings.fps) ||
-		!isValidAnimationExportBitrate(settings.videoBitsPerSecond)) {
-		return false;
-	}
-	return (await findVideoCodec(settings)) !== null;
-}
-
-/** Returns whether MP4 can be encoded with the exact requested settings. */
-export async function supportsAnimationMp4(
-	settings: Omit<AnimationExportCapabilitySettings, 'format'>
-): Promise<boolean> {
-	return supportsAnimationFormat({ ...settings, format: 'mp4' });
-}
-
-export interface AnimationExportStoragePlan {
-	estimatedBytes: number;
-	requiresDirectSave: boolean;
-	canExport: boolean;
-}
-
-/** Applies a hard in-memory cap to buffered video exports. */
-export function isBufferedAnimationOutputWithinLimit(byteLength: number): boolean {
-	return Number.isSafeInteger(byteLength) &&
-		byteLength >= 0 &&
-		byteLength <= MAX_BUFFERED_ANIMATION_OUTPUT_BYTES;
-}
-
-/** Mirrors the exporter's conservative memory estimate so the dialog can warn before rendering. */
-export function getAnimationExportStoragePlan(
-	durationMs: number,
-	videoBitsPerSecond: number,
-	canSaveDirectly: boolean
-): AnimationExportStoragePlan {
-	const estimatedBytes = estimatedOutputBytes(durationMs, videoBitsPerSecond);
-	const requiresDirectSave = estimatedBytes > MAX_BUFFERED_ANIMATION_OUTPUT_BYTES;
-	return {
-		estimatedBytes,
-		requiresDirectSave,
-		canExport: !requiresDirectSave || canSaveDirectly
-	};
 }
 
 export function supportsDirectAnimationFileSave(): boolean {
@@ -359,21 +205,6 @@ async function createTransferableSvgImage(
 		canvas.height = 0;
 		throw error;
 	}
-}
-
-export function safeAnimationFileName(fileName: string, format: AnimationFormat = 'mp4') {
-	const extension = formatExtension(format);
-	const stem = fileName
-		.trim()
-		.replace(/\.(?:mp4|webm|mov)$/i, '')
-		.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
-		.replace(/\s+/g, '-')
-		.slice(0, 100);
-	return `${stem || 'schemra-animation'}${extension}`;
-}
-
-function estimatedOutputBytes(durationMs: number, videoBitsPerSecond: number): number {
-	return (durationMs / 1_000) * (videoBitsPerSecond / 8) * BUFFER_ESTIMATE_HEADROOM;
 }
 
 function outputTooLargeError(): Error {
@@ -604,7 +435,8 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 			videoBitsPerSecond: options.videoBitsPerSecond
 		};
 		const codec = await findVideoCodec({ ...settings, format: options.format });
-		if (!codec) {
+		const mimeType = codec ? null : recorderMimeType(options.format);
+		if (!codec && (!mimeType || typeof HTMLCanvasElement.prototype.captureStream !== 'function')) {
 			const unavailable = new Error(studioMessage('export.encoderUnavailable', { format: studioMessage(formatLabelKey(options.format)) }));
 			unavailable.name = 'AnimationFormatUnavailableError';
 			throw unavailable;
@@ -617,7 +449,7 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 		}
 		throwIfAborted(signal);
 
-		if (supportsWorkerAnimationExport()) {
+		if (codec && supportsWorkerAnimationExport()) {
 			const buffer = await encodeAnimationInWorker(
 				options,
 				{
@@ -685,6 +517,35 @@ export async function exportAnimation(options: AnimationExportOptions): Promise<
 				release();
 			}
 		};
+
+		if (!codec) {
+			const buffer = await recordCanvasAnimation({
+				canvas: exportCanvas,
+				format: options.format,
+				mimeType: mimeType!,
+				durationMs: options.durationMs,
+				frameCount,
+				fps: options.fps,
+				videoBitsPerSecond: options.videoBitsPerSecond,
+				signal,
+				drawFrame,
+				onProgress: options.onProgress,
+				writeChunk: fileWritable ? (chunk) => fileWritable!.write(chunk) : undefined,
+				abort: () => controller.abort(),
+				outputTooLargeError
+			});
+			throwIfAborted(signal);
+			if (fileWritable) {
+				await fileWritable.close();
+				fileWritableOpen = false;
+			} else {
+				if (!buffer?.size) throw new Error(studioMessage('export.emptyAnimation'));
+				downloadBlob(buffer, safeAnimationFileName(options.fileName, options.format));
+			}
+			options.onProgress?.(1);
+			return;
+		}
+
 		const mediabunny = await loadMediabunny();
 		const format = createOutputFormat(mediabunny, options.format);
 		const target = fileWritable

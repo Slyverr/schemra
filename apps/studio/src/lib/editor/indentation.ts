@@ -6,6 +6,39 @@ export interface IndentationEdit {
 	selectionEnd: number;
 }
 
+/** Calculate the newline and matching indentation edit without mutating the source. */
+export function getIndentedNewlineEdit(
+	source: string,
+	selectionStart: number,
+	selectionEnd: number,
+	indentSize: 2 | 4 = 2
+): IndentationEdit {
+	const before = source.slice(0, selectionStart);
+	const after = source.slice(selectionEnd);
+	const lineStart = before.lastIndexOf('\n') + 1;
+	const prefix = before.slice(lineStart);
+	const indent = prefix.match(/^[\t ]*/)?.[0] ?? '';
+	const nextLineBreak = after.search(/[\r\n]/);
+	const nextText = after.slice(0, nextLineBreak < 0 ? after.length : nextLineBreak);
+	const opensBlock = prefix.trimEnd().endsWith('{');
+	const beforeClosingBrace = prefix.trim().length === 0 && /^\s*}/.test(nextText);
+	const rangeStart = selectionStart;
+	const rangeEnd = selectionEnd;
+
+	if (opensBlock && /^\s*}/.test(nextText)) {
+		const text = `\n${indent}${' '.repeat(indentSize)}\n${indent}`;
+		const cursor = selectionStart + 1 + indent.length + indentSize;
+		return { rangeStart, rangeEnd, text, selectionStart: cursor, selectionEnd: cursor };
+	}
+
+	const nextIndent = beforeClosingBrace
+		? indent.slice(0, Math.max(0, indent.length - indentSize))
+		: `${indent}${opensBlock ? ' '.repeat(indentSize) : ''}`;
+	const text = `\n${nextIndent}`;
+	const cursor = selectionStart + text.length;
+	return { rangeStart, rangeEnd, text, selectionStart: cursor, selectionEnd: cursor };
+}
+
 /** Calculate a tab indent or outdent edit without mutating the source. */
 export function getIndentationEdit(
 	source: string,

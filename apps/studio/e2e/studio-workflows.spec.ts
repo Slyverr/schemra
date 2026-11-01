@@ -217,9 +217,13 @@ test('navigates the searchable Studio themes from the keyboard', async ({ page }
 	await expect(popover).toBeVisible();
 	const triggerSwatch = trigger.locator('svg').first();
 	const optionSwatch = popover.getByRole('option').first().locator('svg');
-	await expect.poll(async () => (await triggerSwatch.boundingBox())?.width ?? 0).toBe(48);
-	await expect.poll(async () => (await optionSwatch.boundingBox())?.width ?? 0).toBe(48);
-	await expect(optionSwatch.locator('rect[stroke]')).toHaveCount(0);
+	await expect.poll(async () => (await triggerSwatch.boundingBox())?.width ?? 0).toBe(72);
+	await expect.poll(async () => (await triggerSwatch.boundingBox())?.height ?? 0).toBe(40.5);
+	await expect.poll(async () => (await optionSwatch.boundingBox())?.width ?? 0).toBe(72);
+	await expect.poll(async () => (await optionSwatch.boundingBox())?.height ?? 0).toBe(40.5);
+	await expect(optionSwatch.locator('rect[stroke]')).toHaveCount(1);
+	await expect(optionSwatch.locator('rect').first()).toHaveAttribute('width', '64');
+	await expect(optionSwatch.locator('rect').first()).toHaveAttribute('height', '36');
 	expect(await settings.evaluate((element) => element.contains(element.querySelector('#studio-theme-options')))).toBe(true);
 	expect(await popover.evaluate((element) => getComputedStyle(element.parentElement!).zIndex)).toBe('1000');
 	const popoverBounds = await popover.boundingBox();

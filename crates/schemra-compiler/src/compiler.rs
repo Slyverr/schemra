@@ -258,6 +258,24 @@ pub fn compile(source: &str) -> Result<ModuleIr, Vec<Diagnostic>> {
     compile_sources(&[source])
 }
 
+fn multiple_visual_diagnostics(statements: &[Statement]) -> Vec<Diagnostic> {
+    let mut visuals = statements
+        .iter()
+        .filter_map(|statement| match &statement.kind {
+            StatementKind::Invocation { name, .. } if name.text == "visual" => Some(name),
+            _ => None,
+        });
+
+    visuals.nth(1).map_or_else(Vec::new, |name| {
+        vec![Diagnostic::error(
+            "E_MULTIPLE_VISUALS",
+            "A .schemra file currently contains one visual followed by its scenarios.",
+            name.span,
+            Some("Keep one visual in each source file and place additional visuals in separate files."),
+        )]
+    })
+}
+
 pub(super) fn compile_for_analysis(source: &str) -> (ModuleIr, Vec<Diagnostic>) {
     let registry = match Registry::builtin_shared() {
         Ok(registry) => registry,
@@ -266,6 +284,7 @@ pub(super) fn compile_for_analysis(source: &str) -> (ModuleIr, Vec<Diagnostic>) 
     let mut syntax = parse_syntax(source);
     let mut diagnostics = expand_visual_repeats(&mut syntax, registry);
     diagnostics.extend(registry.validate(&syntax));
+    diagnostics.extend(multiple_visual_diagnostics(&syntax.statements));
     let mut module = ModuleIr::default();
     lower_statements(&syntax.statements, registry, &mut module, &mut diagnostics);
     validate_module(&module, &mut diagnostics);
@@ -459,6 +478,7 @@ pub fn compile_sources_with_registry(
         let mut syntax = parse_syntax(source);
         diagnostics.extend(expand_visual_repeats(&mut syntax, registry));
         diagnostics.extend(registry.validate(&syntax));
+        diagnostics.extend(multiple_visual_diagnostics(&syntax.statements));
         syntax_files.push(syntax);
     }
     if !diagnostics.is_empty() {

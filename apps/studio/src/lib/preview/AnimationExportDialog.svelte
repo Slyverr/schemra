@@ -13,7 +13,7 @@
 		isValidAnimationExportBitrate,
 		isValidAnimationExportDimensions,
 		isValidAnimationExportFps,
-		supportsAnimationFormat,
+		getSupportedAnimationFormats,
 		supportsDirectAnimationFileSave,
 		type AnimationExportCapabilitySettings,
 		type AnimationFormat
@@ -77,8 +77,8 @@
 	let customHeight = $state('1080');
 	let bitrate = $state<number>(12_000_000);
 	let customBitrateMbps = $state('12');
-	let checkingEncoder = $state(false);
-	let formatSupported = $state(false);
+	let checkingFormats = $state(false);
+	let supportedFormats = $state<AnimationFormat[]>([]);
 	let exportError = $state('');
 	let settingsLoadedFor = $state('');
 	let currentCapabilityKey = $state('');
@@ -101,6 +101,7 @@
 	const frameCount = $derived(Math.max(1, Math.ceil(durationMs / 1000 * (validFrameRate ? frameRate : 30))));
 	const estimatedMegabytes = $derived(validBitrate ? ((durationMs / 1000) * outputBitrate / 8 / 1_000_000).toFixed(1) : '—');
 	const estimatedBufferedMegabytes = $derived((storagePlan.estimatedBytes / 1_000_000).toFixed(1));
+	const formatSupported = $derived(supportedFormats.includes(format));
 	const canRender = $derived(
 		props.open && !props.busy && formatSupported && validDimensions && validBitrate && validFrameRate && storagePlan.canExport
 	);
@@ -126,8 +127,7 @@
 
 	$effect(() => {
 		const enabled = props.open && validDimensions && validBitrate && validFrameRate;
-		const candidate: AnimationExportCapabilitySettings = {
-			format,
+		const candidate: Omit<AnimationExportCapabilitySettings, 'format'> = {
 			width: dimensions.width,
 			height: dimensions.height,
 			fps: validFrameRate ? frameRate as 24 | 30 | 60 : 30,
@@ -135,20 +135,24 @@
 		};
 		const key = JSON.stringify(candidate);
 		if (!enabled) {
-			checkingEncoder = false;
-			formatSupported = false;
+			checkingFormats = false;
+			supportedFormats = [];
 			currentCapabilityKey = '';
 			return;
 		}
 		let cancelled = false;
 		currentCapabilityKey = key;
-		checkingEncoder = true;
-		formatSupported = false;
+		checkingFormats = true;
+		supportedFormats = [];
 		const timer = window.setTimeout(() => {
-			void supportsAnimationFormat(candidate).then(
-				(supported) => { if (!cancelled && currentCapabilityKey === key) formatSupported = supported; },
-				() => { if (!cancelled && currentCapabilityKey === key) formatSupported = false; }
-			).finally(() => { if (!cancelled && currentCapabilityKey === key) checkingEncoder = false; });
+			void getSupportedAnimationFormats(candidate).then(
+				(formats) => {
+					if (cancelled || currentCapabilityKey !== key) return;
+					supportedFormats = formats;
+					if (!formats.includes(format)) format = formats[0] ?? 'mp4';
+				},
+				() => { if (!cancelled && currentCapabilityKey === key) supportedFormats = []; }
+			).finally(() => { if (!cancelled && currentCapabilityKey === key) checkingFormats = false; });
 		}, 150);
 		return () => { cancelled = true; window.clearTimeout(timer); };
 	});
@@ -271,18 +275,29 @@
 			<Tabs.Content value="video" class="grid grid-cols-1 gap-4 pt-4 min-[521px]:grid-cols-2">
 				<div class="grid min-w-0 content-start gap-2">
 					<Label for="animation-export-format" class="text-xs font-semibold">{studioMessage('export.format')}</Label>
-					<Select.Root type="single" value={format} onValueChange={(value) => { if (value === 'mp4' || value === 'webm' || value === 'mov') format = value; }} disabled={props.busy}>
-						<Select.Trigger id="animation-export-format" class="w-full" aria-label={studioMessage('export.format')}>
-							<span data-slot="select-value" class="min-w-0 flex-1 truncate">{formatLabel}</span>
-						</Select.Trigger>
-						<Select.Content class="!z-[1000] w-[var(--bits-select-anchor-width)]">
-							<Select.Group>
-								{#each animationFormatOptions as option (option.value)}
+					{#if checkingFormats}
+						<p class="m-0 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground" role="status">
+							{studioMessage('export.encoderChecking', { format: formatLabel })}
+						</p>
+					{:else if supportedFormats.length > 0}
+						<Select.Root type="single" value={format} onValueChange={(value) => { if (supportedFormats.includes(value as AnimationFormat)) format = value as AnimationFormat; }} disabled={props.busy}>
+							<Select.Trigger id="animation-export-format" class="w-full" aria-label={studioMessage('export.format')}>
+								<span data-slot="select-value" class="min-w-0 flex-1 truncate">{formatLabel}</span>
+							</Select.Trigger>
+							<Select.Content class="!z-[1000] w-[var(--bits-select-anchor-width)]">
+								<Select.Group>
+									{#each supportedFormats as optionValue (optionValue)}
+									{@const option = animationFormatOptions.find(({ value }) => value === optionValue)!}
 									<Select.Item value={option.value} label={studioMessage(option.labelKey)}>{studioMessage(option.labelKey)}</Select.Item>
 								{/each}
-							</Select.Group>
-						</Select.Content>
-					</Select.Root>
+								</Select.Group>
+							</Select.Content>
+						</Select.Root>
+					{:else if validDimensions && validBitrate && validFrameRate}
+						<p class="m-0 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground" role="status">
+							{studioMessage('export.noCompatibleFormats')}
+						</p>
+					{/if}
 				</div>
 
 				<div class="grid min-w-0 content-start gap-2">
@@ -384,14 +399,6 @@
 				</fieldset>
 			</Tabs.Content>
 		</Tabs.Root>
-
-		<p class="sr-only" role="status" aria-live="polite">
-			{#if checkingEncoder}
-				{studioMessage('export.encoderChecking', { format: formatLabel })}
-			{:else if !formatSupported}
-				{studioMessage('export.encoderUnavailable', { format: formatLabel })}
-			{/if}
-		</p>
 
 		{#if exportError}<p class="m-0 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm leading-5 text-destructive" role="alert">{exportError}</p>{/if}
 		{#if validBitrate && !storagePlan.canExport}

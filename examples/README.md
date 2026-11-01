@@ -11,6 +11,7 @@ surface can be explored without switching diagrams.
 | `traffic-overview/scenarios/service-flow.schemra` | Parallel client requests followed by a service and response flow. |
 | `traffic-overview/scenarios/data-lifecycle.schemra` | Data movement, a wait, and a database highlight. |
 | `traffic-overview/scenarios/markers.schemra` | Different marker icons, parallel arrivals, highlight defaults and overrides. |
+| `traffic-overview/scenarios/ddos-test.schemra` | A sustained 10-second request surge, with four clients sending requests in parallel every 500 ms. |
 
 Keep this example project to one visual. Add or update scenarios when language
 features change, and keep the example project contract test passing.

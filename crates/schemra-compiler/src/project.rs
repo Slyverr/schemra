@@ -6,7 +6,7 @@ use crate::compiler::compile_for_analysis;
 use crate::{DeclarationInfo, EditorSymbol, SyntaxToken, editor_metadata, highlight_tokens};
 use schemra_ir::{ScenarioIr, VisualIr};
 pub use schemra_project::ProjectSource;
-use schemra_syntax::{Diagnostic, SourceLocation, SourceSpan};
+use schemra_syntax::{Diagnostic, SourceSpan};
 
 #[derive(Clone, Debug)]
 pub struct ProjectFileAnalysis {
@@ -161,16 +161,8 @@ pub fn analyze_project(sources: &[ProjectSource]) -> ProjectAnalysis {
 
 fn analyze_source(source: &ProjectSource) -> ProjectFileAnalysis {
     let tokens = highlight_tokens(&source.source);
-    let (mut module, mut diagnostics) = compile_for_analysis(&source.source);
+    let (mut module, diagnostics) = compile_for_analysis(&source.source);
     let has_multiple_visuals = module.visuals.len() > 1;
-    if has_multiple_visuals {
-        diagnostics.push(Diagnostic::error(
-            "E_MULTIPLE_VISUALS",
-            "A source file currently accepts one visual declaration.",
-            origin_span(),
-            None::<String>,
-        ));
-    }
     let (declarations, editor_symbols) = editor_metadata(&module);
     let scenarios = std::mem::take(&mut module.scenarios);
     let visual = module.visuals.into_iter().next();
@@ -212,14 +204,6 @@ fn analyze_source(source: &ProjectSource) -> ProjectFileAnalysis {
         tokens,
         diagnostics,
     }
-}
-
-fn origin_span() -> SourceSpan {
-    SourceSpan::point(SourceLocation {
-        offset: 0,
-        line: 1,
-        column: 1,
-    })
 }
 
 fn project_error(code: &str, message: String, span: SourceSpan, hint: &str) -> Diagnostic {
