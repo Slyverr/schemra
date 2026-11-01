@@ -1,0 +1,54 @@
+visual cross_target "Cross-target parity" {
+  direction: left-to-right
+
+  group clients "Clients" {
+    layout: grid
+    columns: 2
+
+    node user "User" {
+      icon: "lucide/user"
+      detail: "Crème Δοκιμή Журнал € →"
+    }
+    node cache "Cache" {}
+    node queue "Queue" {}
+  }
+
+  node proxy "Reverse proxy" {
+    icon: "lucide/server"
+  }
+
+  user -> proxy
+  cache -- proxy
+  queue -> proxy
+}
+
+scenario cross_target_request for visual cross_target {
+  highlight: 200ms trace
+
+  token request {
+    icon: "lucide/mail"
+  }
+  token response {
+    char: "R"
+  }
+
+  parallel {
+    move request from user -> proxy {
+      duration: 900ms
+    }
+    move response from cache -> proxy {
+      duration: 700ms
+      highlight: off
+    }
+  }
+
+  wait 25ms
+
+  repeat 2 {
+    move request from user -> proxy {
+      duration: 100ms
+    }
+  }
+
+  highlight queue 50ms trace from left
+}

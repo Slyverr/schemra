@@ -9,6 +9,11 @@ use serde_json::{Value, json};
 fn main() -> Result<(), Box<dyn Error>> {
     let mut source = String::new();
     std::io::stdin().read_to_string(&mut source)?;
+    if std::env::args().any(|argument| argument == "--compile-only") {
+        println!("{}", compile_schemra(&source));
+        return Ok(());
+    }
+
     let project = json!({
         "sources": [{
             "id": "main.schemra",

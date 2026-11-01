@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 fixture="$repo_root/tests/wasm/fixtures/compile-contract.schemra"
+cross_target_fixture="$repo_root/tests/wasm/fixtures/cross-target.schemra"
 project_fixture="$repo_root/tests/wasm/fixtures/project-contract.json"
 temporary_root="$(mktemp -d "${TMPDIR:-/tmp}/schemra-wasm-parity.XXXXXX")"
 trap 'rm -rf -- "$temporary_root"' EXIT
@@ -31,6 +32,12 @@ wasm-bindgen --target nodejs \
 bun "$repo_root/tests/wasm/compare-native-and-wasm.mjs" \
 	"$fixture" \
 	"$temporary_root/native.json" \
+	"$temporary_root/generated/schemra_wasm.js"
+cargo run --quiet -p schemra-wasm --example native_compile -- --compile-only \
+	< "$cross_target_fixture" > "$temporary_root/cross-target-native.json"
+bun "$repo_root/tests/wasm/compare-native-and-wasm-compile.mjs" \
+	"$cross_target_fixture" \
+	"$temporary_root/cross-target-native.json" \
 	"$temporary_root/generated/schemra_wasm.js"
 bun "$repo_root/tests/wasm/compare-native-and-wasm-project.mjs" \
 	"$project_fixture" \
