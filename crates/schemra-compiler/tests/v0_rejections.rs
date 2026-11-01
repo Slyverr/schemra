@@ -116,6 +116,11 @@ fn rejects_deferred_visual_and_node_properties() {
         );
     }
 
+    assert!(
+        compile("visual net { node api { shape: cylinder } }").is_err(),
+        "node shapes are outside the v0 DSL"
+    );
+
     for property in ["processing: sequential", "service: 850"] {
         let source = format!("visual net {{ node queue {{ {property} }} }}");
         assert!(

@@ -576,6 +576,7 @@ dependencies = [
 name = "schemra-engine"
 version = "0.1.0"
 dependencies = [
+ "schemra-compiler",
  "schemra-ir",
  "schemra-renderer",
  "schemra-scene",

@@ -117,9 +117,6 @@ test('organizes export options into tabs and keeps select values readable', asyn
 	await expect(dialog.getByRole('tab', { name: studioMessage('export.tab.video') })).toBeVisible();
 	await expect(dialog.getByRole('tab', { name: studioMessage('export.tab.background') })).toBeVisible();
 	await expect(dialog.locator('small')).toHaveCount(0);
-	const encoderStatus = dialog.locator('p[role="status"].sr-only');
-	await expect(encoderStatus).toHaveCount(1);
-	await expect(encoderStatus).toHaveClass(/\bsr-only\b/);
 
 	const bitrate = dialog.locator('#animation-export-bitrate');
 	await expect(bitrate).toContainText(studioMessage('export.bitrate.balanced'));

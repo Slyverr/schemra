@@ -1,7 +1,7 @@
 use schemra_engine::{VisualLimits, check_visual_limits};
 use schemra_ir::{
     Direction, EdgeDirectionality, EdgeIr, GroupId, GroupIr, GroupLayout, NodeId, NodeIr,
-    SourceLocation, SourceSpan, VisualId, VisualIr,
+    NodeLayout, NodeTextAlign, SourceLocation, SourceSpan, VisualId, VisualIr,
 };
 
 fn span() -> SourceSpan {
@@ -33,6 +33,8 @@ fn node(id: &str) -> NodeIr {
         label: id.into(),
         icon: None,
         detail: None,
+        layout: NodeLayout::default(),
+        text_align: NodeTextAlign::default(),
         group: None,
         span: span(),
     }

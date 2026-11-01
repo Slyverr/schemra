@@ -47,6 +47,12 @@ fn semicolons_reset_completion_context_before_the_next_statement() {
 
 #[test]
 fn enum_values_and_highlight_origins_are_filtered_by_prefix() {
+    for (property, expected) in [("layout", "column"), ("text_align", "center")] {
+        let source = format!("visual app {{\n node api {{\n {property}: c\n }}\n}}");
+        let cursor = source.find("c\n").expect("enum prefix") + 1;
+        assert_eq!(labels(&source, cursor, true), [expected]);
+    }
+
     let source = "visual app {\n direction: ";
     let choices = complete_at(source, source.len(), true).expect("direction choices");
     assert_eq!(

@@ -41,6 +41,24 @@ fn syntax_coloring_uses_construct_and_property_schemas() {
 }
 
 #[test]
+fn node_presentation_properties_and_values_use_registered_colors() {
+    let source = "visual app { node api { layout: vertical\n text_align: center } }";
+    let tokens = token_kinds(source);
+
+    for (text, kind) in [
+        ("layout", SyntaxTokenKind::Property),
+        ("vertical", SyntaxTokenKind::Value),
+        ("text_align", SyntaxTokenKind::Property),
+        ("center", SyntaxTokenKind::Value),
+    ] {
+        assert!(
+            tokens.contains(&(text, kind)),
+            "missing {text:?}: {tokens:?}"
+        );
+    }
+}
+
+#[test]
 fn scenario_action_keywords_and_highlight_values_are_colored() {
     let source = "scenario flow for visual app {\n token packet { char: \"R\" }\n highlight: 200ms trace from left\n move packet from client -> api {\n  duration: 1s\n  highlight: off\n }\n}";
     let tokens = token_kinds(source);

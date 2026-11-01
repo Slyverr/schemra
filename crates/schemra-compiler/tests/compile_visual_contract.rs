@@ -1,5 +1,8 @@
 use schemra_compiler::{compile, compile_sources};
-use schemra_ir::{Direction, EdgeDirectionality, GroupId, GroupLayout, NodeId, VisualId};
+use schemra_ir::{
+    Direction, EdgeDirectionality, GroupId, GroupLayout, NodeId, NodeLayout, NodeTextAlign,
+    VisualId,
+};
 
 fn diagnostic_codes(source: &str) -> Vec<String> {
     compile(source)
@@ -17,6 +20,8 @@ visual network "Service map" {
   node proxy "Reverse proxy" {
     icon: "lucide/server"
     detail: "Routes requests"
+    layout: vertical
+    text_align: center
   }
   node backend "Backend" {}
   proxy -> backend
@@ -37,6 +42,8 @@ visual network "Service map" {
     assert_eq!(visual.nodes[0].label, "Reverse proxy");
     assert_eq!(visual.nodes[0].icon.as_deref(), Some("lucide/server"));
     assert_eq!(visual.nodes[0].detail.as_deref(), Some("Routes requests"));
+    assert_eq!(visual.nodes[0].layout, NodeLayout::Vertical);
+    assert_eq!(visual.nodes[0].text_align, NodeTextAlign::Center);
     assert_eq!(visual.nodes[1].label, "Backend");
     assert_eq!(visual.edges.len(), 2);
     assert_eq!(visual.edges[0].from, NodeId("proxy".into()));
@@ -59,6 +66,21 @@ fn omitted_titles_and_direction_use_the_declared_defaults() {
     assert_eq!(visual.nodes[0].label, "proxy");
     assert!(visual.nodes[0].icon.is_none());
     assert!(visual.nodes[0].detail.is_none());
+    assert_eq!(visual.nodes[0].layout, NodeLayout::Horizontal);
+    assert_eq!(visual.nodes[0].text_align, NodeTextAlign::Left);
+}
+
+#[test]
+fn compiles_node_layout_aliases_and_text_alignment() {
+    let module = compile(
+        "visual network { node vertical { layout: column; text_align: center }; node horizontal { layout: row } }",
+    )
+    .expect("node layout and text alignment compile");
+    let nodes = &module.visuals[0].nodes;
+
+    assert_eq!(nodes[0].layout, NodeLayout::Vertical);
+    assert_eq!(nodes[0].text_align, NodeTextAlign::Center);
+    assert_eq!(nodes[1].layout, NodeLayout::Horizontal);
 }
 
 #[test]
@@ -83,6 +105,10 @@ fn validates_visual_and_node_properties_before_lowering() {
     );
     assert!(
         diagnostic_codes("visual network { node proxy { icon: 2 } }")
+            .contains(&"E_PROPERTY_TYPE".into())
+    );
+    assert!(
+        diagnostic_codes("visual network { node proxy { layout: diagonal } }")
             .contains(&"E_PROPERTY_TYPE".into())
     );
 }

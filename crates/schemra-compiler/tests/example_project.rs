@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use schemra_compiler::{ProjectSource, analyze_project};
-use schemra_ir::{ActionIr, EdgeDirectionality};
+use schemra_ir::{ActionIr, EdgeDirectionality, GroupLayout, HighlightEffect, HighlightOrigin};
 
 fn example_sources() -> Vec<ProjectSource> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/traffic-overview");
@@ -34,6 +34,19 @@ fn example_sources() -> Vec<ProjectSource> {
     }
 
     sources
+}
+
+fn visit_actions(actions: &[ActionIr], visit: &mut impl FnMut(&ActionIr)) {
+    for action in actions {
+        visit(action);
+        match action {
+            ActionIr::Sequence { actions, .. } | ActionIr::Parallel { actions, .. } => {
+                visit_actions(actions, visit);
+            }
+            ActionIr::Repeat { body, .. } => visit_actions(body, visit),
+            ActionIr::Move { .. } | ActionIr::Wait { .. } | ActionIr::Highlight { .. } => {}
+        }
+    }
 }
 
 #[test]
@@ -113,4 +126,112 @@ fn example_project_keeps_one_visual_and_links_all_scenarios() {
             } if from.0 == user && to.0 == "reverse_proxy"
         ));
     }
+}
+
+#[test]
+fn feature_tour_visual_demonstrates_group_layouts_and_node_metadata() {
+    let analysis = analyze_project(&example_sources());
+    let visual = analysis.files[analysis.visuals[0].source_index]
+        .visual
+        .as_ref()
+        .expect("the canonical source declares a visual");
+
+    assert!(
+        visual
+            .groups
+            .iter()
+            .any(|group| { group.layout == GroupLayout::Grid { columns: Some(2) } })
+    );
+    assert!(
+        visual
+            .groups
+            .iter()
+            .any(|group| group.layout == GroupLayout::Auto)
+    );
+    assert!(visual.nodes.iter().any(|node| {
+        node.icon.as_deref() == Some("database")
+            && node.detail.as_deref() == Some("Stores application data")
+    }));
+}
+
+#[test]
+fn feature_tour_scenario_demonstrates_all_action_and_marker_forms() {
+    let analysis = analyze_project(&example_sources());
+    let scenario = analysis.visuals[0]
+        .scenarios
+        .iter()
+        .find(|scenario| scenario.id.0 == "everything")
+        .expect("the language feature tour is linked to the canonical visual");
+
+    assert!(
+        scenario.tokens.iter().any(|token| {
+            token.id.0 == "request" && token.icon.as_deref() == Some("lucide/mail")
+        })
+    );
+    assert!(
+        scenario.tokens.iter().any(|token| {
+            token.id.0 == "acknowledgment" && token.char.as_deref() == Some("✓")
+        })
+    );
+
+    let mut has_parallel_moves = false;
+    let mut has_wait = false;
+    let mut has_repeat = false;
+    let mut has_default_arrival_trace = false;
+    let mut has_move_override_pulse = false;
+    let mut has_independent_highlight = false;
+    visit_actions(&scenario.actions, &mut |action| match action {
+        ActionIr::Parallel { actions, .. } if actions.len() == 3 => has_parallel_moves = true,
+        ActionIr::Wait {
+            duration_ms: 150, ..
+        } => has_wait = true,
+        ActionIr::Repeat { times: 2, .. } => has_repeat = true,
+        ActionIr::Highlight {
+            duration_ms: Some(200),
+            effect: HighlightEffect::Trace,
+            origin: HighlightOrigin::Arrival { .. },
+            ..
+        } => has_default_arrival_trace = true,
+        ActionIr::Highlight {
+            duration_ms: Some(300),
+            effect: HighlightEffect::Pulse,
+            origin: HighlightOrigin::Arrival { from, to },
+            ..
+        } if from.0 == "user_1" && to.0 == "reverse_proxy" => {
+            has_move_override_pulse = true;
+        }
+        ActionIr::Highlight {
+            duration_ms: Some(300),
+            effect: HighlightEffect::Pulse,
+            origin: HighlightOrigin::Default,
+            node,
+            ..
+        } if node.0 == "database" => has_independent_highlight = true,
+        ActionIr::Parallel { .. }
+        | ActionIr::Sequence { .. }
+        | ActionIr::Move { .. }
+        | ActionIr::Wait { .. }
+        | ActionIr::Highlight { .. }
+        | ActionIr::Repeat { .. } => {}
+    });
+
+    assert!(has_parallel_moves);
+    assert!(has_wait);
+    assert!(has_repeat);
+    assert!(has_default_arrival_trace);
+    assert!(has_move_override_pulse);
+    assert!(has_independent_highlight);
+
+    let ActionIr::Parallel { actions, .. } = &scenario.actions[0] else {
+        panic!("the feature tour begins with parallel moves");
+    };
+    assert!(matches!(
+        actions.get(1),
+        Some(ActionIr::Move {
+            from,
+            to,
+            duration_ms: Some(600),
+            ..
+        }) if from.0 == "user_2" && to.0 == "reverse_proxy"
+    ));
 }

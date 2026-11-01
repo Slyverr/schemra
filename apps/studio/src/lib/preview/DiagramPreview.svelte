@@ -24,6 +24,7 @@
 		readPreviewFrame,
 		readPreviewScenario,
 		readPreviewScene,
+		isSafeSvgColor,
 		sanitizeSvgMarkup,
 		type PreviewFrame,
 		type PreviewScene
@@ -448,6 +449,8 @@
 		if (!markup || !currentScene || typeof DOMParser === 'undefined') return '#ffffff';
 		const parsed = new DOMParser().parseFromString(markup, 'image/svg+xml');
 		if (parsed.querySelector('parsererror')) return '#ffffff';
+		const preservedBackground = parsed.documentElement.getAttribute('data-schemra-canvas-background');
+		if (isSafeSvgColor(preservedBackground)) return preservedBackground;
 		const background = [...parsed.documentElement.children].find((element) =>
 			element.localName === 'rect' &&
 			Number(element.getAttribute('width')) === currentScene.width &&

@@ -1,8 +1,9 @@
-use schemra_scene::{CubicBezier, FlowDirection, Point, Rect};
+use schemra_scene::{CubicBezier, FlowDirection, Point, Rect, SceneGroup};
 
 const CURVE_FLATNESS: f64 = 0.35;
 const MAX_FLATTEN_DEPTH: u8 = 12;
 const PATH_JOIN_EPSILON: f64 = 0.5;
+const GROUP_TITLE_CLEARANCE: f32 = 4.0;
 
 #[derive(Clone, Copy, Debug)]
 struct DPoint {
@@ -414,6 +415,26 @@ pub(super) fn path_obstacle_intersections(path: &[CubicBezier], obstacles: &[Rec
                 .any(|pair| segment_intersects_rect(pair[0], pair[1], rect))
         })
         .count()
+}
+
+/// Approximate the rendered group title as a small route obstacle.
+///
+/// The renderer places group titles at `(bounds.x + 16, bounds.y + 24)` in an
+/// 11-unit font. The expanded rectangle keeps direct links clear of the text
+/// without treating the group's background as an obstacle.
+pub(super) fn group_title_bounds(group: &SceneGroup) -> Option<Rect> {
+    let title = group.title.trim();
+    if title.is_empty() {
+        return None;
+    }
+
+    let width = (title.chars().count() as f32 * 7.5).max(1.0);
+    Some(Rect {
+        x: group.bounds.x + 15.0 - GROUP_TITLE_CLEARANCE,
+        y: group.bounds.y + 12.0 - GROUP_TITLE_CLEARANCE,
+        width: width + GROUP_TITLE_CLEARANCE * 2.0,
+        height: 15.0 + GROUP_TITLE_CLEARANCE * 2.0,
+    })
 }
 
 pub(super) fn segment_intersects_rect(start: Point, end: Point, rect: Rect) -> bool {

@@ -17,4 +17,7 @@ pub use timeline::{
     Timeline, TimelineError, TimelineEvent, TimelineEventKind, TimelineFrame, TokenFrame,
     TokenPosition,
 };
-pub use visual::{Direction, EdgeDirectionality, EdgeIr, GroupIr, GroupLayout, NodeIr, VisualIr};
+pub use visual::{
+    Direction, EdgeDirectionality, EdgeIr, GroupIr, GroupLayout, NodeIr, NodeLayout, NodeTextAlign,
+    VisualIr,
+};

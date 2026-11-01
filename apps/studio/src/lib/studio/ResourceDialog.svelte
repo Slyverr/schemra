@@ -89,7 +89,6 @@
 				? 'max-h-[calc(100dvh-2rem)] w-full gap-5 overflow-y-auto sm:max-w-sm'
 				: 'max-h-[calc(100dvh-2rem)] w-full gap-5 overflow-y-auto sm:max-w-md'}
 			role={kind === 'remove-resource' ? 'alertdialog' : 'dialog'}
-			showCloseButton={false}
 		>
 			<Dialog.Header class="gap-1.5 pr-8">
 				<Dialog.Title class="text-base font-semibold leading-6">{title()}</Dialog.Title>

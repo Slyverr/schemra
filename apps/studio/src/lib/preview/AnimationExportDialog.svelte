@@ -236,7 +236,7 @@
 </script>
 
 <Dialog.Root open={props.open} onOpenChange={handleOpenChange}>
-	<Dialog.Content class="max-h-[min(90vh,48rem)] w-full gap-5 overflow-y-auto p-5 sm:max-w-[35rem]" showCloseButton={false} onInteractOutside={handleInteractOutside}>
+	<Dialog.Content class="max-h-[min(90vh,48rem)] w-full gap-5 overflow-y-auto p-5 sm:max-w-[35rem]" onInteractOutside={handleInteractOutside}>
 		<Dialog.Header class="gap-1.5 pr-8 text-left">
 			<Dialog.Title class="text-base font-semibold leading-6">{studioMessage('export.title')}</Dialog.Title>
 			<Dialog.Description class="text-xs leading-[1.45]">{studioMessage('export.description', { scenario: props.scenarioTitle, format: formatLabel, duration: (durationMs / 1000).toFixed(durationMs % 1000 === 0 ? 0 : 1) })}</Dialog.Description>

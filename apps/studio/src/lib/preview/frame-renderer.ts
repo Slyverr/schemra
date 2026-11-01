@@ -4,6 +4,7 @@ import {
 	previewTimeAtElapsed,
 	readPreviewFrame,
 	routePathData,
+	isSafeSvgColor,
 	type PreviewFrame,
 	type PreviewScenario,
 	type PreviewScene
@@ -243,12 +244,12 @@ export function createAnimationFrameRenderer(
 	const parsed = new DOMParser().parseFromString(sourceSvg, 'image/svg+xml');
 	if (parsed.querySelector('parsererror')) throw new Error(studioMessage('preview.animationInvalidDiagram'));
 	const root = parsed.documentElement as unknown as SVGSVGElement;
-	const backgroundRect = [...root.children].find((element) =>
+	let backgroundRect = [...root.children].find((element) =>
 		element.localName === 'rect' &&
 		Number(element.getAttribute('width')) === scene.width &&
 		Number(element.getAttribute('height')) === scene.height
 	) as SVGRectElement | undefined;
-	if (!backgroundRect) throw new Error(studioMessage('preview.animationBackgroundUnavailable'));
+	if (!backgroundRect) backgroundRect = ensureCanvasBackground(root, scene);
 	const colors = getComputedStyle(styleHost);
 	const primary = colors.getPropertyValue('--primary').trim() || '#005bd3';
 	const primaryForeground = colors.getPropertyValue('--primary-foreground').trim() || '#ffffff';
@@ -279,6 +280,20 @@ export function createAnimationFrameRenderer(
 	}) as AnimationFrameRenderer;
 	renderFrame.dispose = () => renderHost.remove();
 	return renderFrame;
+}
+
+export function ensureCanvasBackground(
+	root: SVGSVGElement,
+	scene: Pick<PreviewScene, 'width' | 'height'>
+): SVGRectElement {
+	const background = root.ownerDocument.createElementNS(SVG_NS, 'rect');
+	background.setAttribute('width', String(scene.width));
+	background.setAttribute('height', String(scene.height));
+	const preservedColor = root.getAttribute('data-schemra-canvas-background');
+	background.setAttribute('fill', isSafeSvgColor(preservedColor) ? preservedColor : '#ffffff');
+	const firstArtwork = [...root.children].find((element) => !['title', 'desc', 'defs', 'style'].includes(element.localName));
+	root.insertBefore(background, firstArtwork ?? null);
+	return background;
 }
 
 function frameRenderCacheFor(root: SVGSVGElement): FrameRenderCache {

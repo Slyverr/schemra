@@ -8,7 +8,7 @@
 	const palette = $derived(studioThemePreviewPalettes[theme]);
 </script>
 
-<svg data-slot="theme-preview" class={cn('w-18 aspect-video shrink-0', className)} viewBox="0 0 64 36" aria-hidden="true">
+<svg data-slot="theme-preview" class={cn('w-16 aspect-video shrink-0', className)} viewBox="0 0 64 36" aria-hidden="true">
 	<rect width="64" height="36" rx="4" fill={palette.background} />
 	{#if palette.backgroundDark}
 		<path d="M32 0H60A4 4 0 0 1 64 4V32A4 4 0 0 1 60 36H32Z" fill={palette.backgroundDark} />

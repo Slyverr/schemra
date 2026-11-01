@@ -1,7 +1,7 @@
 use schemra_engine::layout_visual;
 use schemra_ir::{
     Direction, EdgeDirectionality, EdgeIr, GroupId, GroupIr, GroupLayout, NodeId, NodeIr,
-    SourceLocation, SourceSpan, VisualId, VisualIr,
+    NodeLayout, NodeTextAlign, SourceLocation, SourceSpan, VisualId, VisualIr,
 };
 
 fn span() -> SourceSpan {
@@ -33,6 +33,8 @@ fn node(id: &str, label: &str, detail: Option<&str>, group: Option<&str>) -> Nod
         label: label.into(),
         icon: Some("lucide/server".into()),
         detail: detail.map(str::to_owned),
+        layout: NodeLayout::default(),
+        text_align: NodeTextAlign::default(),
         group: group.map(|id| GroupId(id.into())),
         span: span(),
     }
@@ -117,7 +119,7 @@ fn configured_group_grid_places_members_and_contains_them() {
 }
 
 #[test]
-fn grid_rows_center_nodes_with_different_heights() {
+fn grid_rows_share_their_top_edge_with_different_heights() {
     for direction in [
         Direction::LeftToRight,
         Direction::RightToLeft,
@@ -147,8 +149,8 @@ fn grid_rows_center_nodes_with_different_heights() {
         let tall = &scene.nodes[1].bounds;
         assert!(tall.height > short.height, "expected varied node heights");
         assert!(
-            ((short.y + short.height / 2.0) - (tall.y + tall.height / 2.0)).abs() < 0.01,
-            "grid row nodes should share their vertical center in {direction:?}"
+            (short.y - tall.y).abs() < 0.01,
+            "grid row nodes should share their top edge in {direction:?}"
         );
     }
 }

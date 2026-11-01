@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use schemra_ir::{Direction, EdgeDirectionality, GroupLayout, VisualIr};
+use schemra_ir::{Direction, EdgeDirectionality, GroupLayout, NodeLayout, NodeTextAlign, VisualIr};
 use schemra_renderer::{node_text_width, wrap_text_lines};
 use schemra_scene::{
     FlowDirection, Rect, Scene, SceneEdge, SceneGroup, SceneNode, SceneNodeLayout, SceneNodeShape,
@@ -40,7 +40,14 @@ pub fn layout_visual(visual: &VisualIr) -> Scene {
     let heights = visual
         .nodes
         .iter()
-        .map(|node| node_height(&node.label, node.detail.as_deref(), node.icon.is_some()))
+        .map(|node| {
+            node_height(
+                &node.label,
+                node.detail.as_deref(),
+                node.icon.is_some(),
+                scene_node_layout(node.layout),
+            )
+        })
         .collect::<Vec<_>>();
     let node_indices = visual
         .nodes
@@ -145,7 +152,7 @@ pub fn layout_visual(visual: &VisualIr) -> Scene {
                     } else {
                         secondary + cross_offset
                     };
-                    let y = row_y + row_offset + (row_height - heights[index]) / 2.0;
+                    let y = row_y + row_offset;
                     let node = &visual.nodes[index];
                     let bounds = Rect {
                         x,
@@ -168,8 +175,11 @@ pub fn layout_visual(visual: &VisualIr) -> Scene {
                                 icon.strip_prefix("lucide/").unwrap_or(icon).to_owned()
                             }),
                             detail: node.detail.clone(),
-                            layout: SceneNodeLayout::Horizontal,
-                            text_align: SceneTextAlign::Left,
+                            layout: scene_node_layout(node.layout),
+                            text_align: match node.text_align {
+                                NodeTextAlign::Left => SceneTextAlign::Left,
+                                NodeTextAlign::Center => SceneTextAlign::Center,
+                            },
                             shape: SceneNodeShape::Round,
                             style: SceneStyle::default(),
                             bounds,
@@ -223,7 +233,12 @@ pub fn layout_visual(visual: &VisualIr) -> Scene {
             route_diagnostic: None,
         })
         .collect::<Vec<_>>();
-    crate::routing::route_edges(&mut edges, &nodes, flow_direction(visual.direction));
+    crate::routing::route_edges(
+        &mut edges,
+        &nodes,
+        &groups,
+        flow_direction(visual.direction),
+    );
     let (width, height) = route_bounds::fit_scene(&mut nodes, &mut groups, &mut edges, rank_extent);
 
     Scene {
@@ -525,8 +540,15 @@ fn secondary_gap(level: &[LayoutBlock], position: usize) -> f32 {
     }
 }
 
-fn node_height(label: &str, detail: Option<&str>, has_icon: bool) -> f32 {
-    let text_width = node_text_width(NODE_WIDTH, SceneNodeLayout::Horizontal, has_icon, 12.0);
+fn scene_node_layout(layout: NodeLayout) -> SceneNodeLayout {
+    match layout {
+        NodeLayout::Horizontal => SceneNodeLayout::Horizontal,
+        NodeLayout::Vertical => SceneNodeLayout::Vertical,
+    }
+}
+
+fn node_height(label: &str, detail: Option<&str>, has_icon: bool, layout: SceneNodeLayout) -> f32 {
+    let text_width = node_text_width(NODE_WIDTH, layout, has_icon, 12.0);
     let title_lines = wrap_text_lines(schemra_scene::SceneFont::Sans, label, text_width, 17.0, 650)
         .len()
         .max(1);
@@ -541,7 +563,12 @@ fn node_height(label: &str, detail: Option<&str>, has_icon: bool) -> f32 {
         } else {
             0.0
         };
-    text_height.max(if has_icon { 30.0 } else { 0.0 }) + 32.0
+    let content_height = if has_icon && layout == SceneNodeLayout::Vertical {
+        30.0 + 12.0 + text_height
+    } else {
+        text_height.max(if has_icon { 30.0 } else { 0.0 })
+    };
+    content_height + 32.0
 }
 
 fn include_bounds(target: &mut Rect, bounds: Rect) {

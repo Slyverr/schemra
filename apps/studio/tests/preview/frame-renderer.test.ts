@@ -1,22 +1,24 @@
 import { describe, expect, test } from 'bun:test';
-import { applyPreviewFrame } from '../../src/lib/preview/frame-renderer';
+import { applyPreviewFrame, ensureCanvasBackground } from '../../src/lib/preview/frame-renderer';
 import type { PreviewFrame, PreviewScenario, PreviewScene } from '../../src/lib/preview/model';
 
 class FakeSvgDocument {
-	createElementNS() {
-		return new FakeSvgElement(this);
+	createElementNS(_namespace: string, localName: string) {
+		return new FakeSvgElement(this, localName);
 	}
 }
 
 class FakeSvgElement {
 	readonly ownerDocument: FakeSvgDocument;
+	readonly localName: string;
 	readonly attributes = new Map<string, string>();
 	readonly children: FakeSvgElement[] = [];
 	parentElement: FakeSvgElement | null = null;
 	textContent: string | null = null;
 
-	constructor(ownerDocument: FakeSvgDocument) {
+	constructor(ownerDocument: FakeSvgDocument, localName = 'g') {
 		this.ownerDocument = ownerDocument;
+		this.localName = localName;
 	}
 
 	get firstElementChild() {
@@ -67,9 +69,9 @@ class FakeSvgElement {
 		}
 	}
 
-	insertBefore(child: FakeSvgElement, reference: FakeSvgElement) {
+	insertBefore(child: FakeSvgElement, reference: FakeSvgElement | null) {
 		child.parentElement?.removeChild(child);
-		const index = this.children.indexOf(reference);
+		const index = reference ? this.children.indexOf(reference) : this.children.length;
 		child.parentElement = this;
 		this.children.splice(index, 0, child);
 	}
@@ -239,5 +241,38 @@ describe('animated diagram layers', () => {
 
 		const highlights = root.children.find((child) => child.attributes.has('data-schemra-preview-highlights'));
 		expect(highlights?.children).toHaveLength(2);
+	});
+});
+
+describe('animation frame backgrounds', () => {
+	test('restores the omitted theme background below artwork for export frames', () => {
+		const document = new FakeSvgDocument();
+		const root = new FakeSvgElement(document);
+		const title = new FakeSvgElement(document, 'title');
+		title.setAttribute('data-title', 'true');
+		const defs = new FakeSvgElement(document, 'defs');
+		defs.setAttribute('data-defs', 'true');
+		const artwork = new FakeSvgElement(document);
+		artwork.setAttribute('data-artwork', 'true');
+		root.setAttribute('data-schemra-canvas-background', '#f8fafc');
+		root.append(title, defs, artwork);
+
+		const background = ensureCanvasBackground(root as unknown as SVGSVGElement, { width: 320, height: 180 });
+
+		expect(background.getAttribute('fill')).toBe('#f8fafc');
+		expect(background.getAttribute('width')).toBe('320');
+		expect(background.getAttribute('height')).toBe('180');
+		expect(root.children[2]).toBe(background);
+	});
+
+	test('uses a safe fallback when the preserved canvas color is invalid', () => {
+		const document = new FakeSvgDocument();
+		const root = new FakeSvgElement(document);
+		root.setAttribute('data-schemra-canvas-background', 'url(https://invalid.example)');
+
+		const background = ensureCanvasBackground(root as unknown as SVGSVGElement, { width: 100, height: 50 });
+
+		expect(background.getAttribute('fill')).toBe('#ffffff');
+		expect(root.firstElementChild).toBe(background);
 	});
 });

@@ -18,6 +18,20 @@ pub enum GroupLayout {
     },
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum NodeLayout {
+    #[default]
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum NodeTextAlign {
+    #[default]
+    Left,
+    Center,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VisualIr {
     pub id: VisualId,
@@ -47,6 +61,8 @@ pub struct NodeIr {
     pub label: String,
     pub icon: Option<String>,
     pub detail: Option<String>,
+    pub layout: NodeLayout,
+    pub text_align: NodeTextAlign,
     pub group: Option<GroupId>,
     pub span: SourceSpan,
 }

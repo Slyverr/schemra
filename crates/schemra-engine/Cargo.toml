@@ -10,3 +10,6 @@ publish = false
 schemra-ir.workspace = true
 schemra-renderer.workspace = true
 schemra-scene.workspace = true
+
+[dev-dependencies]
+schemra-compiler.workspace = true

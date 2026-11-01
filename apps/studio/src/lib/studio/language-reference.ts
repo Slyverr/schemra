@@ -15,8 +15,15 @@ export const languageReferenceSections = [
       icon: "server"
       detail: "Processes requests"
     }
+    node database "Database" {
+      icon: "database"
+      detail: "Stores application data"
+      layout: vertical
+      text_align: center
+    }
   }
   client -> api
+  api -> database
 }`
 	},
 	{

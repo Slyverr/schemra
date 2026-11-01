@@ -29,7 +29,6 @@
 		<Dialog.Content
 			bind:ref={contentElement}
 			class="h-[min(34rem,calc(100dvh_-_2rem))] max-h-[calc(100dvh_-_2rem)] w-[min(54rem,calc(100vw_-_2rem))] max-w-none sm:max-w-none grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-visible p-0"
-			showCloseButton={false}
 		>
 			<Dialog.Header class="min-h-12 flex-row items-center justify-between border-b border-border px-5 py-2.5 sm:px-6">
 				<Dialog.Title id="settings-title" class="text-base font-semibold">{studioMessage('settings.heading')}</Dialog.Title>

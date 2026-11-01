@@ -1,8 +1,11 @@
-use super::geometry::{direct_connector, natural_sides, paths_conflict, side_anchor};
+use super::geometry::{
+    direct_connector, group_title_bounds, natural_sides, path_obstacle_intersections,
+    paths_conflict, side_anchor,
+};
 use super::{RoutingMode, route_edges_with_mode};
 use schemra_scene::{
-    FlowDirection, Rect, SceneEdge, SceneNode, SceneNodeLayout, SceneNodeShape, SceneStyle,
-    SceneTextAlign,
+    FlowDirection, Rect, SceneEdge, SceneGroup, SceneNode, SceneNodeLayout, SceneNodeShape,
+    SceneStyle, SceneTextAlign,
 };
 
 fn node(id: &str, bounds: Rect) -> SceneNode {
@@ -35,6 +38,69 @@ fn edge(from: &str, to: &str) -> SceneEdge {
         path: Vec::new(),
         route_diagnostic: None,
     }
+}
+
+fn group(title: &str, bounds: Rect) -> SceneGroup {
+    SceneGroup {
+        name: "group".into(),
+        title: title.into(),
+        bounds,
+        style: SceneStyle::default(),
+    }
+}
+
+#[test]
+fn straight_route_selects_a_clear_direct_port_pair_around_group_title() {
+    let nodes = [
+        node(
+            "source",
+            Rect {
+                x: 0.0,
+                y: 20.0,
+                width: 10.0,
+                height: 20.0,
+            },
+        ),
+        node(
+            "target",
+            Rect {
+                x: 100.0,
+                y: 20.0,
+                width: 10.0,
+                height: 20.0,
+            },
+        ),
+    ];
+    let groups = [group(
+        "Services",
+        Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 80.0,
+            height: 40.0,
+        },
+    )];
+    let title_obstacle = group_title_bounds(&groups[0]).unwrap();
+    let natural = [direct_connector(
+        side_anchor(nodes[0].bounds, super::geometry::Side::Right),
+        side_anchor(nodes[1].bounds, super::geometry::Side::Left),
+    )];
+    assert_eq!(path_obstacle_intersections(&natural, &[title_obstacle]), 1);
+
+    let mut edges = [edge("source", "target")];
+    route_edges_with_mode(
+        &mut edges,
+        &nodes,
+        &groups,
+        FlowDirection::LeftToRight,
+        RoutingMode::Straight,
+    );
+
+    let diagnostic = edges[0].route_diagnostic.as_ref().unwrap();
+    assert_eq!(edges[0].path.len(), 1);
+    assert!(!diagnostic.direct_candidate_clear);
+    assert_eq!(diagnostic.obstacle_intersections, 0);
+    assert!(diagnostic.source_port != "right" || diagnostic.target_port != "left");
 }
 
 #[test]
@@ -73,6 +139,7 @@ fn straight_mode_keeps_one_direct_path_when_all_ports_are_obstructed() {
     route_edges_with_mode(
         &mut edges,
         &nodes,
+        &[],
         FlowDirection::LeftToRight,
         RoutingMode::Straight,
     );
@@ -119,6 +186,7 @@ fn straight_mode_selects_an_alternate_port_to_avoid_an_intermediate_node() {
     route_edges_with_mode(
         &mut edges,
         &nodes,
+        &[],
         FlowDirection::LeftToRight,
         RoutingMode::Straight,
     );
@@ -179,11 +247,12 @@ fn straight_mode_reassigns_ports_to_avoid_an_avoidable_route_crossing() {
     assert!(paths_conflict(&first_natural, &second_natural));
 
     let mut edges = [edge("source-a", "target-a"), edge("source-b", "target-b")];
-    route_edges_with_mode(&mut edges, &nodes, direction, RoutingMode::Straight);
+    route_edges_with_mode(&mut edges, &nodes, &[], direction, RoutingMode::Straight);
     let mut reversed_edges = [edge("source-b", "target-b"), edge("source-a", "target-a")];
     route_edges_with_mode(
         &mut reversed_edges,
         &nodes,
+        &[],
         direction,
         RoutingMode::Straight,
     );

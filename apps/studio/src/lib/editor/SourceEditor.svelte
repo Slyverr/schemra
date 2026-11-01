@@ -9,12 +9,12 @@
 	} from '../schemra.js';
 	import { createBracketMatcher } from './bracket-matching.js';
 	import { getCaretScrollAdjustment } from './caret-visibility.js';
+	import EditorDiagnosticTooltip from './EditorDiagnosticTooltip.svelte';
 	import EditorCompletions from './EditorCompletions.svelte';
 	import { getDelimiterEdit } from './delimiters.js';
 	import { formatSourceForSave } from './format-on-save.js';
 	import { getIndentedNewlineEdit, getIndentationEdit } from './indentation.js';
 	import {
-		diagnosticQuickFixOptions,
 		type RefactorDiagnostic,
 		type RefactorSymbol
 	} from './editor-refactors.js';
@@ -42,11 +42,9 @@
 		type EditorPreferences
 	} from '../settings/editor.js';
 	import { studioMessage } from '../i18n/messages.js';
-	import { Button } from '../components/ui/button/index.js';
 	import {
 		editorClasses,
-		inlineDiagnosticClasses,
-		tooltipSeverityClasses
+		inlineDiagnosticClasses
 	} from './editor-classes.js';
 	import { cn } from '#lib/utils.js';
 
@@ -79,13 +77,10 @@
 		items: Array<{ label: string; insert_text: string; detail: string; kind: string }>;
 	}
 
-	interface TooltipState {
-		key: string;
-		diagnostic: EditorDiagnostic;
-		left: number;
-		top: number;
-		maxWidth: number;
-		maxHeight: number;
+	interface DiagnosticTooltipApi {
+		show: (event: PointerEvent, diagnostic: EditorDiagnostic | null) => void;
+		handleLeave: (event: PointerEvent) => void;
+		clear: () => void;
 	}
 
 	const props: Props = $props();
@@ -95,7 +90,6 @@
 	const baseLineHeight = 24;
 	const verticalPadding = 8;
 	const baseFontSize = 14;
-	const diagnosticHoverDelayMs = 400;
 	const matcher = createBracketMatcher();
 
 	let root = $state<HTMLDivElement>();
@@ -104,7 +98,7 @@
 	let highlightedLines = $state<HTMLElement>();
 	let gutterLines = $state<HTMLDivElement>();
 	let input = $state<HTMLTextAreaElement>();
-	let tooltipElement = $state<HTMLDivElement>();
+	let diagnosticTooltip = $state<DiagnosticTooltipApi>();
 	let completion = $state<CompletionState | null>(null);
 	let selectedCompletion = $state(0);
 	let completionPosition = $state({ left: 8, top: 24, width: 288 });
@@ -116,12 +110,9 @@
 	let compiledSource = $state<string | null>(null);
 	let matchingOffsets = $state<ReadonlySet<number>>(new Set());
 	let scopeGuidePositions = $state<Record<number, { left: number; top: number; height: number }>>({});
-	let tooltip = $state<TooltipState | null>(null);
 	let gutterScrollTop = $state(0);
 	let compileTimer: ReturnType<typeof setTimeout> | undefined;
 	let completionTimer: ReturnType<typeof setTimeout> | undefined;
-	let tooltipTimer: ReturnType<typeof setTimeout> | undefined;
-	let pendingTooltip: TooltipState | null = null;
 	let compileRequestId = 0;
 	let completionRequestId = 0;
 	let lastNavigationRequestId = 0;
@@ -141,16 +132,6 @@
 	const lines = $derived(buildEditorLines(props.source, visibleTokens, visibleDiagnostics, matchingOffsets));
 	const activeLineIndex = $derived(props.source.slice(0, caretOffset(selection)).split('\n').length - 1);
 	const completionActiveId = $derived(completion ? `${completionListId}-${selectedCompletion}` : undefined);
-	const tooltipQuickFixes = $derived.by(() => {
-		if (!tooltip) return { diagnostic: null, options: [] };
-		const diagnostic = refactorDiagnosticFor(tooltip.diagnostic);
-		return {
-			diagnostic,
-			options: diagnostic
-				? diagnosticQuickFixOptions(props.source, props.refactorSymbols ?? [], diagnostic)
-				: []
-		};
-	});
 
 	function describeDiagnostic(diagnostic: EditorDiagnostic) {
 		const severity = diagnostic.severity === 'error'
@@ -318,7 +299,6 @@
 		if (!root || typeof ResizeObserver === 'undefined') return;
 		const observer = new ResizeObserver(() => {
 			scheduleScopeGuideMeasurement();
-			if (tooltip) scheduleTooltipPlacement(tooltip.key);
 		});
 		observer.observe(root);
 		return () => observer.disconnect();
@@ -327,7 +307,6 @@
 	onDestroy(() => {
 		clearTimeout(compileTimer);
 		clearTimeout(completionTimer);
-		clearTimeout(tooltipTimer);
 		if (measureFrame) cancelAnimationFrame(measureFrame);
 		if (caretVisibilityFrame) cancelAnimationFrame(caretVisibilityFrame);
 		compileRequestId += 1;
@@ -671,7 +650,7 @@
 			return;
 		}
 		const diagnostic = getEditorDiagnosticAtColumn(line, position.column - 1);
-		handleDiagnosticEnter(event, diagnostic);
+		diagnosticTooltip?.show(event, diagnostic);
 	}
 
 	function scheduleCompletions(explicit: boolean, text = input?.value, cursor = input?.selectionStart) {
@@ -744,66 +723,6 @@
 		completion = null;
 	}
 
-	function handleDiagnosticEnter(event: PointerEvent, diagnostic: EditorDiagnostic | null) {
-		if (preferences.diagnosticPresentation !== 'hover') {
-			clearTooltip();
-			return;
-		}
-		if (!diagnostic) {
-			clearTooltip();
-			return;
-		}
-		const key = diagnosticKey(diagnostic);
-		const bounds = root?.getBoundingClientRect();
-		if (!bounds) return;
-		const target: TooltipState = {
-			key,
-			diagnostic,
-			left: event.clientX - bounds.left + 12,
-			top: event.clientY - bounds.top + 14,
-			maxWidth: Math.max(120, root!.clientWidth - 16),
-			maxHeight: Math.max(80, root!.clientHeight - 16)
-		};
-		if (tooltip?.key === key) {
-			tooltip = target;
-			scheduleTooltipPlacement(key);
-			return;
-		}
-		if (pendingTooltip?.key === key) {
-			pendingTooltip = target;
-			return;
-		}
-		clearTimeout(tooltipTimer);
-		tooltip = null;
-		pendingTooltip = target;
-		tooltipTimer = setTimeout(() => {
-			tooltip = pendingTooltip;
-			pendingTooltip = null;
-			tooltipTimer = undefined;
-			if (tooltip?.key === key) scheduleTooltipPlacement(key);
-		}, diagnosticHoverDelayMs);
-	}
-
-	function diagnosticKey(diagnostic: EditorDiagnostic) {
-		return `${diagnostic.code}:${diagnostic.span.start.line}:${diagnostic.span.start.column}:${diagnostic.span.end.line}:${diagnostic.span.end.column}`;
-	}
-
-	function refactorDiagnosticFor(diagnostic: EditorDiagnostic) {
-		return props.refactorDiagnostics?.find((candidate) =>
-			candidate.code === diagnostic.code &&
-			candidate.message === diagnostic.message &&
-			candidate.span.start.line === diagnostic.span.start.line &&
-			candidate.span.start.column === diagnostic.span.start.column &&
-			candidate.span.end.line === diagnostic.span.end.line &&
-			candidate.span.end.column === diagnostic.span.end.column
-		) ?? null;
-	}
-
-	function applyQuickFix(diagnostic: RefactorDiagnostic, replacement: string) {
-		clearTooltip();
-		props.onQuickFix?.(diagnostic, replacement);
-	}
-
 	function firstLineDiagnostic(items: readonly EditorDiagnostic[], lineNumber: number) {
 		const lineItems = items.filter((item) => item.span.start.line === lineNumber);
 		return lineItems.find((item) => item.severity === 'error') ??
@@ -812,25 +731,11 @@
 	}
 
 	function handleDiagnosticLeave(event: PointerEvent) {
-		if ((event.relatedTarget as Element | null)?.closest('.editor-diagnostic-tooltip')) return;
-		clearTooltip();
-	}
-
-	function scheduleTooltipPlacement(key: string) {
-		void tick().then(() => {
-			if (!tooltip || tooltip.key !== key || !tooltipElement || !root) return;
-			const elementRect = tooltipElement.getBoundingClientRect();
-			const left = Math.max(8, Math.min(tooltip.left, root.clientWidth - elementRect.width - 8));
-			const top = Math.max(8, Math.min(tooltip.top, root.clientHeight - elementRect.height - 8));
-			if (left !== tooltip.left || top !== tooltip.top) tooltip = { ...tooltip, left, top };
-		});
+		diagnosticTooltip?.handleLeave(event);
 	}
 
 	function clearTooltip() {
-		clearTimeout(tooltipTimer);
-		tooltipTimer = undefined;
-		pendingTooltip = null;
-		tooltip = null;
+		diagnosticTooltip?.clear();
 	}
 
 	function scheduleScopeGuideMeasurement() {
@@ -970,48 +875,15 @@
 			></textarea>
 		</div>
 	</div>
-	{#if tooltip}
-		<div
-			bind:this={tooltipElement}
-			class={cn(
-				editorClasses.tooltip,
-				tooltip.diagnostic.severity === 'error' && editorClasses.tooltipError,
-				`diagnostic-${tooltip.diagnostic.severity}`
-			)}
-			role="status"
-			style:left={`${tooltip.left}px`}
-			style:top={`${tooltip.top}px`}
-			style:max-width={`${tooltip.maxWidth}px`}
-			style:max-height={`${tooltip.maxHeight}px`}
-			onpointerleave={handleDiagnosticLeave}
-		>
-			<strong class={cn(editorClasses.tooltipSeverity, tooltipSeverityClasses[tooltip.diagnostic.severity])}>
-				{tooltip.diagnostic.severity}
-			</strong>: {tooltip.diagnostic.message}
-			{#if tooltip.diagnostic.hint}
-				<div class={editorClasses.tooltipHint}>{tooltip.diagnostic.hint}</div>
-			{/if}
-			{#if tooltipQuickFixes.options.length > 0 && props.onQuickFix && tooltipQuickFixes.diagnostic}
-				<div class={editorClasses.quickFixes}>
-					<span>{studioMessage('editor.quickFixReplace')}</span>
-					{#each tooltipQuickFixes.options as quickFix (`${tooltipQuickFixes.diagnostic.code}-${quickFix.replacement}`)}
-						<Button
-							variant="outline"
-							size="xs"
-							class={editorClasses.quickFixButton}
-							type="button"
-							disabled={props.quickFixDisabled}
-							onpointerdown={(event) => event.preventDefault()}
-							onclick={(event) => {
-								event.stopPropagation();
-								if (tooltipQuickFixes.diagnostic) applyQuickFix(tooltipQuickFixes.diagnostic, quickFix.replacement);
-							}}
-						>{quickFix.replacement}</Button>
-					{/each}
-				</div>
-			{/if}
-		</div>
-	{/if}
+	<EditorDiagnosticTooltip
+		bind:this={diagnosticTooltip}
+		root={root}
+		source={props.source}
+		refactorDiagnostics={props.refactorDiagnostics}
+		refactorSymbols={props.refactorSymbols}
+		quickFixDisabled={props.quickFixDisabled}
+		onQuickFix={props.onQuickFix}
+	/>
 	{#if visibleDiagnostics.length}
 		<ul id={diagnosticListId} class="sr-only" aria-label={studioMessage('editor.diagnosticList')}>
 			{#each visibleDiagnostics as diagnostic, index (`${diagnostic.code}-${index}`)}

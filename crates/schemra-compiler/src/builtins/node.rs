@@ -1,4 +1,4 @@
-use schemra_ir::{NodeId, NodeIr};
+use schemra_ir::{NodeId, NodeIr, NodeLayout, NodeTextAlign};
 use schemra_syntax::{Diagnostic, TokenKind};
 
 use crate::compiler::{LoweredItem, LoweringContext, ValidatedConstruct};
@@ -44,6 +44,14 @@ fn lower(
             .to_owned(),
         icon: crate::compiler::string_property(body, "icon"),
         detail: crate::compiler::string_property(body, "detail"),
+        layout: match crate::compiler::scalar_property(body, "layout").as_deref() {
+            Some("vertical" | "column") => NodeLayout::Vertical,
+            _ => NodeLayout::Horizontal,
+        },
+        text_align: match crate::compiler::scalar_property(body, "text_align").as_deref() {
+            Some("center") => NodeTextAlign::Center,
+            _ => NodeTextAlign::Left,
+        },
         group: construct.parent_group.clone(),
         span: construct.statement.span,
     }))

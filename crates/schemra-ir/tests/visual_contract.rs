@@ -1,6 +1,6 @@
 use schemra_ir::{
     Direction, EdgeDirectionality, EdgeIr, GroupId, GroupIr, GroupLayout, NodeId, NodeIr,
-    SourceLocation, SourceSpan, VisualId, VisualIr,
+    NodeLayout, NodeTextAlign, SourceLocation, SourceSpan, VisualId, VisualIr,
 };
 
 fn span(start: usize, end: usize) -> SourceSpan {
@@ -41,6 +41,8 @@ fn visual_ir_models_typed_groups_nodes_and_link_endpoints() {
             label: "Reverse proxy".into(),
             icon: Some("server".into()),
             detail: None,
+            layout: NodeLayout::Vertical,
+            text_align: NodeTextAlign::Center,
             group: Some(GroupId("application".into())),
             span: node_span,
         }],
@@ -56,6 +58,8 @@ fn visual_ir_models_typed_groups_nodes_and_link_endpoints() {
     };
 
     assert_eq!(visual.nodes[0].group, Some(GroupId("application".into())));
+    assert_eq!(visual.nodes[0].layout, NodeLayout::Vertical);
+    assert_eq!(visual.nodes[0].text_align, NodeTextAlign::Center);
     assert_eq!(visual.edges[0].from, visual.nodes[0].id);
     assert_eq!(visual.edges[0].directionality, EdgeDirectionality::Directed);
     assert_eq!(visual.edges[0].from_span, span(31, 36));
@@ -66,6 +70,8 @@ fn visual_ir_models_typed_groups_nodes_and_link_endpoints() {
 fn visual_layout_and_direction_defaults_are_explicit_and_stable() {
     assert_eq!(Direction::default(), Direction::LeftToRight);
     assert_eq!(GroupLayout::default(), GroupLayout::Auto);
+    assert_eq!(NodeLayout::default(), NodeLayout::Horizontal);
+    assert_eq!(NodeTextAlign::default(), NodeTextAlign::Left);
 }
 
 #[test]

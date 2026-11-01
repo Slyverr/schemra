@@ -330,7 +330,7 @@ export function sanitizeSvgMarkup(
 			if (name === 'href' && !/^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/]+=*$/i.test(attribute.value)) {
 				element.removeAttribute(name);
 			}
-			if (['fill', 'stroke', 'flood-color'].includes(name) && !isSafeColor(attribute.value)) {
+			if (['fill', 'stroke', 'flood-color'].includes(name) && !isSafeSvgColor(attribute.value)) {
 				element.removeAttribute(name);
 			}
 			if (name === 'filter' && attribute.value !== 'url(#schemra-shadow)') {
@@ -357,10 +357,13 @@ function omitCanvasBackground(root: Element): void {
 		Number(element.getAttribute('width')) === width &&
 		Number(element.getAttribute('height')) === height
 	);
+	const fill = background?.getAttribute('fill');
+	if (fill && isSafeSvgColor(fill)) root.setAttribute('data-schemra-canvas-background', fill);
 	background?.remove();
 }
 
-function isSafeColor(value: string): boolean {
+export function isSafeSvgColor(value: string | null): value is string {
+	if (value === null) return false;
 	return /^#[a-f0-9]{3,8}$/i.test(value) || /^[a-z]{1,32}$/i.test(value);
 }
 

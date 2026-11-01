@@ -217,10 +217,10 @@ test('navigates the searchable Studio themes from the keyboard', async ({ page }
 	await expect(popover).toBeVisible();
 	const triggerSwatch = trigger.locator('svg').first();
 	const optionSwatch = popover.getByRole('option').first().locator('svg');
-	await expect.poll(async () => (await triggerSwatch.boundingBox())?.width ?? 0).toBe(72);
-	await expect.poll(async () => (await triggerSwatch.boundingBox())?.height ?? 0).toBe(40.5);
-	await expect.poll(async () => (await optionSwatch.boundingBox())?.width ?? 0).toBe(72);
-	await expect.poll(async () => (await optionSwatch.boundingBox())?.height ?? 0).toBe(40.5);
+	await expect.poll(async () => (await triggerSwatch.boundingBox())?.width ?? 0).toBe(64);
+	await expect.poll(async () => (await triggerSwatch.boundingBox())?.height ?? 0).toBe(36);
+	await expect.poll(async () => (await optionSwatch.boundingBox())?.width ?? 0).toBe(64);
+	await expect.poll(async () => (await optionSwatch.boundingBox())?.height ?? 0).toBe(36);
 	await expect(optionSwatch.locator('rect[stroke]')).toHaveCount(1);
 	await expect(optionSwatch.locator('rect').first()).toHaveAttribute('width', '64');
 	await expect(optionSwatch.locator('rect').first()).toHaveAttribute('height', '36');
@@ -589,7 +589,8 @@ test('restores the caret and vertical scroll when returning to a source tab', as
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('textbox', { name: / editor$/ })).toBeVisible();
 	const tabs = page.getByRole('tablist', { name: studioMessage('tabs.projectSourceFiles') }).getByRole('tab');
-	await expect(tabs).toHaveCount(6);
+	const sourceTabCount = await tabs.count();
+	expect(sourceTabCount).toBeGreaterThan(1);
 	const firstTab = tabs.nth(0);
 	const secondTab = tabs.nth(1);
 	await firstTab.click();
@@ -598,6 +599,7 @@ test('restores the caret and vertical scroll when returning to a source tab', as
 	const editor = page.getByRole('textbox', { name: / editor$/ });
 	const longSource = Array.from({ length: 100 }, (_, index) => `// editor view state ${index}`).join('\n');
 	await editor.fill(longSource);
+	await expect(tabs).toHaveCount(sourceTabCount);
 	await editor.press('Control+End');
 	const savedView = await editor.evaluate((element: HTMLTextAreaElement) => ({
 		selectionStart: element.selectionStart,

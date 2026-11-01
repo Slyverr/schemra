@@ -11,7 +11,7 @@
 
 <Dialog.Root bind:open>
 	{#if open}
-		<Dialog.Content class="max-h-[calc(100dvh-2rem)] w-full gap-5 overflow-y-auto p-5 sm:max-w-2xl sm:p-6" showCloseButton={false}>
+		<Dialog.Content class="max-h-[calc(100dvh-2rem)] w-full gap-5 overflow-y-auto p-5 sm:max-w-2xl sm:p-6">
 			<Dialog.Header class="flex-row items-start justify-between gap-4 pr-9">
 				<div class="min-w-0">
 					<Dialog.Title id={`${instanceId}-title`} class="text-base font-semibold">{studioMessage('reference.title')}</Dialog.Title>

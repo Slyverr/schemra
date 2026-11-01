@@ -63,6 +63,14 @@ pub(super) const NODE_PROPERTIES: &[crate::PropertySpec] = &[
         name: "detail",
         kind: crate::PropertyKind::String,
     },
+    crate::PropertySpec {
+        name: "layout",
+        kind: crate::PropertyKind::Value(&["horizontal", "vertical", "row", "column"]),
+    },
+    crate::PropertySpec {
+        name: "text_align",
+        kind: crate::PropertyKind::Value(&["left", "center"]),
+    },
 ];
 
 pub(super) const TOKEN_PROPERTIES: &[crate::PropertySpec] = &[

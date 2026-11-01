@@ -33,7 +33,7 @@
 
 <Dialog.Root open={open} onOpenChange={handleOpenChange}>
 	{#if open}
-		<Dialog.Content class="max-h-[calc(100dvh-2rem)] w-full gap-4 overflow-y-auto p-[1.1rem] sm:max-w-md" showCloseButton={false}>
+		<Dialog.Content class="max-h-[calc(100dvh-2rem)] w-full gap-4 overflow-y-auto p-[1.1rem] sm:max-w-md">
 			<Dialog.Header class="gap-1.5 pr-9">
 				<Dialog.Title id="symbol-rename-title" class="text-base font-semibold leading-6">
 					{studioMessage('symbolRename.title', { kind })}

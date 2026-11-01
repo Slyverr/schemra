@@ -3,7 +3,8 @@
 use std::collections::{HashMap, HashSet};
 
 use schemra_scene::{
-    CubicBezier, FlowDirection, Rect, SceneEdge, SceneNode, SceneRouteDiagnostic, SceneRouteStatus,
+    CubicBezier, FlowDirection, Rect, SceneEdge, SceneGroup, SceneNode, SceneRouteDiagnostic,
+    SceneRouteStatus,
 };
 
 mod geometry;
@@ -11,7 +12,9 @@ mod straight;
 
 pub(crate) use geometry::RouteGeometry;
 
-use geometry::{Side, center, direct_connector, natural_sides, paths_conflict, side_anchor};
+use geometry::{
+    Side, center, direct_connector, group_title_bounds, natural_sides, paths_conflict, side_anchor,
+};
 use straight::{SharedTargetRequest, choose_direct_pair, choose_shared_target_face};
 
 #[cfg(test)]
@@ -30,13 +33,19 @@ struct EdgePlan {
 }
 
 /// Routes each edge as a straight connector between the four centered node ports.
-pub(super) fn route_edges(edges: &mut [SceneEdge], nodes: &[SceneNode], direction: FlowDirection) {
-    route_edges_with_mode(edges, nodes, direction, RoutingMode::Straight);
+pub(super) fn route_edges(
+    edges: &mut [SceneEdge],
+    nodes: &[SceneNode],
+    groups: &[SceneGroup],
+    direction: FlowDirection,
+) {
+    route_edges_with_mode(edges, nodes, groups, direction, RoutingMode::Straight);
 }
 
 fn route_edges_with_mode(
     edges: &mut [SceneEdge],
     nodes: &[SceneNode],
+    groups: &[SceneGroup],
     direction: FlowDirection,
     mode: RoutingMode,
 ) {
@@ -53,6 +62,10 @@ fn route_edges_with_mode(
         .iter()
         .map(|node| (node.id.as_str(), node.bounds))
         .collect::<HashMap<_, _>>();
+    let group_title_obstacles = groups
+        .iter()
+        .filter_map(group_title_bounds)
+        .collect::<Vec<_>>();
     let reciprocal_pairs = compatible_reciprocals(edges);
     let mut reverse_indices = HashSet::new();
     let mut reciprocal_for = HashMap::new();
@@ -89,6 +102,7 @@ fn route_edges_with_mode(
                 .iter()
                 .filter(|node| node.id != source_id)
                 .map(|node| node.bounds)
+                .chain(group_title_obstacles.iter().copied())
                 .collect::<Vec<_>>();
             route_self_link(&mut edges[*index], source, &obstacles, mode);
             continue;
@@ -124,6 +138,7 @@ fn route_edges_with_mode(
                         .iter()
                         .filter(|node| node.id != edge.from && node.id != edge.to)
                         .map(|node| node.bounds)
+                        .chain(group_title_obstacles.iter().copied())
                         .collect::<Vec<_>>(),
                 )
             })
@@ -289,6 +304,7 @@ fn route_edges_with_mode(
             .iter()
             .filter(|node| node.id != edge.from && node.id != edge.to)
             .map(|node| node.bounds)
+            .chain(group_title_obstacles.iter().copied())
             .collect::<Vec<_>>();
         let actual_direct_obstruction_count =
             geometry::path_obstacle_intersections(&direct_path, &obstacles);
@@ -341,7 +357,7 @@ fn route_edges_with_mode(
                 "straight connector between assigned face anchors".into()
             },
             message: (obstruction_count > 0).then(|| {
-                format!("The selected straight connector intersects {obstruction_count} node(s).")
+                format!("The selected straight connector intersects {obstruction_count} scene obstacle(s).")
             }),
         });
         if let Some(reverse) = reciprocal_for.get(index).copied() {

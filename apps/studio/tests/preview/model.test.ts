@@ -223,6 +223,39 @@ describe('diagram preview model', () => {
 		expect(markup).toContain('letter-spacing="1.1"');
 	});
 
+	test('preserves the sanitized canvas color when removing the background for the grid canvas', () => {
+		const background = {
+			localName: 'rect',
+			hasAttribute: () => false,
+			getAttribute: (name: string) => ({ width: '100', height: '50', fill: '#f8fafc' })[name as 'width' | 'height' | 'fill'] ?? null,
+			remove: () => { removed = true; }
+		};
+		let removed = false;
+		const attributes: Record<string, string> = { viewBox: '0 0 100 50' };
+		const root = {
+			localName: 'svg',
+			namespaceURI: 'http://www.w3.org/2000/svg',
+			children: [background],
+			querySelectorAll: () => [],
+			getAttribute: (name: string) => attributes[name] ?? null,
+			setAttribute: (name: string, value: string) => { attributes[name] = value; }
+		};
+		const parser = {
+			parseFromString: () => ({ documentElement: root, querySelector: () => null })
+		};
+		const serializer = { serializeToString: () => JSON.stringify(attributes) };
+
+		const markup = sanitizeSvgMarkup(
+			'<svg></svg>',
+			parser as unknown as DOMParser,
+			serializer as unknown as XMLSerializer,
+			{ omitCanvasBackground: true }
+		);
+
+		expect(removed).toBe(true);
+		expect(markup).toContain('data-schemra-canvas-background":"#f8fafc"');
+	});
+
 	test('clamps playback time and handles invalid durations', () => {
 		expect(previewTimeAtElapsed(-10, 100)).toBe(0);
 		expect(previewTimeAtElapsed(125, 100)).toBe(100);

@@ -1,7 +1,8 @@
 use schemra_engine::{SceneTimelineSampler, compile_timeline, layout_visual, render_svg};
 use schemra_ir::{
     ActionIr, Direction, EdgeDirectionality, EdgeIr, GroupId, GroupIr, GroupLayout, NodeId, NodeIr,
-    ScenarioId, ScenarioIr, SourceLocation, SourceSpan, TokenId, VisualId, VisualIr,
+    NodeLayout, NodeTextAlign, ScenarioId, ScenarioIr, SourceLocation, SourceSpan, TokenId,
+    VisualId, VisualIr,
 };
 use schemra_scene::SceneRouteStatus;
 
@@ -34,6 +35,8 @@ fn node(id: &str, group: Option<&str>) -> NodeIr {
         label: id.into(),
         icon: None,
         detail: None,
+        layout: NodeLayout::default(),
+        text_align: NodeTextAlign::default(),
         group: group.map(|id| GroupId(id.into())),
         span: span(),
     }

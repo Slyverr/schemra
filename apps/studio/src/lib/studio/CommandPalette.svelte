@@ -190,7 +190,6 @@
 			id={dialogId}
 			class={classes.content}
 			overlayClass={classes.overlay}
-			showCloseButton={false}
 			aria-labelledby={`${instanceId}-title`}
 			aria-describedby={`${instanceId}-description`}
 		onkeydown={handleKeydown}
