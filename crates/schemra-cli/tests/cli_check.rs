@@ -39,12 +39,10 @@ impl Drop for TempProject {
     }
 }
 
-fn run_check(root: &Path, input: &Path, json: bool) -> Output {
+fn run_check(root: &Path, input: &Path, options: &[&str]) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_schemra"));
     command.arg("check").arg(input).arg("--root").arg(root);
-    if json {
-        command.arg("--json");
-    }
+    command.args(options);
     command.output().expect("the Schemra CLI should start")
 }
 
@@ -62,7 +60,7 @@ fn check_accepts_a_visual_and_linked_scenario_project() {
     project.write("visuals/network.schemra", visual_source());
     let scenario = project.write("scenarios/requests.schemra", scenario_source());
 
-    let output = run_check(project.root(), &scenario, false);
+    let output = run_check(project.root(), &scenario, &[]);
 
     assert!(output.status.success());
     assert!(String::from_utf8_lossy(&output.stdout).contains("Valid Schemra scenario"));
@@ -77,7 +75,7 @@ fn check_reports_semantic_errors_with_a_failing_exit_status() {
         "scenario requests for visual network {\n  token packet {}\n  move packet from client -> nowhere { duration: 100ms }\n}\n",
     );
 
-    let output = run_check(project.root(), &scenario, false);
+    let output = run_check(project.root(), &scenario, &[]);
     let diagnostics = String::from_utf8_lossy(&output.stderr);
 
     assert_eq!(output.status.code(), Some(1));
@@ -89,7 +87,7 @@ fn check_rejects_a_source_that_does_not_define_a_visual_or_scenario() {
     let project = TempProject::new();
     let source = project.write("notes/empty.schemra", "\n");
 
-    let output = run_check(project.root(), &source, false);
+    let output = run_check(project.root(), &source, &[]);
 
     assert_eq!(output.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&output.stderr).contains("does not contain a visual"));
@@ -103,7 +101,7 @@ fn check_json_contains_machine_readable_diagnostics() {
         "visual network {\n node client {}\n",
     );
 
-    let output = run_check(project.root(), &visual, true);
+    let output = run_check(project.root(), &visual, &["--json"]);
     let report: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("check output should be JSON");
 
@@ -119,7 +117,7 @@ fn check_rejects_source_files_outside_the_project_root() {
     let outside = TempProject::new();
     let source = outside.write("network.schemra", visual_source());
 
-    let output = run_check(project.root(), &source, false);
+    let output = run_check(project.root(), &source, &[]);
 
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stderr).contains("outside project root"));
@@ -132,7 +130,7 @@ fn check_ignores_generated_source_files_and_orders_project_discovery() {
     project.write("target/generated.schemra", "not valid Schemra");
     project.write(".schemra/cache/generated.schemra", "not valid Schemra");
 
-    let output = run_check(project.root(), &selected, false);
+    let output = run_check(project.root(), &selected, &[]);
 
     assert!(output.status.success());
 }
@@ -147,10 +145,29 @@ fn scenario_check_is_limited_to_the_selected_file_but_visual_check_checks_all_sc
         "scenario broken for visual network {\n  token packet {}\n  move packet from client -> nowhere { duration: 100ms }\n}\n",
     );
 
-    let selected_scenario = run_check(project.root(), &valid_scenario, false);
-    let selected_visual = run_check(project.root(), &visual, false);
+    let selected_scenario = run_check(project.root(), &valid_scenario, &[]);
+    let selected_visual = run_check(project.root(), &visual, &[]);
 
     assert!(selected_scenario.status.success());
     assert_eq!(selected_visual.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&selected_visual.stderr).contains("E_UNKNOWN_MOVE_NODE"));
+}
+
+#[test]
+fn strict_check_flag_is_accepted_for_valid_and_invalid_sources() {
+    let project = TempProject::new();
+    let visual = project.write("visuals/network.schemra", visual_source());
+
+    let strict_valid = run_check(project.root(), &visual, &["--strict"]);
+    assert!(strict_valid.status.success());
+
+    let invalid = project.write(
+        "visuals/invalid.schemra",
+        "visual network {\n  node client {}\n  client -> nowhere\n}\n",
+    );
+    let strict_invalid = run_check(project.root(), &invalid, &["--strict", "--json"]);
+    let report: serde_json::Value = serde_json::from_slice(&strict_invalid.stdout)
+        .expect("strict check output should remain JSON");
+    assert_eq!(strict_invalid.status.code(), Some(1));
+    assert_eq!(report["ok"], false);
 }

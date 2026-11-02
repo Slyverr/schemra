@@ -119,7 +119,10 @@ impl LoweringContext<'_> {
         scope: Scope,
         parent_group: Option<GroupId>,
     ) -> Result<LoweredItem, Diagnostic> {
-        let StatementKind::Invocation { name, .. } = &statement.kind else {
+        let StatementKind::Invocation {
+            name, arguments, ..
+        } = &statement.kind
+        else {
             return Ok(LoweredItem::Ignored);
         };
         let Some(handler) = self.registry.handler(&name.text) else {
@@ -133,6 +136,9 @@ impl LoweringContext<'_> {
                 None::<String>,
             ));
         };
+        if !self.registry.header_is_valid(&name.text, arguments) {
+            return Ok(LoweredItem::Ignored);
+        }
         handler.lower(
             &ValidatedConstruct {
                 statement,
@@ -153,7 +159,7 @@ impl LoweringContext<'_> {
             .and_then(|name| self.registry.spec(name))
             .and_then(|spec| match spec.body {
                 BodySpec::Scope(scope) => Some(scope),
-                BodySpec::None | BodySpec::Properties(_) => None,
+                BodySpec::None | BodySpec::Properties(_) | BodySpec::OptionalProperties(_) => None,
             })
         else {
             return Ok(Vec::new());

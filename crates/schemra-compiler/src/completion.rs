@@ -188,7 +188,9 @@ fn active_scope(tokens: &[Token], registry: &Registry, cursor: usize) -> Scope {
                         .first()
                         .and_then(|name| registry.spec(&name.text))
                         .and_then(|spec| match spec.body {
-                            BodySpec::Properties(scope) | BodySpec::Scope(scope) => Some(scope),
+                            BodySpec::Properties(scope)
+                            | BodySpec::OptionalProperties(scope)
+                            | BodySpec::Scope(scope) => Some(scope),
                             BodySpec::None => None,
                         })
                 };

@@ -162,8 +162,8 @@
 			'pane-resizer group relative z-10 flex touch-none items-center justify-center bg-transparent text-muted-foreground outline-none hover:bg-transparent focus-visible:ring-2 focus-visible:ring-ring/50',
 			focusedPane !== null ? 'hidden' : '',
 			paneLayoutWide
-				? 'h-auto w-3 min-w-0 flex-[0_0_.75rem] -mx-1.5 cursor-col-resize'
-				: 'h-3 w-full min-h-0 flex-[0_0_.75rem] -my-1.5 cursor-row-resize'
+				? 'h-auto w-3 min-w-0 flex-[0_0_.75rem] cursor-col-resize'
+				: 'h-3 w-full min-h-0 flex-[0_0_.75rem] cursor-row-resize'
 		].filter(Boolean).join(' ')}
 		role="separator"
 		aria-orientation={paneLayoutWide ? 'vertical' : 'horizontal'}

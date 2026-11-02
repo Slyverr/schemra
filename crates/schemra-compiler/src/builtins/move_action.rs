@@ -12,7 +12,7 @@ static SPEC: ConstructSpec = ConstructSpec {
     name: "move",
     contexts: ACTION_SCOPE,
     header: MOVE_HEADER,
-    body: BodySpec::Properties(Scope::Action),
+    body: BodySpec::OptionalProperties(Scope::Action),
     properties: MOVE_PROPERTIES,
 };
 

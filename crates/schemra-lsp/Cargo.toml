@@ -13,6 +13,7 @@ path = "src/main.rs"
 lsp-server.workspace = true
 lsp-types.workspace = true
 schemra-compiler.workspace = true
+schemra-engine.workspace = true
 schemra-project.workspace = true
 schemra-syntax.workspace = true
 serde.workspace = true

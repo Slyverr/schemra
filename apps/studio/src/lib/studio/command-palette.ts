@@ -156,30 +156,6 @@ export function firstCommandPaletteSelection(entries: readonly CommandPaletteEnt
 	return entries.findIndex((entry) => !entry.disabled);
 }
 
-export function lastCommandPaletteSelection(entries: readonly CommandPaletteEntry[]): number {
-	for (let index = entries.length - 1; index >= 0; index -= 1) {
-		if (!entries[index]?.disabled) return index;
-	}
-	return -1;
-}
-
-/** Move the active result with wraparound while skipping unavailable actions. */
-export function moveCommandPaletteSelection(
-	entries: readonly CommandPaletteEntry[],
-	currentIndex: number,
-	direction: -1 | 1
-): number {
-	if (entries.length === 0) return -1;
-	const startIndex = Number.isInteger(currentIndex) && currentIndex >= 0 && currentIndex < entries.length
-		? currentIndex
-		: direction === 1 ? -1 : 0;
-	for (let step = 1; step <= entries.length; step += 1) {
-		const candidate = (startIndex + direction * step + entries.length) % entries.length;
-		if (!entries[candidate]?.disabled) return candidate;
-	}
-	return -1;
-}
-
 /** Return file kind from its DSL declaration, falling back to the conventional project folder. */
 export function commandPaletteFileKind(file: Pick<PaletteDocument, 'path' | 'source'>): CommandPaletteFileEntry['kind'] {
 	const declared = /^\s*(visual|scenario)\b/m.exec(file.source)?.[1];

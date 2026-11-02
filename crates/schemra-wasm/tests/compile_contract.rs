@@ -87,6 +87,83 @@ fn project_compilation_links_scenario_files_to_their_visual() {
 }
 
 #[test]
+fn project_compilation_keeps_visual_and_valid_scenarios_when_one_scenario_is_invalid() {
+    let invalid_scenario = r#"scenario broken for visual network {
+  token packet { icon: "mail" }
+  move packet from client -> missing_node { duration: 100ms }
+}
+"#;
+    let sources = json!({
+        "sources": [
+            { "id": "visual", "path": "visuals/network.schemra", "source": VISUAL },
+            { "id": "valid", "path": "scenarios/requests.schemra", "source": SCENARIO },
+            { "id": "broken", "path": "scenarios/broken.schemra", "source": invalid_scenario }
+        ]
+    });
+    let output = parse_json(&compile_project_schemra(&sources.to_string()));
+    let visual = &output["visuals"][0]["output"];
+
+    assert_eq!(visual["ok"], false);
+    assert!(
+        visual["svg"]
+            .as_str()
+            .is_some_and(|svg| svg.contains("<svg"))
+    );
+    assert!(visual["scene"].is_object());
+    assert_eq!(
+        visual["scenarios"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|scenario| scenario["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["requests"]
+    );
+    assert!(
+        visual["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|diagnostic| diagnostic["code"] == "E_UNKNOWN_MOVE_NODE")
+    );
+}
+
+#[test]
+fn project_compilation_keeps_visual_when_scenario_has_syntax_errors() {
+    let invalid_scenario = r#"scenario broken for visual network {
+  token packet { icon: "mail" }
+  move packet from client => server { duration: 100ms }
+}
+"#;
+    let sources = json!({
+        "sources": [
+            { "id": "visual", "path": "visuals/network.schemra", "source": VISUAL },
+            { "id": "broken", "path": "scenarios/broken.schemra", "source": invalid_scenario }
+        ]
+    });
+    let output = parse_json(&compile_project_schemra(&sources.to_string()));
+    let visual = &output["visuals"][0]["output"];
+
+    assert_eq!(visual["ok"], false);
+    assert!(
+        visual["svg"]
+            .as_str()
+            .is_some_and(|svg| svg.contains("<svg"))
+    );
+    assert!(visual["scene"].is_object());
+    let broken_file = output["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|file| file["id"] == "broken")
+        .expect("broken scenario source remains in the project output");
+    assert!(
+        !broken_file["diagnostics"].as_array().unwrap().is_empty(),
+        "{broken_file}"
+    );
+}
+
+#[test]
 fn project_compilation_reports_invalid_json_and_unknown_request_fields() {
     let malformed = parse_json(&compile_project_schemra("{"));
     assert!(malformed["error"].as_str().is_some());

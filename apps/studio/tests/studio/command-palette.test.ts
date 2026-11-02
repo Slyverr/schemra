@@ -4,8 +4,6 @@ import {
 	commandPaletteFileKind,
 	commandPaletteFileName,
 	firstCommandPaletteSelection,
-	lastCommandPaletteSelection,
-	moveCommandPaletteSelection,
 	searchCommandPalette,
 	type CommandPaletteContext
 } from '../../src/lib/studio/command-palette.ts';
@@ -117,23 +115,19 @@ describe('command palette entries', () => {
 		expect(commandPaletteFileName('scenarios/request-response.SCHEMRA')).toBe('request-response');
 	});
 
-	it('wraps keyboard selection and skips actions that are unavailable', () => {
+	it('chooses the first enabled result for the command primitive', () => {
 		const entries = buildCommandPaletteEntries({
 			projects: [],
 			activeProjectId: null,
 			activeFileId: null,
 			actions: [
-				{ id: 'first', label: 'First action' },
+				{ id: 'first', label: 'First action', disabled: true },
 				{ id: 'unavailable', label: 'Unavailable action', disabled: true },
 				{ id: 'last', label: 'Last action' }
 			]
 		});
 
-		expect(firstCommandPaletteSelection(entries)).toBe(0);
-		expect(lastCommandPaletteSelection(entries)).toBe(2);
-		expect(moveCommandPaletteSelection(entries, 0, 1)).toBe(2);
-		expect(moveCommandPaletteSelection(entries, 2, 1)).toBe(0);
-		expect(moveCommandPaletteSelection(entries, -1, -1)).toBe(2);
-		expect(moveCommandPaletteSelection([], 0, 1)).toBe(-1);
+		expect(firstCommandPaletteSelection(entries)).toBe(2);
+		expect(firstCommandPaletteSelection([])).toBe(-1);
 	});
 });

@@ -33,11 +33,12 @@ pub struct HeaderParam {
     pub optional: bool,
 }
 
-/// Describes whether a construct has no body, a property body, or a nested scope.
+/// Describes whether a construct has no body, an optional or required property body, or a nested scope.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BodySpec {
     None,
     Properties(Scope),
+    OptionalProperties(Scope),
     Scope(Scope),
 }
 

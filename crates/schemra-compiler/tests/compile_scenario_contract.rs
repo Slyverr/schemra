@@ -55,6 +55,32 @@ scenario requests for visual network {
 }
 
 #[test]
+fn compiles_bodyless_move_with_engine_default_duration() {
+    let module = compile(
+        r#"
+visual network {
+  node client {}
+  node server {}
+  client -> server
+}
+scenario requests for visual network {
+  token acknowledgment { char: "✓" }
+  move acknowledgment from client -> server
+}
+"#,
+    )
+    .expect("movement properties are optional");
+
+    assert!(matches!(
+        module.scenarios[0].actions.as_slice(),
+        [ActionIr::Move {
+            duration_ms: None,
+            ..
+        }]
+    ));
+}
+
+#[test]
 fn rejects_invalid_character_marker_styles() {
     let too_long = diagnostic_codes(
         r#"visual network {

@@ -1,7 +1,10 @@
 use std::{fs, path::PathBuf};
 
 use schemra_compiler::{ProjectSource, analyze_project};
-use schemra_ir::{ActionIr, EdgeDirectionality, GroupLayout, HighlightEffect, HighlightOrigin};
+use schemra_ir::{
+    ActionIr, Direction, EdgeDirectionality, GroupLayout, HighlightEffect, HighlightOrigin,
+    HighlightSide, NodeLayout, NodeTextAlign,
+};
 
 fn example_sources() -> Vec<ProjectSource> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/traffic-overview");
@@ -62,13 +65,20 @@ fn example_project_keeps_one_visual_and_links_all_scenarios() {
         analysis
             .files
             .iter()
-            .all(|file| file.diagnostics.is_empty())
+            .all(|file| file.diagnostics.is_empty()),
+        "example project diagnostics: {:?}",
+        analysis
+            .files
+            .iter()
+            .flat_map(|file| &file.diagnostics)
+            .collect::<Vec<_>>()
     );
 
     let visual_ir = analysis.files[visual.source_index]
         .visual
         .as_ref()
         .expect("the canonical source declares a visual");
+    assert_eq!(visual_ir.direction, Direction::LeftToRight);
     assert!(
         visual_ir
             .edges
@@ -81,6 +91,15 @@ fn example_project_keeps_one_visual_and_links_all_scenarios() {
             .iter()
             .any(|edge| { edge.directionality == EdgeDirectionality::Undirected })
     );
+    for index in 1..=4 {
+        let user = format!("user_{index}");
+        assert!(visual_ir.nodes.iter().any(|node| node.id.0 == user));
+        assert!(visual_ir.edges.iter().any(|edge| {
+            edge.directionality == EdgeDirectionality::Undirected
+                && edge.from.0 == user
+                && edge.to.0 == "reverse_proxy"
+        }));
+    }
 
     let scenario_ids = visual
         .scenarios
@@ -151,6 +170,13 @@ fn feature_tour_visual_demonstrates_group_layouts_and_node_metadata() {
     assert!(visual.nodes.iter().any(|node| {
         node.icon.as_deref() == Some("database")
             && node.detail.as_deref() == Some("Stores application data")
+            && node.layout == NodeLayout::Horizontal
+            && node.text_align == NodeTextAlign::Left
+    }));
+    assert!(visual.nodes.iter().any(|node| {
+        node.id.0 == "audit_worker"
+            && node.layout == NodeLayout::Vertical
+            && node.text_align == NodeTextAlign::Center
     }));
 }
 
@@ -173,6 +199,9 @@ fn feature_tour_scenario_demonstrates_all_action_and_marker_forms() {
             token.id.0 == "acknowledgment" && token.char.as_deref() == Some("✓")
         })
     );
+    assert!(scenario.tokens.iter().any(|token| {
+        token.id.0 == "response" && token.icon.as_deref() == Some("lucide/package")
+    }));
 
     let mut has_parallel_moves = false;
     let mut has_wait = false;
@@ -180,6 +209,8 @@ fn feature_tour_scenario_demonstrates_all_action_and_marker_forms() {
     let mut has_default_arrival_trace = false;
     let mut has_move_override_pulse = false;
     let mut has_independent_highlight = false;
+    let mut has_directional_trace = false;
+    let mut has_default_duration_move = false;
     visit_actions(&scenario.actions, &mut |action| match action {
         ActionIr::Parallel { actions, .. } if actions.len() == 3 => has_parallel_moves = true,
         ActionIr::Wait {
@@ -207,6 +238,24 @@ fn feature_tour_scenario_demonstrates_all_action_and_marker_forms() {
             node,
             ..
         } if node.0 == "database" => has_independent_highlight = true,
+        ActionIr::Highlight {
+            duration_ms: Some(350),
+            effect: HighlightEffect::Trace,
+            origin: HighlightOrigin::Side {
+                side: HighlightSide::Left,
+            },
+            node,
+            ..
+        } if node.0 == "reverse_proxy" => has_directional_trace = true,
+        ActionIr::Move {
+            token,
+            from,
+            to,
+            duration_ms: None,
+            ..
+        } if token.0 == "acknowledgment" && from.0 == "reverse_proxy" && to.0 == "user_3" => {
+            has_default_duration_move = true;
+        }
         ActionIr::Parallel { .. }
         | ActionIr::Sequence { .. }
         | ActionIr::Move { .. }
@@ -221,6 +270,8 @@ fn feature_tour_scenario_demonstrates_all_action_and_marker_forms() {
     assert!(has_default_arrival_trace);
     assert!(has_move_override_pulse);
     assert!(has_independent_highlight);
+    assert!(has_directional_trace);
+    assert!(has_default_duration_move);
 
     let ActionIr::Parallel { actions, .. } = &scenario.actions[0] else {
         panic!("the feature tour begins with parallel moves");

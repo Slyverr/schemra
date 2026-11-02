@@ -5,7 +5,7 @@ export const workspaceResizeGripClass =
 	'pointer-events-none absolute size-4 rounded-sm bg-background text-muted-foreground opacity-30 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100';
 
 export const workspacePanelHeaderClass =
-	'flex h-10 min-h-10 flex-[0_0_auto] items-center justify-between gap-2 border-b border-border bg-background px-3 sm:px-4';
+	'flex h-10 min-h-10 flex-[0_0_auto] items-center justify-between gap-2 border-b border-border bg-background px-3 sm:px-6';
 
 export const workspacePanelTitleClass =
 	'm-0 overflow-hidden text-ellipsis whitespace-nowrap text-[.8125rem] font-medium text-foreground';

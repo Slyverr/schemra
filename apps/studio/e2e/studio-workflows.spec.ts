@@ -74,6 +74,37 @@ test('exposes compile errors in the source tab accessibility state', async ({ pa
 	await expect.poll(() => hasDestructiveColor(selectedTab.locator('svg').first())).toBe(true);
 });
 
+test('shows rename preparation failures without shifting the workspace layout', async ({ page }) => {
+	await page.goto('/');
+	const editor = page.getByRole('textbox', { name: / editor$/ });
+	const scenarioTab = page.getByRole('tab', {
+		name: new RegExp(`^${studioMessage('sidebar.resourceKindScenario')}:`)
+	}).first();
+	await scenarioTab.click();
+	await editor.fill(`${await editor.inputValue()}\n???`);
+	const scenarioName = (await scenarioTab.locator('span').textContent())?.trim() ?? '';
+	await expect(scenarioTab).toHaveAccessibleName(studioMessage('tabs.hasErrors', { name: scenarioName }));
+
+	const visualTab = page.getByRole('tab', {
+		name: new RegExp(`^${studioMessage('sidebar.resourceKindVisual')}:`)
+	}).first();
+	await visualTab.click();
+	const visualSource = await editor.inputValue();
+	const editorTopBefore = (await editor.boundingBox())?.y;
+	const symbolOffset = visualSource.indexOf('traffic_overview') + 3;
+	await editor.evaluate((element: HTMLTextAreaElement, offset) => {
+		element.focus();
+		element.setSelectionRange(offset, offset);
+	}, symbolOffset);
+	await page.keyboard.press('F2');
+
+	const notice = page.getByRole('alert').filter({ hasText: 'Resolve project errors' });
+	await expect(notice).toBeVisible();
+	await expect.poll(() => notice.evaluate((element) => getComputedStyle(element).position)).toBe('fixed');
+	const editorTopAfter = (await editor.boundingBox())?.y;
+	expect(editorTopAfter).toBe(editorTopBefore);
+});
+
 test('keeps the new-scenario action centered and opens scenario creation', async ({ page }) => {
 	await page.setViewportSize({ width: 780, height: 600 });
 	await page.goto('/');
@@ -211,6 +242,14 @@ test('navigates the searchable Studio themes from the keyboard', async ({ page }
 	await page.getByRole('option').filter({ hasText: openSettingsLabel }).click();
 
 	const settings = page.getByRole('dialog', { name: studioMessage('settings.heading') });
+	await settings.getByRole('button', { name: studioMessage('settings.editor') }).click();
+	const moveSamples = settings.locator('code').filter({ hasText: 'move request' });
+	const savedSamples = settings.locator('code').filter({ hasText: 'Saved' });
+	const sampleCount = await moveSamples.count();
+	expect(sampleCount).toBeGreaterThan(0);
+	await expect(moveSamples).toHaveText(Array(sampleCount).fill('move request -> export'));
+	await expect(savedSamples).toHaveText(Array(sampleCount).fill('label "Saved" duration 720'));
+	await settings.getByRole('button', { name: studioMessage('settings.appearance') }).click();
 	const trigger = settings.locator('button[aria-controls="studio-theme-options"]');
 	await trigger.click();
 	const popover = settings.locator('#studio-theme-options');
@@ -319,6 +358,53 @@ test('cancels visual creation from the ResourceDialog without adding a resource'
 	await expect(visuals).toHaveCount(visualCount);
 });
 
+test('aligns desktop workspace headers and sizes the project picker to its content', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 720 });
+	await page.goto('/');
+
+	const projectLocation = page.getByRole('navigation', { name: studioMessage('header.projectLocation') });
+	const topHeader = projectLocation.locator('xpath=ancestor::header[1]');
+	const projectPicker = projectLocation.getByRole('button').first();
+	const tabsHeader = page.getByRole('navigation', { name: studioMessage('tabs.projectSourceFiles') });
+	const tabs = tabsHeader.getByRole('tablist');
+	const editorTitle = page.getByRole('heading', { name: studioMessage('pane.editor') });
+	const previewTitle = page.getByRole('heading', { name: studioMessage('pane.preview') });
+	const editorHeader = page.locator('header').filter({ has: editorTitle });
+	const previewHeader = page.locator('header').filter({ has: previewTitle });
+
+	const [headerBounds, pickerBounds, tabsHeaderBounds, tabsBounds, editorHeaderBounds, editorBounds, previewHeaderBounds, previewBounds] = await Promise.all([
+		topHeader.boundingBox(),
+		projectPicker.boundingBox(),
+		tabsHeader.boundingBox(),
+		tabs.boundingBox(),
+		editorHeader.boundingBox(),
+		editorTitle.boundingBox(),
+		previewHeader.boundingBox(),
+		previewTitle.boundingBox()
+	]);
+	expect(headerBounds).not.toBeNull();
+	expect(pickerBounds).not.toBeNull();
+	expect(tabsHeaderBounds).not.toBeNull();
+	expect(tabsBounds).not.toBeNull();
+	expect(editorHeaderBounds).not.toBeNull();
+	expect(editorBounds).not.toBeNull();
+	expect(previewHeaderBounds).not.toBeNull();
+	expect(previewBounds).not.toBeNull();
+	if (!headerBounds || !pickerBounds || !tabsHeaderBounds || !tabsBounds || !editorHeaderBounds || !editorBounds || !previewHeaderBounds || !previewBounds) return;
+
+	const expectedInset = 24;
+	for (const inset of [
+		pickerBounds.x - headerBounds.x,
+		tabsBounds.x - tabsHeaderBounds.x,
+		editorBounds.x - editorHeaderBounds.x,
+		previewBounds.x - previewHeaderBounds.x
+	]) {
+		expect(Math.abs(inset - expectedInset)).toBeLessThan(1);
+	}
+	expect(pickerBounds.width).toBeLessThan(208);
+	expect(pickerBounds.width).toBeGreaterThan(120);
+});
+
 test('keeps the pane splitter centered on the divider while resizing both layouts', async ({ page }) => {
 	await page.setViewportSize({ width: 1280, height: 720 });
 	await page.goto('/');
@@ -379,8 +465,8 @@ test('keeps the pane splitter centered on the divider while resizing both layout
 			editorSize: wide ? editor.width : editor.height,
 			boundaryGap: wide ? preview.left - editor.right : preview.top - editor.bottom,
 			centerDelta: wide
-				? Math.abs((bounds.left + bounds.right) / 2 - editor.right)
-				: Math.abs((bounds.top + bounds.bottom) / 2 - editor.bottom),
+				? Math.abs((bounds.left + bounds.right) / 2 - (editor.right + preview.left) / 2)
+				: Math.abs((bounds.top + bounds.bottom) / 2 - (editor.bottom + preview.top) / 2),
 			gripSize: wide ? bounds.width : bounds.height
 		};
 	});
@@ -389,7 +475,7 @@ test('keeps the pane splitter centered on the divider while resizing both layout
 	let geometry = await measure();
 	expect(geometry.position).toBe('relative');
 	expect(geometry.background).toBe('rgba(0, 0, 0, 0)');
-	expect(Math.abs(geometry.boundaryGap)).toBeLessThan(1);
+	expect(geometry.boundaryGap).toBe(12);
 	expect(geometry.centerDelta).toBeLessThan(1);
 	expect(geometry.gripSize).toBe(12);
 
@@ -409,7 +495,7 @@ test('keeps the pane splitter centered on the divider while resizing both layout
 	geometry = await measure();
 	expect(geometry.position).toBe('relative');
 	expect(geometry.background).toBe('rgba(0, 0, 0, 0)');
-	expect(Math.abs(geometry.boundaryGap)).toBeLessThan(1);
+	expect(geometry.boundaryGap).toBe(12);
 	expect(geometry.centerDelta).toBeLessThan(1);
 	expect(geometry.gripSize).toBe(12);
 
@@ -565,6 +651,9 @@ test('navigates visuals and linked scenarios from the project sidebar', async ({
 
 test('scenario playback advances and can be paused', async ({ page }) => {
 	await page.goto('/');
+	const selector = page.getByRole('combobox', { name: studioMessage('preview.scenarioLabel') });
+	await expect(selector).toContainText(studioMessage('preview.staticVisual'));
+	await page.getByRole('tab', { name: new RegExp(`^${studioMessage('sidebar.resourceKindScenario')}:`) }).first().click();
 
 	const timeline = page.getByRole('slider', { name: studioMessage('preview.scenarioTimeline') });
 	await expect(timeline).toBeEnabled();
@@ -580,6 +669,43 @@ test('scenario playback advances and can be paused', async ({ page }) => {
 	const nextTime = pausedTime >= maxTime ? pausedTime - 1 : pausedTime + 1;
 	await page.keyboard.press(pausedTime >= maxTime ? 'ArrowLeft' : 'ArrowRight');
 	await expect(timeline).toHaveAttribute('aria-valuenow', String(nextTime));
+});
+
+test('the all-in-one DSL scenario compiles and plays in the preview', async ({ page }) => {
+	await page.goto('/');
+	const exampleScenario = page.getByRole('tab', { name: /^Scenario: .*everything/i });
+	await expect(exampleScenario).toBeVisible();
+	await exampleScenario.click();
+	await expect(page.getByRole('textbox', { name: / editor$/ })).toHaveValue(
+		/highlight reverse_proxy 350ms trace from left/
+	);
+
+	const timeline = page.getByRole('slider', { name: studioMessage('preview.scenarioTimeline') });
+	await expect(timeline).toBeEnabled();
+	await page.getByRole('button', { name: studioMessage('preview.play') }).click();
+	await expect(page.getByRole('button', { name: studioMessage('preview.pause') })).toBeVisible();
+	await expect.poll(async () => Number(await timeline.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
+});
+
+test('keeps the current visual preview when one scenario has a compile error', async ({ page }) => {
+	await page.goto('/');
+	const scenario = page.getByRole('tab', { name: /^Scenario: .*everything/i });
+	await scenario.click();
+
+	const editor = page.getByRole('textbox', { name: / editor$/ });
+	const source = await editor.inputValue();
+	const invalidSource = source.replace('reverse_proxy -> user_3', 'reverse_proxy => user_3');
+	expect(invalidSource).not.toBe(source);
+	await editor.fill(invalidSource);
+
+	const canvas = page.getByRole('application', { name: studioMessage('preview.canvas') });
+	await expect(page.getByRole('button', { name: /diagnostic/ })).toBeVisible();
+	await expect(canvas.locator('svg.schemra-preview-svg')).toBeVisible();
+	await expect(page.getByRole('button', { name: studioMessage('resource.lastValidPreview') })).toBeVisible();
+	const timeline = page.getByRole('slider', { name: studioMessage('preview.scenarioTimeline') });
+	await expect(timeline).toBeVisible();
+	await page.getByRole('button', { name: studioMessage('preview.play') }).click();
+	await expect.poll(async () => Number(await timeline.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
 });
 
 test('restores the caret and vertical scroll when returning to a source tab', async ({ page }) => {

@@ -598,6 +598,7 @@ dependencies = [
  "lsp-server",
  "lsp-types",
  "schemra-compiler",
+ "schemra-engine",
  "schemra-project",
  "schemra-syntax",
  "serde",

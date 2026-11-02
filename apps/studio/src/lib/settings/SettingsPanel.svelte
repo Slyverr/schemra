@@ -175,8 +175,8 @@
 									<span>{studioMessage(option.labelKey)}</span>
 								</span>
 								<span class={classes.syntaxPreview} style={editorThemeStyles(resolveEditorTheme(option.value, resolvedStudioTheme))} aria-hidden="true">
-									<code class={classes.syntaxCode}><span class="font-[650] text-[var(--editor-syntax-keyword)]">move</span><span class="text-[var(--editor-foreground)]"> request </span><span class="text-[var(--editor-syntax-punctuation)]">-&gt;</span><span class="text-[var(--editor-foreground)]"> export</span></code>
-									<code class={classes.syntaxCode}><span class="text-[var(--editor-syntax-property)]">label</span><span class="text-[var(--editor-syntax-string)]"> "Saved" </span><span class="text-[var(--editor-syntax-property)]">duration</span><span class="text-[var(--editor-syntax-number)]"> 720</span></code>
+									<code class={classes.syntaxCode}><span class="font-[650] text-[var(--editor-syntax-keyword)]">move</span>{' '}<span class="text-[var(--editor-foreground)]">request</span>{' '}<span class="text-[var(--editor-syntax-punctuation)]">-&gt;</span>{' '}<span class="text-[var(--editor-foreground)]">export</span></code>
+									<code class={classes.syntaxCode}><span class="text-[var(--editor-syntax-property)]">label</span>{' '}<span class="text-[var(--editor-syntax-string)]">"Saved"</span>{' '}<span class="text-[var(--editor-syntax-property)]">duration</span>{' '}<span class="text-[var(--editor-syntax-number)]">720</span></code>
 								</span>
 							</label>
 						{/each}

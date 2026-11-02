@@ -61,6 +61,8 @@ scenario everything for visual traffic_overview {
   move response from reverse_proxy -> user_2 {
     duration: 500ms
   }
+  move acknowledgment from reverse_proxy -> user_3
 
   highlight database 300ms pulse
+  highlight reverse_proxy 350ms trace from left
 }

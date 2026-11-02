@@ -48,6 +48,11 @@ impl Registry {
         self.handlers.get(name).copied()
     }
 
+    pub(crate) fn header_is_valid(&self, name: &str, arguments: &[Token]) -> bool {
+        self.spec(name)
+            .is_some_and(|spec| header_matches_spec(spec, arguments))
+    }
+
     /// Validate generic syntax against the registered construct and property schemas.
     pub fn validate(&self, file: &SyntaxFile) -> Vec<Diagnostic> {
         let mut diagnostics = file.diagnostics.clone();
@@ -267,10 +272,15 @@ fn body_matches_contexts(spec: &ConstructSpec) -> bool {
     let compatible_parents: &[Scope] = match spec.body {
         BodySpec::None => return spec.properties.is_empty(),
         BodySpec::Properties(Scope::Node) => &[Scope::Visual, Scope::Group],
+        BodySpec::OptionalProperties(Scope::Node) => &[Scope::Visual, Scope::Group],
         BodySpec::Properties(Scope::Token) => &[Scope::Scenario],
+        BodySpec::OptionalProperties(Scope::Token) => &[Scope::Scenario],
         BodySpec::Properties(Scope::Action) => &[Scope::Scenario, Scope::Action],
+        BodySpec::OptionalProperties(Scope::Action) => &[Scope::Scenario, Scope::Action],
         BodySpec::Properties(Scope::Edge) => &[Scope::Visual],
+        BodySpec::OptionalProperties(Scope::Edge) => &[Scope::Visual],
         BodySpec::Properties(_) => return false,
+        BodySpec::OptionalProperties(_) => return false,
         BodySpec::Scope(Scope::Visual | Scope::Scenario) => &[Scope::File],
         BodySpec::Scope(Scope::Group) => &[Scope::Visual],
         BodySpec::Scope(Scope::Action) => &[Scope::Scenario, Scope::Action],
@@ -285,7 +295,9 @@ fn body_matches_contexts(spec: &ConstructSpec) -> bool {
 fn body_scope(body: BodySpec) -> Option<Scope> {
     match body {
         BodySpec::None => None,
-        BodySpec::Properties(scope) | BodySpec::Scope(scope) => Some(scope),
+        BodySpec::Properties(scope)
+        | BodySpec::OptionalProperties(scope)
+        | BodySpec::Scope(scope) => Some(scope),
     }
 }
 
@@ -396,7 +408,7 @@ fn validate_scope(
                         )),
                     ));
                 }
-                validate_header(spec, arguments, diagnostics);
+                let valid_header = validate_header(spec, arguments, diagnostics);
                 match (spec.body, body) {
                     (BodySpec::None, Some(_)) => diagnostics.push(Diagnostic::error(
                         "E_UNEXPECTED_BODY",
@@ -413,12 +425,14 @@ fn validate_scope(
                         ));
                     }
                     (BodySpec::Properties(child_scope), Some(children))
+                    | (BodySpec::OptionalProperties(child_scope), Some(children))
                     | (BodySpec::Scope(child_scope), Some(children)) => {
                         validate_scope(children, child_scope, registry, diagnostics);
                     }
+                    (BodySpec::OptionalProperties(_), None) => {}
                     (BodySpec::None, None) => {}
                 }
-                if let Some(handler) = registry.handler(&name.text) {
+                if valid_header && let Some(handler) = registry.handler(&name.text) {
                     handler.validate(&ValidatedConstruct::new(statement, scope), diagnostics);
                 }
             }
@@ -458,11 +472,17 @@ fn scopes_display(scopes: &[Scope]) -> String {
         .join(", ")
 }
 
-fn validate_header(spec: &ConstructSpec, arguments: &[Token], diagnostics: &mut Vec<Diagnostic>) {
+fn validate_header(
+    spec: &ConstructSpec,
+    arguments: &[Token],
+    diagnostics: &mut Vec<Diagnostic>,
+) -> bool {
     let mut argument_index = 0;
+    let mut valid = true;
     for parameter in spec.header {
         let Some(argument) = arguments.get(argument_index) else {
             if !parameter.optional {
+                valid = false;
                 diagnostics.push(Diagnostic::error(
                     "E_CONSTRUCT_HEADER",
                     format!("Construct `{}` has an incomplete header.", spec.name),
@@ -492,11 +512,12 @@ fn validate_header(spec: &ConstructSpec, arguments: &[Token], diagnostics: &mut 
                 argument.span,
                 Some(format!("Expected: {}.", signature(spec))),
             ));
-            return;
+            return false;
         }
         argument_index += 1;
     }
     if argument_index != arguments.len() {
+        valid = false;
         diagnostics.push(Diagnostic::error(
             "E_CONSTRUCT_HEADER",
             format!("Construct `{}` has too many header arguments.", spec.name),
@@ -504,6 +525,28 @@ fn validate_header(spec: &ConstructSpec, arguments: &[Token], diagnostics: &mut 
             Some(format!("Expected: {}.", signature(spec))),
         ));
     }
+    valid
+}
+
+fn header_matches_spec(spec: &ConstructSpec, arguments: &[Token]) -> bool {
+    let mut argument_index = 0;
+    for parameter in spec.header {
+        let Some(argument) = arguments.get(argument_index) else {
+            if parameter.optional {
+                continue;
+            }
+            return false;
+        };
+
+        if !header_matches(parameter.kind, argument) {
+            if parameter.optional {
+                continue;
+            }
+            return false;
+        }
+        argument_index += 1;
+    }
+    argument_index == arguments.len()
 }
 
 fn signature(spec: &ConstructSpec) -> String {

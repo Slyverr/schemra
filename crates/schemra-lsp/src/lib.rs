@@ -3,6 +3,7 @@
 mod backend;
 mod positions;
 mod server;
+mod validation;
 
 #[cfg(test)]
 mod tests;

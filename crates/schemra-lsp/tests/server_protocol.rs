@@ -198,6 +198,59 @@ fn server_publishes_diagnostics_and_refreshes_them_after_edits() {
 }
 
 #[test]
+fn server_publishes_timeline_compilation_diagnostics_for_scenario_sources() {
+    let workspace = temporary_workspace();
+    fs::create_dir_all(workspace.join("scenarios"))
+        .expect("the scenario directory should be created");
+    let mut server = TestServer::start(&workspace);
+    let visual = "visual flow \"Flow\" {\n  node client \"Client\" {}\n  node server \"Server\" {}\n  client -- server\n}\n";
+    server.open_document(&workspace, "flow.schemra", visual);
+
+    let scenario = "scenario overloaded for visual flow {\n  token request { char: \"R\" }\n  repeat 501 {\n    move request from client -> server { duration: 1ms }\n  }\n}\n";
+    let (uri, first_update) =
+        server.open_document(&workspace, "scenarios/overloaded.schemra", scenario);
+    let updates = [first_update, server.receive()];
+    let published = updates
+        .iter()
+        .find(|update| update["params"]["uri"] == uri)
+        .expect("scenario diagnostics should be published for the scenario source");
+    let diagnostics = published["params"]["diagnostics"]
+        .as_array()
+        .expect("diagnostics should be an array");
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic["code"] == "E_TIMELINE_EVENT_LIMIT" && diagnostic["range"]["start"]["line"] == 2
+    }));
+
+    server.stop();
+    fs::remove_dir_all(workspace).expect("the temporary workspace should be removed");
+}
+
+#[test]
+fn server_publishes_visual_limit_diagnostics_for_visual_sources() {
+    let workspace = temporary_workspace();
+    let mut source = String::from(
+        "visual flow \"Flow\" {\n  node client \"Client\" {}\n  node server \"Server\" {}\n",
+    );
+    for _ in 0..=1_000 {
+        source.push_str("  client -- server\n");
+    }
+    source.push_str("}\n");
+
+    let mut server = TestServer::start(&workspace);
+    let (_, published) = server.open_document(&workspace, "flow.schemra", &source);
+    assert!(
+        published["params"]["diagnostics"]
+            .as_array()
+            .expect("diagnostics should be an array")
+            .iter()
+            .any(|diagnostic| diagnostic["code"] == "E_VISUAL_LINK_LIMIT")
+    );
+
+    server.stop();
+    fs::remove_dir_all(workspace).expect("the temporary workspace should be removed");
+}
+
+#[test]
 fn completion_uses_node_definitions_from_the_open_project() {
     let workspace = temporary_workspace();
     let mut server = TestServer::start(&workspace);

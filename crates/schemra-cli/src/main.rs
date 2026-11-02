@@ -30,6 +30,9 @@ enum Commands {
         /// Print diagnostics as JSON.
         #[arg(long)]
         json: bool,
+        /// Treat warnings as errors.
+        #[arg(long)]
+        strict: bool,
     },
     /// Format a source file or standard input.
     #[command(visible_alias = "format")]
@@ -82,7 +85,12 @@ fn main() -> ExitCode {
             }
             Err(_) => ExitCode::FAILURE,
         },
-        Some(Commands::Check { input, root, json }) => {
+        Some(Commands::Check {
+            input,
+            root,
+            json,
+            strict,
+        }) => {
             let root = match current_or_selected_root(root) {
                 Ok(root) => root,
                 Err(error) => {
@@ -90,7 +98,7 @@ fn main() -> ExitCode {
                     return ExitCode::from(2);
                 }
             };
-            match project::check(&input, &root) {
+            match project::check(&input, &root, strict) {
                 Ok(report) => {
                     if json {
                         println!("{}", report.to_json());

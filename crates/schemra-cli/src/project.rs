@@ -49,7 +49,7 @@ impl CheckReport {
     }
 }
 
-pub(super) fn check(input: &Path, root: &Path) -> Result<CheckReport, String> {
+pub(super) fn check(input: &Path, root: &Path, strict: bool) -> Result<CheckReport, String> {
     let root = canonical_root(root)?;
     let entry_path = resolve_entry_path(input, &root)?;
     let sources = read_sources(&root)?;
@@ -100,10 +100,7 @@ pub(super) fn check(input: &Path, root: &Path) -> Result<CheckReport, String> {
         }
     }
 
-    let ok = file.kind != "unknown"
-        && diagnostics
-            .iter()
-            .all(|diagnostic| diagnostic.severity != Severity::Error);
+    let ok = report_is_ok(&file.kind, &diagnostics, strict);
     Ok(CheckReport {
         ok,
         kind: file.kind.clone(),
@@ -115,13 +112,24 @@ pub(super) fn check(input: &Path, root: &Path) -> Result<CheckReport, String> {
     })
 }
 
+fn report_is_ok(kind: &str, diagnostics: &[Diagnostic], strict: bool) -> bool {
+    kind != "unknown"
+        && diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.severity != Severity::Error)
+        && (!strict
+            || diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.severity != Severity::Warning))
+}
+
 pub(super) fn scenario_check(
     input: &Path,
     visual: &Path,
     root: &Path,
 ) -> Result<ScenarioCheckReport, String> {
-    let scenario = check(input, root)?;
-    let selected_visual = check(visual, root)?;
+    let scenario = check(input, root, false)?;
+    let selected_visual = check(visual, root, false)?;
     let selection_error = if scenario.kind != "scenario" {
         Some(format!(
             "{} is a {} source file; scenario-check expects a scenario source file",
@@ -175,7 +183,7 @@ pub(super) fn print_scenario_report(report: &ScenarioCheckReport) {
 }
 
 pub(super) fn render(input: &Path, output: &Path, root: &Path) -> Result<(), (u8, String)> {
-    let report = check(input, root).map_err(|error| (2, error))?;
+    let report = check(input, root, false).map_err(|error| (2, error))?;
     if report.kind != "visual" {
         print_diagnostics(&report.path, &report.diagnostics);
         return Err((
@@ -261,6 +269,9 @@ fn canonical_root(root: &Path) -> Result<PathBuf, String> {
     }
     Ok(root)
 }
+
+#[cfg(test)]
+mod tests;
 
 fn resolve_entry_path(input: &Path, root: &Path) -> Result<String, String> {
     resolve_project_entry_path(input, root).map_err(|error| error.to_string())

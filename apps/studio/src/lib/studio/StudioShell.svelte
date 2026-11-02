@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
-	import { AlertCircle, Download, Plus, Save, X } from '@lucide/svelte';
+	import { AlertCircle, Download, Plus, Save } from '@lucide/svelte';
 	import { Button } from '../components/ui/button/index.js';
 	import { editorOffsetAtPosition, readEditorDiagnostics, readEditorSyntaxTokens } from '../editor/source-model.js';
 	import { studioMessage } from '../i18n/messages.js';
@@ -48,6 +48,7 @@
 	import WorkspaceLoading from './WorkspaceLoading.svelte';
 	import WorkspacePanels from './WorkspacePanels.svelte';
 	import StudioSettingsDialog from './StudioSettingsDialog.svelte';
+	import StudioToast from './StudioToast.svelte';
 	import { buildProjectSidebarModel, sourceLabel } from './project-sidebar.js';
 	import {
 		compareSourceFiles,
@@ -216,16 +217,19 @@
 		{ id: 'show-editor', label: studioMessage('command.action.showEditor'), description: studioMessage('command.action.showEditorDescription'), icon: 'editor' },
 		{ id: 'show-preview', label: studioMessage('command.action.showPreview'), description: studioMessage('command.action.showPreviewDescription'), icon: 'preview' }
 	]);
-	const previewVisual = $derived(currentProjectValid && currentVisual?.output.svg && currentVisual.output.scene ? currentVisual : lastGoodVisual);
-	const previewSources = $derived(
-		currentProjectValid && previewVisual === currentVisual ? sourceFiles :
-		lastValidForProject ? lastValidForProject.sources : sourceFiles
+	const previewVisual = $derived(currentVisual?.output.svg && currentVisual.output.scene ? currentVisual : lastGoodVisual);
+	const currentPreviewScenarios = $derived(
+		currentVisual?.output.svg && currentVisual.output.scene
+			? (currentVisual.output.scenarios as CompiledScenario[] | undefined) ?? []
+			: []
 	);
 	const previewScenarios = $derived.by(() => {
-		const current = currentVisual?.output.scenarios as CompiledScenario[] | undefined;
-		const last = lastGoodVisual?.output.scenarios as CompiledScenario[] | undefined;
-		const list = currentProjectValid && currentVisual?.output.svg && currentVisual.output.scene ? current : last;
-		return list ?? [];
+		const currentIds = new Set(currentPreviewScenarios.map(({ id }) => id));
+		const lastValidScenarios = (lastGoodVisual?.output.scenarios as CompiledScenario[] | undefined) ?? [];
+		return [
+			...currentPreviewScenarios,
+			...lastValidScenarios.filter(({ id }) => !currentIds.has(id))
+		];
 	});
 	const selectedScenarioPreference = $derived.by(() => {
 		if (!activeProject || !visualId) return { present: false, id: null as string | null };
@@ -239,12 +243,27 @@
 		selectedScenarioPreference.present
 			? selectedScenarioPreference.id
 			: activeFile?.path.startsWith('scenarios/')
-				? ((currentFileCompilation?.output?.scenarios as CompiledScenario[] | undefined)?.[0]?.id ?? previewScenarios[0]?.id ?? null)
-				: previewScenarios[0]?.id ?? null
+				? currentFileCompilation?.declarations.find(({ kind }) => kind === 'scenario')?.id ?? null
+				: null
 	);
 	const selectedScenario = $derived(
-		requestedScenarioId ? previewScenarios.find(({ id }) => id === requestedScenarioId) ?? previewScenarios[0] ?? null : null
+		requestedScenarioId ? previewScenarios.find(({ id }) => id === requestedScenarioId) ?? null : null
 	);
+	const selectedScenarioIsStale = $derived(
+		Boolean(selectedScenario && !currentPreviewScenarios.some(({ id }) => id === selectedScenario.id))
+	);
+	const previewSources = $derived.by(() => {
+		if (selectedScenarioIsStale && selectedScenario && lastValidForProject) {
+			const previousFile = lastGoodFiles.find(({ declarations }) => declarations.some(
+				({ kind, id }) => kind === 'scenario' && id === selectedScenario.id
+			));
+			const previousSource = lastValidForProject.sources.find(({ id }) => id === previousFile?.id);
+			if (previousSource) {
+				return sourceFiles.map((source) => source.id === previousSource.id ? previousSource : source);
+			}
+		}
+		return previewVisual === currentVisual ? sourceFiles : lastValidForProject?.sources ?? sourceFiles;
+	});
 	const currentResourceDeclaration = $derived.by(() => {
 		const kind = activeFile?.path.startsWith('visuals/') ? 'visual' : activeFile?.path.startsWith('scenarios/') ? 'scenario' : null;
 		if (!kind || !currentFileCompilation) return null;
@@ -315,7 +334,9 @@
 		errorCount,
 		onNavigate: navigateToDiagnostic
 	});
-	const showLastValidPreview = $derived(Boolean(lastGoodVisual && previewVisual !== currentVisual && !compilePending));
+	const showLastValidPreview = $derived(Boolean(
+		!compilePending && ((lastGoodVisual && previewVisual !== currentVisual) || selectedScenarioIsStale)
+	));
 	const workspacePreview = $derived(
 		previewVisual?.output.svg && previewVisual.output.scene ? {
 			svg: previewVisual.output.svg,
@@ -421,14 +442,6 @@
 			window.clearTimeout(timer);
 			abortController.abort();
 		};
-	});
-
-	$effect(() => {
-		if (!currentCompilation || !activeProject || !visualId || Object.hasOwn(workspace.selectedScenarioByProject[activeProject.id] ?? {}, visualId)) return;
-		const scenarioId = activeFile?.path.startsWith('scenarios/')
-			? ((currentFileCompilation?.output?.scenarios as CompiledScenario[] | undefined)?.[0]?.id ?? null)
-			: previewScenarios[0]?.id ?? null;
-		if (scenarioId) controller.selectScenario(activeProject.id, visualId, scenarioId);
 	});
 
 	onMount(() => {
@@ -863,26 +876,23 @@
 	<input bind:this={importInput} class="sr-only" type="file" accept="application/json,.json" aria-label={studioMessage('file.chooseProjectBundle')} onchange={sourceActions.importProject} />
 	<input bind:this={sourceInput} class="sr-only" type="file" accept=".schemra,text/plain" aria-label={studioMessage('file.chooseSource')} onchange={sourceActions.openUpload} oncancel={sourceActions.cancelUpload} />
 
-	<nav class="flex h-11 min-h-11 flex-[0_0_auto] items-stretch justify-between gap-2 border-b border-border bg-background px-3 sm:px-4" aria-label={studioMessage('tabs.projectSourceFiles')}>
+	<nav class="flex h-11 min-h-11 flex-[0_0_auto] items-stretch justify-between gap-2 border-b border-border bg-background px-3 sm:px-6" aria-label={studioMessage('tabs.projectSourceFiles')}>
 		<WorkspaceTabs tabs={workspaceTabViews} activeTabId={activeFileId} initialized={workspace.initialized} onSelect={openFile} />
 		<Button variant="ghost" size="xs" class="h-8 w-8 shrink-0 self-center justify-center gap-0 rounded-md p-0 text-primary hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 lg:w-auto lg:gap-2 lg:px-[.65rem]" type="button" aria-label={studioMessage('resource.newScenario')} title={studioMessage('resource.newScenario')} onclick={() => resourceActions.openResourceCreation('scenario')} disabled={resourceCreationDisabled || !currentProjectValid || !currentVisual}>
 			<Plus size={16} class="size-4" aria-hidden="true" /><span class="hidden lg:inline">{studioMessage('resource.newScenario')}</span>
 		</Button>
 	</nav>
 
-	{#if fileMessage}
-		<div class={`flex min-h-[2.2rem] flex-[0_0_auto] items-center justify-between gap-4 border-b px-4 py-[.35rem] text-xs ${fileMessage.kind === 'error' ? 'border-destructive/35 bg-destructive/[.06] text-destructive' : 'border-primary/30 bg-primary/[.07] text-primary'}`} role={fileMessage.kind === 'error' ? 'alert' : 'status'}>
-			<span>{fileMessage.text}</span><Button variant="ghost" size="icon-sm" class="size-[1.6rem] shrink-0 rounded-md p-0 text-current hover:bg-current/10 hover:text-current" type="button" aria-label={studioMessage('resource.dismissMessage')} onclick={() => (fileMessage = null)}><X size={14} class="size-[14px]" /></Button>
-		</div>
-	{/if}
 	{#if workspace.restoreError || (workspace.error && (workspace.saveStatus === 'error' || workspace.saveStatus === 'conflict'))}
-		<div class="flex min-h-[2.2rem] flex-[0_0_auto] flex-wrap items-center justify-start gap-4 border-b border-destructive/35 bg-destructive/[.06] px-4 py-[.35rem] text-xs text-destructive" role="alert" aria-live="assertive">
-			<AlertCircle size={15} aria-hidden="true" />
-			<div class="flex min-w-48 flex-[1_1_20rem] flex-wrap items-baseline gap-x-2 gap-y-1">
+		<div class="fixed right-4 top-4 z-[1000] flex max-h-[calc(100dvh-2rem)] w-[min(32rem,calc(100vw-2rem))] flex-col gap-3 overflow-auto rounded-lg border border-destructive/35 bg-popover/90 p-3 text-xs text-destructive shadow-lg backdrop-blur-sm" role="alert" aria-live="assertive">
+			<div class="flex min-w-0 items-start gap-2">
+				<AlertCircle size={15} class="mt-0.5 size-[15px] shrink-0" aria-hidden="true" />
+				<div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
 				<strong>{workspace.restoreError ? studioMessage('workspace.restoreFailed') : workspace.saveStatus === 'conflict' ? studioMessage('workspace.conflict') : studioMessage('workspace.saveFailed')}</strong>
 				<span>{prettySaveError()}</span>
+				</div>
 			</div>
-			<div class="ml-auto flex flex-[0_0_auto] flex-wrap gap-[.4rem]">
+			<div class="flex flex-wrap gap-[.4rem]">
 				{#if !workspace.restoreError && workspace.saveStatus === 'error'}
 					<Button variant="outline" size="xs" class="min-h-8 gap-[.35rem] border-current/30 px-[.55rem] text-[.72rem] text-current hover:bg-current/[.08] hover:text-current disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={!activeProject || !workspace.initialized} onclick={retryWorkspaceSave}><Save size={14} aria-hidden="true" />{studioMessage('workspace.retrySave')}</Button>
 				{/if}
@@ -949,6 +959,7 @@
 		onAction={runPaletteAction}
 	/>
 	<LanguageReferenceDialog bind:open={languageReferenceOpen} />
+	<StudioToast message={fileMessage} onDismiss={() => (fileMessage = null)} />
 	</div>
 </main>
 {/if}

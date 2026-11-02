@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use schemra_compiler::{
     DeclarationInfo, EditorSymbol, ProjectFileAnalysis, ProjectSource, SyntaxToken,
-    analyze_project, validate_scenarios_for_visual,
+    analyze_project, validate_scenario_for_visual, validate_scenarios_for_visual,
 };
 use schemra_engine::{
     VisualLimits, check_visual_limits, compile_timeline, layout_visual, render_svg,
@@ -454,9 +454,18 @@ fn compile_visual(
         };
     }
 
-    let mut diagnostics = validate_scenarios_for_visual(scenario_irs, visual);
+    let mut diagnostics = Vec::new();
     let mut scenarios = Vec::with_capacity(scenario_irs.len());
     for scenario in scenario_irs {
+        let scenario_diagnostics = validate_scenario_for_visual(scenario, visual);
+        let is_valid = scenario_diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.severity != Severity::Error);
+        append_unique(&mut diagnostics, &scenario_diagnostics);
+        if !is_valid {
+            continue;
+        }
+
         match compile_scenario(scenario) {
             Ok(compiled) => scenarios.push(compiled),
             Err(error) => diagnostics.push(Diagnostic::error(

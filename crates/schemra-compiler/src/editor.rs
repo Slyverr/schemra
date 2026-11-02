@@ -143,7 +143,9 @@ fn collect_property_offsets(
                 }
                 if let (Some(body), Some(spec)) = (body, registry.spec(&name.text)) {
                     let child_scope = match spec.body {
-                        BodySpec::Properties(scope) | BodySpec::Scope(scope) => scope,
+                        BodySpec::Properties(scope)
+                        | BodySpec::OptionalProperties(scope)
+                        | BodySpec::Scope(scope) => scope,
                         BodySpec::None => continue,
                     };
                     collect_property_offsets(

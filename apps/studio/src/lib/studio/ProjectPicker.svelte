@@ -43,14 +43,14 @@
 	}: Props = $props();
 </script>
 
-<div class="w-[min(13rem,55vw)] min-w-0 flex-[0_1_13rem] max-md:w-[min(12rem,55vw)] max-md:basis-48">
+<div class="w-fit min-w-0 max-w-[min(12rem,55vw)] flex-[0_1_auto] max-md:w-[min(12rem,55vw)] max-md:basis-48">
 	<DropdownMenu.Root>
 		<DropdownMenu.Trigger>
 			{#snippet child({ props })}
 				<Button
 					{...props}
 					variant="outline"
-					class="h-9 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-sm font-normal shadow-none hover:bg-accent aria-expanded:bg-accent disabled:cursor-wait disabled:opacity-[.55]"
+					class="h-9 w-fit max-w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-sm font-normal shadow-none hover:bg-accent aria-expanded:bg-accent disabled:cursor-wait disabled:opacity-[.55] max-md:w-full"
 					type="button"
 					aria-label={studioMessage('project.current', { name: activeProjectName ?? '' })}
 					title={activeProjectName ?? studioMessage('project.select')}

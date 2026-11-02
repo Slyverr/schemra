@@ -21,6 +21,7 @@ use serde_json::{Value, json};
 use url::Url;
 
 use crate::positions::range_for_bytes;
+use crate::validation::diagnostics_for_file;
 
 #[derive(Clone)]
 struct OpenDocument {
@@ -188,9 +189,14 @@ impl Backend {
                     .get(&root.map(Path::to_path_buf))
                     .and_then(|project| {
                         let path = self.document_project_path(document, root)?;
-                        project.analysis.files.iter().find(|file| file.path == path)
+                        let file = project
+                            .analysis
+                            .files
+                            .iter()
+                            .find(|file| file.path == path)?;
+                        let diagnostics = diagnostics_for_file(&project.analysis, &file.path);
+                        Some(convert_diagnostics(&document.source, &diagnostics))
                     })
-                    .map(|file| convert_diagnostics(&document.source, &file.diagnostics))
                     .unwrap_or_default(),
                 Err(error) => vec![project_resolution_diagnostic(error)],
             };

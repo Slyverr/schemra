@@ -73,7 +73,7 @@
 	}: Props = $props();
 </script>
 
-<header class="flex h-14 min-h-14 shrink-0 items-center gap-2 border-b bg-background px-3 sm:px-4 max-sm:grid max-sm:h-auto max-sm:min-h-14 max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:gap-y-1 max-sm:py-1.5">
+<header class="flex h-14 min-h-14 shrink-0 items-center gap-2 border-b bg-background px-3 sm:px-6 max-sm:grid max-sm:h-auto max-sm:min-h-14 max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:gap-y-1 max-sm:py-1.5">
 	<nav class="min-w-0 flex-1 overflow-hidden max-sm:col-start-1 max-sm:row-start-1" aria-label={studioMessage('header.projectLocation')}>
 		<ol class="m-0 flex min-w-0 list-none items-center gap-2 p-0">
 			<li class="flex min-w-0 flex-[0_1_auto] items-center">
