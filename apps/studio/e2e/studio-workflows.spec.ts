@@ -51,6 +51,12 @@ test('shows tab save state through icon and text colors instead of status dots',
 	await expect.poll(() => matchesThemeColor(selectedLabel, 'warning')).toBe(true);
 	await expect.poll(() => matchesThemeColor(selectedIcon, 'warning')).toBe(true);
 	await expect(selectedTab.locator('span')).toHaveCount(1);
+
+	const projectDirtyMarker = page.getByLabel(studioMessage('project.unsavedNamed', { name: 'Example project' }));
+	await expect(projectDirtyMarker).toBeVisible();
+	await editor.press('Control+s');
+	await expect(selectedTab).toHaveAccessibleName(studioMessage('sidebar.resourceKindVisual') + `: ${title}`);
+	await expect(projectDirtyMarker).toBeHidden();
 });
 
 test('exposes compile errors in the source tab accessibility state', async ({ page }) => {
@@ -82,15 +88,15 @@ test('shows rename preparation failures without shifting the workspace layout', 
 	}).first();
 	await scenarioTab.click();
 	await editor.fill(`${await editor.inputValue()}\n???`);
-	const scenarioName = (await scenarioTab.locator('span').textContent())?.trim() ?? '';
-	await expect(scenarioTab).toHaveAccessibleName(studioMessage('tabs.hasErrors', { name: scenarioName }));
+	await expect(page.getByRole('button', { name: /diagnostic/ })).toBeVisible();
 
 	const visualTab = page.getByRole('tab', {
 		name: new RegExp(`^${studioMessage('sidebar.resourceKindVisual')}:`)
 	}).first();
 	await visualTab.click();
 	const visualSource = await editor.inputValue();
-	const editorTopBefore = (await editor.boundingBox())?.y;
+	const editorHeading = page.getByRole('heading', { name: 'Editor', exact: true });
+	const editorTopBefore = (await editorHeading.boundingBox())?.y;
 	const symbolOffset = visualSource.indexOf('traffic_overview') + 3;
 	await editor.evaluate((element: HTMLTextAreaElement, offset) => {
 		element.focus();
@@ -101,7 +107,7 @@ test('shows rename preparation failures without shifting the workspace layout', 
 	const notice = page.getByRole('alert').filter({ hasText: 'Resolve project errors' });
 	await expect(notice).toBeVisible();
 	await expect.poll(() => notice.evaluate((element) => getComputedStyle(element).position)).toBe('fixed');
-	const editorTopAfter = (await editor.boundingBox())?.y;
+	const editorTopAfter = (await editorHeading.boundingBox())?.y;
 	expect(editorTopAfter).toBe(editorTopBefore);
 });
 
@@ -128,6 +134,25 @@ test('keeps the new-scenario action centered and opens scenario creation', async
 	await expect(dialog.getByLabel(studioMessage('resource.dialog.scenarioName'))).toBeVisible();
 	await dialog.getByRole('button', { name: studioMessage('resource.dialog.cancel') }).click();
 	await expect(dialog).toBeHidden();
+});
+
+test('only shows tab scroll arrows when more tabs are hidden in that direction', async ({ page }) => {
+	await page.setViewportSize({ width: 320, height: 640 });
+	await page.goto('/');
+
+	const scrollLeft = page.getByRole('button', { name: studioMessage('tabs.scrollLeft') });
+	const scrollRight = page.getByRole('button', { name: studioMessage('tabs.scrollRight') });
+	const tabScroller = page.getByRole('tablist', { name: studioMessage('tabs.projectSourceFiles') });
+	await expect(scrollLeft).toHaveCount(0);
+	await expect(scrollRight).toBeVisible();
+	await scrollRight.click();
+	await expect(scrollLeft).toBeVisible();
+	await tabScroller.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
+	await expect(scrollRight).toHaveCount(0);
+	await expect(scrollLeft).toBeVisible();
+	await tabScroller.evaluate((element) => { element.scrollLeft = 0; });
+	await expect(scrollLeft).toHaveCount(0);
+	await expect(scrollRight).toBeVisible();
 });
 
 test('keeps pointer selection and deletion aligned with highlighted source text', async ({ page }) => {
@@ -230,6 +255,7 @@ test('searches Studio actions and opens settings', async ({ page }) => {
 
 	const settings = page.getByRole('dialog', { name: 'Settings' });
 	await expect(settings).toBeVisible();
+	await expect(page.locator('[data-slot="dialog-overlay"]')).toHaveCSS('backdrop-filter', 'none');
 	await page.getByRole('button', { name: 'Close settings' }).click();
 	await expect(settings).toBeHidden();
 });
@@ -369,8 +395,14 @@ test('aligns desktop workspace headers and sizes the project picker to its conte
 	const tabs = tabsHeader.getByRole('tablist');
 	const editorTitle = page.getByRole('heading', { name: studioMessage('pane.editor') });
 	const previewTitle = page.getByRole('heading', { name: studioMessage('pane.preview') });
+	const editorMaximize = page.getByRole('button', { name: studioMessage('pane.maximizeEditor') });
+	const previewMaximize = page.getByRole('button', { name: studioMessage('pane.maximizePreview') });
 	const editorHeader = page.locator('header').filter({ has: editorTitle });
 	const previewHeader = page.locator('header').filter({ has: previewTitle });
+	for (const button of [editorMaximize, previewMaximize]) {
+		await expect(button).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+		await expect(button).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+	}
 
 	const [headerBounds, pickerBounds, tabsHeaderBounds, tabsBounds, editorHeaderBounds, editorBounds, previewHeaderBounds, previewBounds] = await Promise.all([
 		topHeader.boundingBox(),
@@ -664,10 +696,13 @@ test('scenario playback advances and can be paused', async ({ page }) => {
 	await page.getByRole('button', { name: studioMessage('preview.pause') }).click();
 	await expect(page.getByRole('button', { name: studioMessage('preview.play') })).toBeVisible();
 	const pausedTime = Number(await timeline.getAttribute('aria-valuenow'));
+	await page.waitForTimeout(80);
+	await expect(timeline).toHaveAttribute('aria-valuenow', String(pausedTime));
 	const maxTime = Number(await timeline.getAttribute('aria-valuemax'));
 	await timeline.focus();
-	const nextTime = pausedTime >= maxTime ? pausedTime - 1 : pausedTime + 1;
-	await page.keyboard.press(pausedTime >= maxTime ? 'ArrowLeft' : 'ArrowRight');
+	const atEnd = pausedTime >= maxTime;
+	const nextTime = atEnd ? pausedTime - 1 : pausedTime + 1;
+	await timeline.press(atEnd ? 'ArrowLeft' : 'ArrowRight');
 	await expect(timeline).toHaveAttribute('aria-valuenow', String(nextTime));
 });
 

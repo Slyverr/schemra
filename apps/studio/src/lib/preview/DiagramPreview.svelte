@@ -1,6 +1,6 @@
 
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { studioMessage } from '../i18n/messages.js';
 	import { cn } from '../utils.js';
 	import { createScenarioPlayback, type ProjectSource, type ScenarioPlayback } from '../schemra';
@@ -72,6 +72,11 @@
 	const scene = $derived(readPreviewScene(props.scene));
 	const scenario = $derived(readPreviewScenario(props.scenario));
 	const durationMs = $derived(playback?.durationMs ?? scenario?.duration_ms ?? 0);
+	const playbackInputKey = $derived(JSON.stringify([
+		props.visualId,
+		scenario?.id ?? null,
+		props.sources.map(({ id, path, source }) => [id, path, source])
+	]));
 	const contentViewport = $derived(insetPreviewViewport(viewport, controlInsets));
 	const displaySize = $derived(svgDisplaySize(contentViewport, scene));
 	const gridTransform = $derived(previewGridTransform(viewport, pan, zoomPercent));
@@ -160,9 +165,14 @@
 	});
 
 	$effect(() => {
-		const sourceSnapshot = props.sources.map(({ id, path, source }) => ({ id, path, source }));
-		const targetVisualId = props.visualId;
-		const selectedScenario = scenario;
+		const inputKey = playbackInputKey;
+		void inputKey;
+		const { sourceSnapshot, targetVisualId, selectedScenarioId } = untrack(() => ({
+			sourceSnapshot: props.sources.map(({ id, path, source }) => ({ id, path, source })),
+			targetVisualId: props.visualId,
+			selectedScenarioId: scenario?.id ?? null
+		}));
+
 		let cancelled = false;
 		let ownedPlayback: ScenarioPlayback | null = null;
 		playback = null;
@@ -171,8 +181,8 @@
 		playing = false;
 		timeMs = 0;
 
-		if (!selectedScenario || !targetVisualId) return;
-		void createScenarioPlayback(sourceSnapshot, targetVisualId, selectedScenario.id).then(
+		if (!selectedScenarioId || !targetVisualId) return;
+		void createScenarioPlayback(sourceSnapshot, targetVisualId, selectedScenarioId).then(
 			(sampler) => {
 				if (cancelled) sampler.dispose();
 				else {

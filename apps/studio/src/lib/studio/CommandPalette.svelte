@@ -86,7 +86,7 @@
 	const dialogId = `${instanceId}-dialog`;
 	const searchId = `${instanceId}-search`;
 	const resultsId = `${instanceId}-results`;
-	let searchInput = $state<HTMLInputElement>();
+	let searchInput = $state<HTMLInputElement | null>(null);
 	let query = $state('');
 	let selectedKey = $state('');
 	let wasOpen = false;
@@ -167,7 +167,7 @@
 
 			<CommandPrimitive.Root
 				bind:value={selectedKey}
-				label={studioMessage('command.results')}
+				label={studioMessage('command.inputLabel')}
 				loop
 				shouldFilter={false}
 				class={classes.root}

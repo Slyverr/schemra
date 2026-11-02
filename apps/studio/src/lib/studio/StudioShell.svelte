@@ -223,11 +223,25 @@
 			? (currentVisual.output.scenarios as CompiledScenario[] | undefined) ?? []
 			: []
 	);
+	const invalidScenarioIds = $derived.by(() => {
+		const currentFilesById = new Map(currentFiles.map((file) => [file.id, file]));
+		return new Set(lastGoodFiles.flatMap((file) => {
+			const currentFile = currentFilesById.get(file.id);
+			const hasErrors = currentFile && readEditorDiagnostics(currentFile.diagnostics)
+				.some(({ severity }) => severity === 'error');
+			return hasErrors
+				? file.declarations.filter(({ kind }) => kind === 'scenario').map(({ id }) => id)
+				: [];
+		}));
+	});
+	const currentValidScenarios = $derived(
+		currentPreviewScenarios.filter(({ id }) => !invalidScenarioIds.has(id))
+	);
 	const previewScenarios = $derived.by(() => {
-		const currentIds = new Set(currentPreviewScenarios.map(({ id }) => id));
+		const currentIds = new Set(currentValidScenarios.map(({ id }) => id));
 		const lastValidScenarios = (lastGoodVisual?.output.scenarios as CompiledScenario[] | undefined) ?? [];
 		return [
-			...currentPreviewScenarios,
+			...currentValidScenarios,
 			...lastValidScenarios.filter(({ id }) => !currentIds.has(id))
 		];
 	});
@@ -243,14 +257,16 @@
 		selectedScenarioPreference.present
 			? selectedScenarioPreference.id
 			: activeFile?.path.startsWith('scenarios/')
-				? currentFileCompilation?.declarations.find(({ kind }) => kind === 'scenario')?.id ?? null
+				? currentFileCompilation?.declarations.find(({ kind }) => kind === 'scenario')?.id
+					?? lastGoodActiveFile?.declarations.find(({ kind }) => kind === 'scenario')?.id
+					?? null
 				: null
 	);
 	const selectedScenario = $derived(
 		requestedScenarioId ? previewScenarios.find(({ id }) => id === requestedScenarioId) ?? null : null
 	);
 	const selectedScenarioIsStale = $derived(
-		Boolean(selectedScenario && !currentPreviewScenarios.some(({ id }) => id === selectedScenario.id))
+		Boolean(selectedScenario && !currentValidScenarios.some(({ id }) => id === selectedScenario.id))
 	);
 	const previewSources = $derived.by(() => {
 		if (selectedScenarioIsStale && selectedScenario && lastValidForProject) {

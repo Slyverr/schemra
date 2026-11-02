@@ -132,7 +132,7 @@
 					</Button>
 				</div>
 				<Button
-					variant="outline"
+					variant="ghost"
 					size="icon-sm"
 					class={workspacePaneToggleClass}
 					type="button"
@@ -229,7 +229,7 @@
 			<div class="flex min-w-0 items-center justify-end gap-3 max-sm:[&_[data-slot=diagram-stats]]:hidden">
 				{#if stats}<span data-slot="diagram-stats" class="text-[.65rem] whitespace-nowrap text-muted-foreground">{studioMessage('preview.stats', stats)}</span>{/if}
 				<Button
-					variant="outline"
+					variant="ghost"
 					size="icon-sm"
 					class={workspacePaneToggleClass}
 					type="button"
