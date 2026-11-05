@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Rust, Studio, and browser checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          target: wasm32-unknown-unknown
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: apps/studio/package.json
+
+      - name: Install wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --locked --version 0.2.129
+
+      - name: Run Rust and Studio checks
+        run: ./check.sh
+
+      - name: Check native and WebAssembly parity
+        run: bash tests/wasm/differential.sh
+
+      - name: Install Playwright Chromium
+        working-directory: apps/studio
+        run: bunx --bun playwright install --with-deps chromium
+
+      - name: Test Studio in the development server
+        working-directory: apps/studio
+        run: bun run test:e2e
+
+      - name: Test the static Studio build
+        working-directory: apps/studio
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory build >/dev/null 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:4173/ >/dev/null
+          STUDIO_E2E_PORT=4173 bun run test:e2e
+
+      - name: Upload browser traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-results
+          path: apps/studio/test-results/
+          if-no-files-found: ignore

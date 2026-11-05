@@ -61,6 +61,18 @@ describe('project bundle serialization', () => {
 		expect(restored.files).toHaveLength(1);
 	});
 
+	it('upgrades version 1 bundles while preserving source text', () => {
+		const bundle = parseProjectBundle(JSON.stringify({
+			format: 'schemra-project',
+			version: 1,
+			name: 'Legacy project',
+			files: [{ path: 'visuals/main.schemra', source: 'legacy opaque source' }]
+		}));
+
+		expect(bundle.version).toBe(2);
+		expect(bundle.files[0]?.source).toBe('legacy opaque source');
+	});
+
 	it('rejects an otherwise valid project when JSON escaping exceeds the import limit', () => {
 		const expandedSource = String.fromCharCode(0).repeat(1_950_000);
 		const project: StudioProject = {
@@ -155,7 +167,17 @@ describe('project document bounds and paths', () => {
 
 	it('rejects unsafe source paths and allocates deterministic case-insensitive names', () => {
 		expect(normalizeProjectFilePath('visuals/main.schemra')).toBe('visuals/main.schemra');
-		for (const unsafePath of ['/main.schemra', '../main.schemra', 'visuals\\main.schemra']) {
+		expect(normalizeProjectFilePath('visuals/Cafe\u0301.schemra')).toBe('visuals/Café.schemra');
+		for (const unsafePath of [
+			'',
+			'/main.schemra',
+			'C:/main.schemra',
+			'../main.schemra',
+			'visuals/../main.schemra',
+			'visuals\\main.schemra',
+			'visuals//main.schemra',
+			'visuals/ main.schemra'
+		]) {
 			expect(() => normalizeProjectFilePath(unsafePath)).toThrow('safe project-relative path');
 		}
 		expect(() => normalizeProjectFilePath('visuals/main.txt')).toThrow('must point to a .schemra source file');
@@ -164,5 +186,13 @@ describe('project document bounds and paths', () => {
 			files: [{ id: 'one', path: 'visuals/Main.schemra', source: '', savedSource: '', handle: null, mode: 'memory' as const }]
 		};
 		expect(uniqueProjectPath(project, 'visuals/main.schemra')).toBe('visuals/main-2.schemra');
+		expect(uniqueProjectPath({
+			...emptyProject,
+			files: [
+				{ id: 'one', path: 'visuals/Map.schemra', source: '', savedSource: '', handle: null, mode: 'memory' },
+				{ id: 'two', path: 'visuals/map-2.schemra', source: '', savedSource: '', handle: null, mode: 'memory' }
+			]
+		}, 'visuals/map.schemra')).toBe('visuals/map-3.schemra');
+		expect(uniqueProjectPath(project, 'scenarios/request.schemra')).toBe('scenarios/request.schemra');
 	});
 });

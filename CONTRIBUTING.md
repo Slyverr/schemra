@@ -34,6 +34,11 @@ When a subject does not explain the motivation or consequences, add a short body
 covering why the change was made, key decisions, and compatibility effects. Keep
 trivial commits brief.
 
+Record notable user-visible changes in `CHANGELOG.md` under `Unreleased`, using
+the categories and release process in [docs/releases.md](docs/releases.md).
+Avoid adding changelog entries for internal-only changes or every individual
+commit.
+
 Install the repository's local commit-message hook with:
 
 ```sh
@@ -56,6 +61,14 @@ text. Use `start` as the default leading-edge alignment unless the layout calls
 for a different edge.
 
 ## Verification
+
+An optional Nix development shell provides the project toolchain and browser
+test libraries. Its packages are defined under `nix/`. Start it from the
+repository root with:
+
+```sh
+nix develop
+```
 
 ### Test layout
 

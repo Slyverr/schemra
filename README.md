@@ -1,19 +1,13 @@
 # Schemra
 
-Schemra is a local authoring environment for structured diagrams and their
-animated scenarios. The Rust workspace provides the language, compiler,
-renderer, playback engine, CLI, and browser-facing WASM API. The SvelteKit Studio
-provides local project authoring, editing, and diagram preview.
+Schemra is a text-based language and toolkit for structured diagrams and timed
+scenarios. Describe a system in `.schemra` files, then validate, format, render,
+and animate it with the Rust tools and browser-based Studio.
 
-## Requirements
+## Try the Studio
 
-- Rust 1.85 or newer (the repository toolchain pins Rust 1.88.0) with Cargo,
-  rustfmt, and Clippy
-- Bun 1.4.2
-- `wasm32-unknown-unknown` Rust target and `wasm-bindgen-cli` 0.2.129 for the
-  Studio bindings and WASM parity checks
-
-## Run Studio
+The Studio runs locally in your browser. See [Studio setup and hosting](docs/studio.md)
+for prerequisites and the static production build.
 
 ```sh
 cd apps/studio
@@ -21,58 +15,28 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-Studio commands build the browser WASM bindings from `schemra-wasm` before
-starting, checking, testing, or building the app. They require the
-`wasm32-unknown-unknown` Rust target and `wasm-bindgen-cli` 0.2.129. Run
-`bun run build:wasm` from `apps/studio` to regenerate the ignored bindings
-without starting the app.
+Open the local URL printed by Bun (normally `http://127.0.0.1:5173`).
 
-## Run the CLI
+## Try the CLI
+
+With the Rust toolchain installed, validate the example project:
 
 ```sh
-cargo run -p schemra-cli -- --help
-cargo run -p schemra-cli -- check path/to/visual.schemra --root path/to/project
-cargo run -p schemra-cli -- fmt path/to/source.schemra --check
-cargo run -p schemra-cli -- scenario-check path/to/flow.schemra --visual path/to/network.schemra
-cargo run -p schemra-cli -- render path/to/network.schemra --out network.svg
+cargo run --locked -p schemra-cli -- check \
+  examples/traffic-overview/visuals/traffic-overview.schemra \
+  --root examples/traffic-overview
 ```
 
-## Language server
+See [Getting started](docs/getting-started.md) for rendering, formatting, and
+building the CLI.
 
-Build the Schemra Language Server Protocol executable:
+## Project guide
 
-```sh
-cargo build --release -p schemra-lsp
-```
+- [Documentation index](docs/README.md)
+- [Examples and language tour](examples/README.md)
+- [Contributing and verification](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+- [MIT License](LICENSE-MIT) / [Apache License 2.0](LICENSE-APACHE)
 
-Configure an LSP-compatible editor to launch `target/release/schemra-lsp` for
-files with the `schemra` language ID. The `schemra lsp` CLI subcommand can also
-start the server directly over standard input and output.
-
-## Verify the browser compiler API
-
-The `schemra-wasm` crate exposes `compile_schemra` for one source document and
-`compile_project_schemra` for a linked project request. Editor functions expose
-formatting, context-aware completions, and project-wide rename edits. These APIs
-reuse the same syntax and compiler services as the native tools. Run the
-cross-target response comparison with:
-
-```sh
-bash tests/wasm/differential.sh
-```
-
-The reusable `ScenarioSampler` compiles a selected project scenario once,
-caches its scene geometry, and returns time-indexed playback frames. The Studio
-bridge also converts compiler byte offsets to the editor's UTF-16 offsets.
-
-The `check` command validates a visual or scenario source with the other Schemra
-files in its project. Add `--json` for machine-readable diagnostics.
-The `fmt` command writes formatted source to stdout by default; use `--check`
-to verify formatting or `--write` to atomically update a file. Pass `-` to read
-from standard input. Use `scenario-check` to verify a scenario against a
-specific visual, and `render` to write a validated visual as SVG.
-
-## License
-
-Licensed under either the MIT License or Apache License, Version 2.0, at your
-option. See [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE).
+Schemra is currently at `0.1.0`; language and tool interfaces may change before
+`1.0.0`. See the changelog for notable user-facing changes.
